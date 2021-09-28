@@ -1,5 +1,7 @@
 # Kubectl Pro
 
+![pro](https://filelist.cn/disk/public/ywgx/pro.gif)
+
 ki.py 可以自动的在多个 kubeconfig 中切换,管理几十/几百个 kubernetes 集群就好比一个那样方便,而且免去输出长长的指令,无论是登录 Pod 还是查看 Pod 日志都非常便捷
 
 # 快速安装,即刻上手

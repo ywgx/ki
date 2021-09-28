@@ -12,6 +12,7 @@ ki.py 可以自动的在多个 kubeconfig 中切换,管理几十/几百个 kuber
 1. ks 选择需要连接的kubernetes(如果存在多个~/.kube/kubeconfig*,可以把 kubeconfig 存放命令为 kubeconfig-hz,kubeconfig-sh)
 2. ki 列出所有 Namespace
 3. ki xx 列出某 Namespace (如果存在多个 ~/.kube/kubeconfig*,将在其中找到最优匹配) 的 Pod,Namespace 参数支持模糊匹配,例如要查看 Namespace 为 dev 里的 pod,可以简写为 'ki d',输出 pod 列表后 grep: xxx 过滤查询
+
          grep: xxx l (可选参数 [ l ] 表示输出目标 Pod 的实时日志)
          grep: xxx l 100 (表示输出目标 Pod 最新100行的实时日志)
          grep: xxx l xxx (表示输出目标 Pod 实时日志并过滤指定字符串)

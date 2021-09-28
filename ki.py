@@ -126,9 +126,10 @@ def find_optimal(namespace_list: list, namespace: str):
     result_list = [(indexes[i] + container) * (1.62 if not words[i] else 1) for i, container in enumerate(contains)]  # 权重组合
     return namespace_list[result_list.index(min(result_list))] if len(set(indexes)) != 1 else None
 def find_config():
-    cmd = "find $HOME/.kube -maxdepth 2 -type f -name 'kubeconfig*'"
+    cmd = '''find $HOME/.kube -maxdepth 2 -type f -name 'kubeconfig*'|egrep '.*' || grep "current-context" `find $HOME/.kube -maxdepth 2 -type f` -l'''
     k8s_list = subprocess.Popen(cmd,shell=True,stdout=subprocess.PIPE,stderr=subprocess.PIPE,universal_newlines=True)
     result_lines = list({ e.split('\n')[0] for e in k8s_list.stdout.readlines() })
+    result_num = len(result_lines)
     result_lines.sort()
     dst = os.environ.get("HOME")+"/.kube/config"
     kubeconfig = None
@@ -152,8 +153,6 @@ def find_config():
             kubeconfig = "kubeconfig"
         else:
             kubeconfig = None
-    k8s_list = subprocess.Popen("find $HOME/.kube -maxdepth 2 -type f -name 'kubeconfig*'",shell=True,stdout=subprocess.PIPE,stderr=subprocess.PIPE,universal_newlines=True)
-    result_num = len(list({ e.split('\n')[0] for e in k8s_list.stdout.readlines() }))
     return kubeconfig,result_lines,result_num
 def find_ns():
     l = find_config()
@@ -210,15 +209,16 @@ def ki():
         result_lines = find_config()[1]
         if result_lines and len(result_lines) > 1:
             lr = set()
+            dst = os.environ.get("HOME")+"/.kube/config"
             for i in result_lines:
                 for j in result_lines:
                     if cmp_file(i,j) and i != j:
                         e = i if len(i) < len(j) else j
-                        lr.add(e)
+                        if e != dst:
+                            lr.add(e)
             for e in lr:
                 os.remove(e)
                 result_lines.remove(e)
-            dst = os.environ.get("HOME")+"/.kube/config"
             if os.path.exists(dst):
                 k8s = ""
                 res = None

@@ -15,7 +15,7 @@ ki.py 可以自动的在多个 kubeconfig 中切换,管理几十/几百个 kuber
 
          grep: index l (可选参数 [ l ] 表示输出目标 Pod 的实时日志)
          grep: index l 100 (表示输出目标 Pod 最新100行的实时日志)
-         grep: index l index (表示输出目标 Pod 实时日志并过滤指定字符串)
+         grep: index l xxx (表示输出目标 Pod 实时日志并过滤指定字符串)
          grep: index r (可选参数 [ r ] 表示重启目标 Pod)
          grep: index o (可选参数 [ o ] 表示导出目标[Deployment,StatefulSet,Service,Ingress,Configmap,Secret] yml文件)
          grep: index del (可选参数 [ del ] 表示删除目标 Pod,根据 k8s 的默认编排策略会重新拉起,类似重启 Pod)

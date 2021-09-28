@@ -236,11 +236,11 @@ def ki():
                         k8s = ""
             else:
                 print("\033[1;32;35m%s\033[0m\033[5;32;35m%s\033[0m " % ("File not found ",dst))
-    elif sys.argv[1] == '-n' and len(sys.argv) == 2:
+    elif sys.argv[1] == '-n' and len(sys.argv) == 2 or sys.argv[1] == '-h':
         cmd = "kubectl get ns"
         print("\033[1;32;40m%s\033[0m" % cmd)
         os.system(cmd)
-        print("\033[1;32;40m%s\033[0m" % "\nK8S clusters 管理使用说明")
+        print("\033[1;32;40m%s\033[0m" % "\nKubectl Pro 管理使用说明")
         print("\033[1;32;40m%s\033[0m" % "1. ks","选择需要连接的kubernetes(如果存在多个~/.kube/kubeconfig*,可以把 kubeconfig 存放命令为 kubeconfig-hz,kubeconfig-sh)")
         print("\033[1;32;40m%s\033[0m" % "2. ki","列出所有 Namespace")
         print("\033[1;32;40m%s\033[0m" % "3. ki xx","列出某 Namespace (如果存在多个 ~/.kube/kubeconfig*,将在其中找到最优匹配) 的 Pod,Namespace 参数支持模糊匹配,例如要查看 Namespace 为 dev 里的 pod,可以简写为 'ki d',输出 pod 列表后 grep: xxx 过滤查询\n         grep: xxx l (可选参数 [ l ] 表示输出目标 Pod 的实时日志)\n         grep: xxx l 100 (表示输出目标 Pod 最新100行的实时日志)\n         grep: xxx l xxx (表示输出目标 Pod 实时日志并过滤指定字符串)\n         grep: xxx r (可选参数 [ r ] 表示重启目标 Pod)\n         grep: xxx o (可选参数 [ o ] 表示导出目标[Deployment,StatefulSet,Service,Ingress,Configmap,Secret] yml文件)\n         grep: xxx del (可选参数 [ del ] 表示删除目标 Pod,根据 k8s 的默认编排策略会重新拉起,类似重启 Pod)\n         grep: xxx cle (可选参数 [ cle ] 表示删除目标 Deployment/StatefulSet)\n         grep: xxx e[si] (可选参数 [ e[si] ] 表示编辑目标 Deploy/Service/Ingress)")

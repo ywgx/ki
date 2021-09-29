@@ -4,8 +4,6 @@
 # Version     : 0.1
 #*************************************************
 import os,re,sys,subprocess
-#-----------------VAR-----------------------------
-#-----------------CLS-----------------------------
 #-----------------FUN-----------------------------
 def cmp_file(f1, f2):
     st1 = os.stat(f1)
@@ -106,16 +104,11 @@ def cmd_obj(ns,obj,res,args,iip="x"):
             regular = args.split('l')[-1]
             p = subprocess.Popen("kubectl -n "+ns+" get pod "+res+" -o jsonpath='{.spec.containers[:].name}'",shell=True,stdout=subprocess.PIPE,universal_newlines=True)
             result_list = p.stdout.readlines()[0].split()
-            if name in result_list:
-                if regular.isdigit():
-                    cmd = "kubectl -n "+ns+" logs -f "+res+" "+name+" --tail "+regular
-                else:
-                    cmd = "kubectl -n "+ns+" logs -f "+res+" "+name+"|grep --color=auto "+regular if regular else "kubectl -n "+ns+" logs -f "+res+" "+name+" --tail 200"
+            container = name if name in result_list else "--all-containers"
+            if regular.isdigit():
+                cmd = "kubectl -n "+ns+" logs -f "+res+" "+container+" --tail "+regular
             else:
-                if regular.isdigit():
-                    cmd = "kubectl -n "+ns+" logs -f "+res+" --all-containers --tail "+regular
-                else:
-                    cmd = "kubectl -n "+ns+" logs -f "+res+" --all-containers |grep --color=auto "+regular if regular else "kubectl -n "+ns+" logs -f "+res+" --all-containers --tail 200"
+                cmd = "kubectl -n "+ns+" logs -f "+res+" "+container+"|grep --color=auto "+regular if regular else "kubectl -n "+ns+" logs -f "+res+" "+container+" --tail 200"
         else:
             cmd = "kubectl -n "+ns+" exec -it  "+res+"  -- sh"
     return cmd

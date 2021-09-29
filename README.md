@@ -31,9 +31,9 @@ ki.py 可以自动的在多个 kubeconfig 中切换,管理几十/几百个 kuber
 
 # Kubectl Pro controls the Kubernetes cluster manager
 
-1. ki -s Select the kubernetes to be connected ( If there are multiple ~/.kube/kubeconfig*,the kubeconfig storage can be kubeconfig-hz,kubeconfig-sh,etc. )
+1. ki -s Select the kubernetes to be connected ( if there are multiple ~/.kube/kubeconfig*,the kubeconfig storage can be kubeconfig-hz,kubeconfig-sh,etc. )
 2. ki List all namespaces
-3. ki xx List all pods in the namespace ( If there are multiple ~/.kube/kubeconfig*,the best matching kubeconfig will be found ),the namespace parameter supports fuzzy matching,after outputting the pod list, grep: XXX filters the query
+3. ki xx List all pods in the namespace ( if there are multiple ~/.kube/kubeconfig*,the best matching kubeconfig will be found ),the namespace parameter supports fuzzy matching,after outputting the pod list, grep: XXX filters the query
 
          grep: index l ( [ l ] Print the logs for a container in a pod or specified resource )
          grep: index l 100 ( Print the logs of the latest 100 lines )

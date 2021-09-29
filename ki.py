@@ -115,7 +115,7 @@ def cmd_obj(ns,obj,res,args,iip="x"):
 def find_optimal(namespace_list: list, namespace: str):
     indexes = [row.index(namespace) * 0.8 if namespace in row else 10000 for row in namespace_list]
     contains = [len(row.replace(namespace, '')) * 0.42 for row in namespace_list]
-    words = [re.compile(f"\\b{namespace}\\b", re.I).search(row) is not None for row in namespace_list]
+    words = [namespace == row for row in namespace_list]
     result_list = [(indexes[i] + container) * (1.62 if not words[i] else 1) for i, container in enumerate(contains)]
     return namespace_list[result_list.index(min(result_list))] if len(set(indexes)) != 1 else None
 def find_config():

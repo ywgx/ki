@@ -1,6 +1,6 @@
 #!/usr/bin/python3
 #*************************************************
-# Description : ki.py for kubectl
+# Description : Kubectl Pro
 # Version     : 0.1
 #*************************************************
 import os,re,sys,subprocess
@@ -120,10 +120,10 @@ def cmd_obj(ns,obj,res,args,iip="x"):
             cmd = "kubectl -n "+ns+" exec -it  "+res+"  -- sh"
     return cmd
 def find_optimal(namespace_list: list, namespace: str):
-    indexes = [row.index(namespace) * 0.8 if namespace in row else 10000 for row in namespace_list]  # 按下标位置取最小权重
-    contains = [len(row.replace(namespace, '')) * 0.42 for row in namespace_list]  # 取包含字符量最小权重
-    words = [re.compile(f"\\b{namespace}\\b", re.I).search(row) is not None for row in namespace_list]  # 按单词配置权重
-    result_list = [(indexes[i] + container) * (1.62 if not words[i] else 1) for i, container in enumerate(contains)]  # 权重组合
+    indexes = [row.index(namespace) * 0.8 if namespace in row else 10000 for row in namespace_list]
+    contains = [len(row.replace(namespace, '')) * 0.42 for row in namespace_list]
+    words = [re.compile(f"\\b{namespace}\\b", re.I).search(row) is not None for row in namespace_list]
+    result_list = [(indexes[i] + container) * (1.62 if not words[i] else 1) for i, container in enumerate(contains)]
     return namespace_list[result_list.index(min(result_list))] if len(set(indexes)) != 1 else None
 def find_config():
     cmd = '''find $HOME/.kube -maxdepth 2 -type f -name 'kubeconfig*'|egrep '.*' || grep "current-context" `find $HOME/.kube -maxdepth 2 -type f` -l'''
@@ -197,14 +197,14 @@ def ki():
         cmd = "kubectl get ns"
         print("\033[1;32;40m%s\033[0m" % cmd)
         os.system(cmd)
-        print("\033[1;32;40m%s\033[0m" % "\nKubectl Pro 管理使用说明")
-        print("\033[1;32;40m%s\033[0m" % "1. ki -s","主动选择需要连接的kubernetes(如果存在多个~/.kube/kubeconfig*,可以把 kubeconfig 存放命令为 kubeconfig-hz,kubeconfig-sh)")
-        print("\033[1;32;40m%s\033[0m" % "2. ki","列出当前 kubernetes Namespace")
-        print("\033[1;32;40m%s\033[0m" % "3. ki xx","列出某 Namespace (如果存在多个 ~/.kube/kubeconfig*,将在其中找到最优匹配的kubeconfig) 的 Pod,Namespace 参数支持模糊匹配,例如要查看 Namespace 为 dev 里的 pod,可以简写为 'ki d',输出 pod 列表后 grep: xxx 过滤查询\n         grep: index l (可选参数 [ l ] 表示输出目标 Pod 的实时日志)\n         grep: index l 100 (表示输出目标 Pod 最新100行的实时日志)\n         grep: index l xxx (表示输出目标 Pod 实时日志并过滤指定字符串)\n         grep: index r (可选参数 [ r ] 表示重启目标 Pod)\n         grep: index o (可选参数 [ o ] 表示导出目标[Deployment,StatefulSet,Service,Ingress,Configmap,Secret] yml文件)\n         grep: index del (可选参数 [ del ] 表示删除目标 Pod,根据 k8s 的默认编排策略会重新拉起,类似重启 Pod)\n         grep: index cle (可选参数 [ cle ] 表示删除目标 Deployment/StatefulSet)\n         grep: index e[si] (可选参数 [ e[si] ] 表示编辑目标 Deploy/Service/Ingress)")
-        print("\033[1;32;40m%s\033[0m" % "4. ki xx d","列出某 Namespace 的 Deployment")
-        print("\033[1;32;40m%s\033[0m" % "5. ki xx f","列出某 Namespace 的 StatefulSet")
-        print("\033[1;32;40m%s\033[0m" % "6. ki xx s","列出某 Namespace 的 Service")
-        print("\033[1;32;40m%s\033[0m" % "7. ki xx i","列出某 Namespace 的 Ingress")
+        print("\033[1;32;40m%s\033[0m" % "\nKubectl Pro controls the Kubernetes cluster manager")
+        print("\033[1;32;40m%s\033[0m" % "1. ki -s","Select the kubernetes to be connected ( If there are multiple ~/.kube/kubeconfig*,the kubeconfig storage can be kubeconfig-hz,kubeconfig-sh,etc. )")
+        print("\033[1;32;40m%s\033[0m" % "2. ki","List all namespaces")
+        print("\033[1;32;40m%s\033[0m" % "3. ki xx","List all pods in the namespace ( If there are multiple ~/.kube/kubeconfig*,the best matching kubeconfig will be found ),the namespace parameter supports fuzzy matching,after outputting the pod list, grep: XXX filters the query\n         grep: index l ( [ l ] Print the logs for a container in a pod or specified resource )\n         grep: index l 100 ( Print the logs of the latest 100 lines )\n         grep: index l xxx ( Print the logs and filters the specified characters )\n         grep: index r ( [ r ] Rollout restart the pod )\n         grep: index o ( [ o ] Output the [Deployment,StatefulSet,Service,Ingress,Configmap,Secret].yml file )\n         grep: index del ( [ del ] Delete the pod )\n         grep: index cle ( [ cle ] Delete the Deployment/StatefulSet )\n         grep: index e[si] ( [ e[si] ] Edit the Deploy/Service/Ingress )")
+        print("\033[1;32;40m%s\033[0m" % "4. ki xx d","List the Deployment of a Namespace")
+        print("\033[1;32;40m%s\033[0m" % "5. ki xx f","List the StatefulSet of a Namespace")
+        print("\033[1;32;40m%s\033[0m" % "6. ki xx s","List the Service of a Namespace")
+        print("\033[1;32;40m%s\033[0m" % "7. ki xx i","List the Ingress of a Namespace")
     elif len(sys.argv) == 2 and sys.argv[1] == '-s':
         result_lines = find_config()[1]
         if result_lines and len(result_lines) > 1:

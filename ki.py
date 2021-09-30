@@ -3,7 +3,7 @@
 # Description : Kubectl Pro
 # Version     : 0.1
 #*************************************************
-import os,re,sys,subprocess
+import os,re,sys,json,subprocess
 #-----------------FUN-----------------------------
 def cmp_file(f1, f2):
     st1 = os.stat(f1)
@@ -121,9 +121,19 @@ def find_optimal(namespace_list: list, namespace: str):
 def find_config():
     cmd = '''find $HOME/.kube -maxdepth 2 -type f -name 'kubeconfig*'|egrep '.*' || grep "current-context" `find $HOME/.kube -maxdepth 2 -type f` -l'''
     k8s_list = subprocess.Popen(cmd,shell=True,stdout=subprocess.PIPE,stderr=subprocess.PIPE,universal_newlines=True)
-    result_lines = list({ e.split('\n')[0] for e in k8s_list.stdout.readlines() })
-    result_num = len(result_lines)
-    result_lines.sort()
+    result_set = { e.split('\n')[0] for e in k8s_list.stdout.readlines() }
+    result_num = len(result_set)
+
+    dc = {}
+    dic = os.environ.get("HOME")+"/.kube/.dict"
+    if os.path.exists(dic):
+        with open(dic,'r') as f:
+            dc = json.loads(f.read())
+
+    result_dict = sorted(dc.items(),key = lambda dc:(dc[1], dc[0]),reverse=True)
+    sort_list = [ i[0] for i in result_dict ]
+    result_lines = sort_list + list(result_set - set(sort_list))
+
     dst = os.environ.get("HOME")+"/.kube/config"
     kubeconfig = None
     if result_lines:
@@ -147,6 +157,19 @@ def find_config():
         else:
             kubeconfig = None
     return kubeconfig,result_lines,result_num
+def find_history(config):
+    dic = os.environ.get("HOME")+"/.kube/.dict"
+    if os.path.exists(dic):
+        with open(dic,'r') as f:
+            dc = json.loads(f.read())
+            dc[config] = dc[config] + 1 if config in dc else 1
+        with open(dic,'w') as f:
+            f.write(json.dumps(dc))
+    else:
+        dc = {}
+        dc[config] = 1
+        with open(dic,'w') as f:
+            f.write(json.dumps(dc))
 def find_ns():
     l = find_config()
     result_num = l[-1]
@@ -173,6 +196,7 @@ def find_ns():
                         if os.path.exists(dst):
                             os.unlink(dst)
                             os.symlink(config,dst)
+                            find_history(config)
                             l = find_config()
                             print("\033[5;32;40m%s\033[0m"%("[ switch to "+config.split("/")[-1]+" / "+ns+" ]"))
                             break

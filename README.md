@@ -3,6 +3,7 @@
 ![pro](https://filelist.cn/disk/public/ywgx/pro.gif)
 
 ki.py 可以自动的在多个 kubeconfig 中切换,管理几十/几百个 kubernetes 集群就好比一个那样方便,而且免去输出长长的指令,无论是登录 Pod 还是查看 Pod 日志都非常便捷
+
 自动管理策略是这样的,比如你~/.kube/下有多个配置文件,当你输入 `ki.py -n dev` 的时候,首先寻找当前 config,如果没有找到则自动寻找下一个集群,找到则config 软链接指向新集群配置,切换的时候会有显示提醒所在[ 集群/空间 ]
 当然有的 Namespace 比较长,所以支持了相似度匹配比如 ki.py -n sys 就可以匹配到 kube-system
 然后带索引输出目标 Namespace 的 Pods 列表,可以快速选择登陆/查看日志/编辑/重启/删除等日常管理操作

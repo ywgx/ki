@@ -123,19 +123,21 @@ def find_config():
     k8s_list = subprocess.Popen(cmd,shell=True,stdout=subprocess.PIPE,stderr=subprocess.PIPE,universal_newlines=True)
     result_set = { e.split('\n')[0] for e in k8s_list.stdout.readlines() }
     result_num = len(result_set)
+    result_lines = list(result_set)
+    kubeconfig = None
 
-    dc = {}
-    dic = os.environ.get("HOME")+"/.kube/.dict"
-    if os.path.exists(dic):
-        with open(dic,'r') as f:
-            dc = json.loads(f.read())
+    if result_num > 1:
+        dc = {}
+        dic = os.environ.get("HOME")+"/.kube/.dict"
+        if os.path.exists(dic):
+            with open(dic,'r') as f:
+                dc = json.loads(f.read())
 
-    result_dict = sorted(dc.items(),key = lambda dc:(dc[1], dc[0]),reverse=True)
-    sort_list = [ i[0] for i in result_dict ]
-    result_lines = sort_list + list(result_set - set(sort_list))
+        result_dict = sorted(dc.items(),key = lambda dc:(dc[1], dc[0]),reverse=True)
+        sort_list = [ i[0] for i in result_dict ]
+        result_lines = sort_list + list(result_set - set(sort_list))
 
     dst = os.environ.get("HOME")+"/.kube/config"
-    kubeconfig = None
     if result_lines:
         if os.path.exists(dst):
             for n,e in enumerate(result_lines):
@@ -154,8 +156,7 @@ def find_config():
                 f.write(fi.read())
                 fi.close()
             kubeconfig = "kubeconfig"
-        else:
-            kubeconfig = None
+
     return kubeconfig,result_lines,result_num
 def find_history(config):
     dic = os.environ.get("HOME")+"/.kube/.dict"

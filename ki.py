@@ -215,10 +215,10 @@ def find_ns():
                                 f.write(os.path.realpath(dst))
                             os.unlink(dst)
                             os.symlink(config,dst)
-                            find_history(config)
                             l = find_config()
                             kubeconfig = config
                             print("\033[5;32;40m%s\033[0m"%("[ switch to "+config.split("/")[-1]+" / "+ns+" ] "+str(n+1)))
+                            find_history(config)
                             break
         kubeconfig = l[0]
     else:
@@ -284,6 +284,7 @@ def ki():
                             os.unlink(dst)
                             os.symlink(res,dst)
                             print("\033[1;32;40m%s\033[0m" % res)
+                            find_history(res)
                             break
                     else:
                         k8s = ""

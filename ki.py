@@ -129,12 +129,26 @@ def find_config():
     if result_num > 1:
         dc = {}
         dic = os.environ.get("HOME")+"/.kube/.dict"
+        last = os.environ.get("HOME")+"/.kube/.last"
         if os.path.exists(dic):
             with open(dic,'r') as f:
-                dc = json.loads(f.read())
+                try:
+                    dc = json.loads(f.read())
+                except:
+                    os.remove(dic)
+        if os.path.exists(last):
+            with open(last,'r') as f:
+                last_config = f.read()
+                if not os.path.exists(last_config):
+                    last_config = result_lines[0]
+        else:
+            last_config = result_lines[0]
 
         result_dict = sorted(dc.items(),key = lambda dc:(dc[1], dc[0]),reverse=True)
         sort_list = [ i[0] for i in result_dict ]
+        if last_config in sort_list:
+            sort_list.remove(last_config)
+        sort_list.insert(0,last_config)
         result_lines = sort_list + list(result_set - set(sort_list))
 
     dst = os.environ.get("HOME")+"/.kube/config"
@@ -164,6 +178,7 @@ def find_history(config):
         with open(dic,'r') as f:
             dc = json.loads(f.read())
             dc[config] = dc[config] + 1 if config in dc else 1
+            dc.pop(os.environ.get("HOME")+"/.kube/config",404)
         with open(dic,'w') as f:
             f.write(json.dumps(dc))
     else:
@@ -186,7 +201,7 @@ def find_ns():
                 pass
         if flag and result_num > 1:
             l[1].remove(os.environ.get("HOME")+"/.kube/"+l[0])
-            for config in l[1]:
+            for n,config in enumerate(l[1]):
                 p1 = subprocess.Popen("kubectl get ns --no-headers --kubeconfig "+config,shell=True,stdout=subprocess.PIPE,stderr=subprocess.PIPE,universal_newlines=True)
                 ns_set = list({ e.split()[0] for e in p1.stdout.readlines() })
                 ns = find_optimal(ns_set,sys.argv[2])
@@ -194,12 +209,16 @@ def find_ns():
                     p2 = subprocess.Popen("kubectl get pods --no-headers --kubeconfig "+config+" -n "+ns,shell=True,stdout=subprocess.PIPE,stderr=subprocess.PIPE,universal_newlines=True)
                     if list({ e.split()[0] for e in p2.stdout.readlines() }):
                         dst = os.environ.get("HOME")+"/.kube/config"
+                        last = os.environ.get("HOME")+"/.kube/.last"
                         if os.path.exists(dst):
+                            with open(last,'w') as f:
+                                f.write(os.path.realpath(dst))
                             os.unlink(dst)
                             os.symlink(config,dst)
                             find_history(config)
                             l = find_config()
-                            print("\033[5;32;40m%s\033[0m"%("[ switch to "+config.split("/")[-1]+" / "+ns+" ]"))
+                            kubeconfig = config
+                            print("\033[5;32;40m%s\033[0m"%("[ switch to "+config.split("/")[-1]+" / "+ns+" ] "+str(n+1)))
                             break
         kubeconfig = l[0]
     else:

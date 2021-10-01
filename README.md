@@ -23,7 +23,7 @@ ki.py 可以自动的在多个 kubeconfig 中切换,管理几十/几百个 kuber
 # Install 快速安装,即刻上手
 
 `# curl -s xabc.io/ki|bash`
-这条指令会快速把 ki.py 和 xabc_k8s.sh 分别放到所在机器的 /usr/local/bin/ 和 /etc/profile.d/ 下,然后即刻感受
+这条指令会快速把 ki.py 放到所在机器的 /usr/local/bin/ 路径下,然后即刻感受
 
 # Kubectl Pro 管理使用说明
 

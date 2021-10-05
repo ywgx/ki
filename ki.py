@@ -119,9 +119,10 @@ def find_optimal(namespace_list: list, namespace: str):
     result_list = [(indexes[i] + container) * (1.62 if not words[i] else 1) for i, container in enumerate(contains)]
     return namespace_list[result_list.index(min(result_list))] if len(set(indexes)) != 1 else None
 def find_config():
-    cmd = '''find $HOME/.kube -maxdepth 2 -type f -name 'kubeconfig*'|egrep '.*' || grep "current-context" `find $HOME/.kube -maxdepth 2 -type f` -l'''
+    cmd = '''find $HOME/.kube -maxdepth 2 -type f -name 'kubeconfig*'|egrep '.*' || grep -l "current-context" `find $HOME/.kube -maxdepth 2 -type f`'''
     k8s_list = subprocess.Popen(cmd,shell=True,stdout=subprocess.PIPE,stderr=subprocess.PIPE,universal_newlines=True)
-    result_set = { e.split('\n')[0] for e in k8s_list.stdout.readlines() }
+    dst = os.environ.get("HOME")+"/.kube/config"
+    result_set = { e.split('\n')[0] for e in k8s_list.stdout.readlines() } - { dst }
     result_num = len(result_set)
     result_lines = list(result_set)
     kubeconfig = None
@@ -130,13 +131,16 @@ def find_config():
         dc = {}
         dic = os.environ.get("HOME")+"/.kube/.dict"
         last = os.environ.get("HOME")+"/.kube/.last"
-        if os.path.exists(dic):
+        if os.path.exists(dic) and os.path.getsize(dic) > 5:
             with open(dic,'r') as f:
                 try:
                     dc = json.loads(f.read())
+                    for config in list(dc.keys()):
+                        if not os.path.exists(config):
+                            del dc[config]
                 except:
                     os.remove(dic)
-        if os.path.exists(last):
+        if os.path.exists(last) and os.path.getsize(last) > 0:
             with open(last,'r') as f:
                 last_config = f.read()
                 if not os.path.exists(last_config):
@@ -151,41 +155,37 @@ def find_config():
         sort_list.insert(0,last_config)
         result_lines = sort_list + list(result_set - set(sort_list))
 
-    dst = os.environ.get("HOME")+"/.kube/config"
     if result_lines:
         if os.path.exists(dst):
-            for n,e in enumerate(result_lines):
+            for e in result_lines:
                 if cmp_file(e,dst):
                     kubeconfig = e.strip().split("/")[-1]
         else:
-            with open(dst,'w') as f:
-                fi = open(result_lines[0])
-                f.write(fi.read())
-                fi.close()
+            with open(result_lines[0],'r') as fr, open(dst,'w') as fw:
+                fw.write(fr.read())
             kubeconfig = result_lines[0].split("/")[-1]
     else:
         if os.path.exists(dst):
-            with open(os.environ.get("HOME")+"/.kube/kubeconfig",'w') as f:
-                fi = open(dst)
-                f.write(fi.read())
-                fi.close()
+            with open(dst,'r') as fr, open(os.environ.get("HOME")+"/.kube/kubeconfig",'w') as fw:
+                fw.write(fr.read())
             kubeconfig = "kubeconfig"
 
     return kubeconfig,result_lines,result_num
 def find_history(config):
+    dc = {}
     dic = os.environ.get("HOME")+"/.kube/.dict"
-    if os.path.exists(dic):
+    if os.path.exists(dic) and os.path.getsize(dic) > 5:
         with open(dic,'r') as f:
             dc = json.loads(f.read())
             dc[config] = dc[config] + 1 if config in dc else 1
             dc.pop(os.environ.get("HOME")+"/.kube/config",404)
-        with open(dic,'w') as f:
-            f.write(json.dumps(dc))
+            for config in list(dc.keys()):
+                if not os.path.exists(config):
+                    del dc[config]
     else:
-        dc = {}
         dc[config] = 1
-        with open(dic,'w') as f:
-            f.write(json.dumps(dc))
+    with open(dic,'w') as f:
+        f.write(json.dumps(dc))
 def find_ns():
     l = find_config()
     result_num = l[-1]
@@ -209,10 +209,10 @@ def find_ns():
                     p2 = subprocess.Popen("kubectl get pods --no-headers --kubeconfig "+config+" -n "+ns,shell=True,stdout=subprocess.PIPE,stderr=subprocess.PIPE,universal_newlines=True)
                     if list({ e.split()[0] for e in p2.stdout.readlines() }):
                         dst = os.environ.get("HOME")+"/.kube/config"
-                        last = os.environ.get("HOME")+"/.kube/.last"
-                        if os.path.exists(dst):
-                            with open(last,'w') as f:
-                                f.write(os.path.realpath(dst))
+                        if os.path.exists(dst) and config != dst:
+                            if dst != os.path.realpath(dst):
+                                with open(os.environ.get("HOME")+"/.kube/.last",'w') as f:
+                                    f.write(os.path.realpath(dst))
                             os.unlink(dst)
                             os.symlink(config,dst)
                             l = find_config()
@@ -261,11 +261,7 @@ def ki():
                 res = None
                 temp = result_lines
                 while True:
-                    if k8s:
-                        k8s = str(k8s)
-                    else:
-                        result_lines = temp
-                    result_lines = list(filter(lambda x: x.find(k8s) >= 0, result_lines))
+                    result_lines = list(filter(lambda x: x.find(k8s) >= 0, result_lines)) if k8s else temp
                     if result_lines:
                         for n,e in enumerate(result_lines):
                             if cmp_file(e,dst):
@@ -273,14 +269,13 @@ def ki():
                             else:
                                 print("\033[1;32;40m%s\033[0m"%n,e.strip())
                         try:
-                            k8s = input("\033[1;32;35m%s\033[0m\033[5;32;35m%s\033[0m" % ("select",":"))
-                            k8s = k8s.strip()
+                            k8s = input("\033[1;32;35m%s\033[0m\033[5;32;35m%s\033[0m" % ("select",":")).strip()
                         except:
                             sys.exit()
                         if k8s.isdigit() and 0 <= int(k8s) < len(result_lines) or len(result_lines) == 1:
                             index = int(k8s) if k8s.isdigit() else 0
                             res = (result_lines[index]).split()[0]
-                        if res:
+                        if res and res != dst:
                             os.unlink(dst)
                             os.symlink(res,dst)
                             print("\033[1;32;40m%s\033[0m" % res)
@@ -304,9 +299,7 @@ def ki():
                 obj = d[str(sys.argv[3])[0]][0]
                 ext = d[str(sys.argv[3])[0]][1]
             while True:
-                if pod:
-                    pod = str(pod)
-                else:
+                if not pod:
                     cmd = "kubectl --sort-by=.metadata.creationTimestamp get "+obj+ext+" --no-headers -n "+ ns
                     print("\033[1;32;40m%s\033[0m" % cmd)
                     p = subprocess.Popen(cmd,shell=True,stdout=subprocess.PIPE,stderr=subprocess.PIPE,universal_newlines=True)
@@ -320,8 +313,7 @@ def ki():
                     if result_num > 1 and n > 7:
                         print("\033[1;32;40m%s\033[0m"%("[ "+kubeconfig+" / "+ns+" ]"))
                     try:
-                        pod = input("\033[1;32;35m%s\033[0m\033[5;32;35m%s\033[0m" % ("grep",":"))
-                        pod = pod.strip()
+                        pod = input("\033[1;32;35m%s\033[0m\033[5;32;35m%s\033[0m" % ("grep",":")).strip()
                     except:
                         sys.exit()
                     podList = pod.split()

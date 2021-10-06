@@ -122,12 +122,29 @@ def find_config():
     cmd = '''find $HOME/.kube -maxdepth 2 -type f -name 'kubeconfig*'|egrep '.*' || grep -l "current-context" `find $HOME/.kube -maxdepth 2 -type f`'''
     k8s_list = subprocess.Popen(cmd,shell=True,stdout=subprocess.PIPE,stderr=subprocess.PIPE,universal_newlines=True)
     dst = os.environ.get("HOME")+"/.kube/config"
-    result_set = { e.split('\n')[0] for e in k8s_list.stdout.readlines() } - { dst }
+    result_set = { e.split('\n')[0] for e in k8s_list.stdout.readlines() }
     result_num = len(result_set)
     result_lines = list(result_set)
     kubeconfig = None
 
-    if result_num > 1:
+    if result_num == 1:
+        if os.path.exists(dst):
+            if not os.path.islink(dst):
+                with open(dst,'r') as fr, open(os.environ.get("HOME")+"/.kube/kubeconfig-0",'w') as fw:
+                    fw.write(fr.read())
+                os.unlink(dst)
+                os.symlink(os.environ.get("HOME")+"/.kube/kubeconfig-0",dst)
+                kubeconfig = "kubeconfig-0"
+            else:
+                kubeconfig = result_lines[0].split("/")[-1]
+        else:
+            try:
+                os.unlink(dst)
+            except:
+                pass
+            os.symlink(result_lines[0],dst)
+            kubeconfig = result_lines[0].split("/")[-1]
+    elif result_num > 1:
         dc = {}
         dic = os.environ.get("HOME")+"/.kube/.dict"
         last = os.environ.get("HOME")+"/.kube/.last"
@@ -155,21 +172,24 @@ def find_config():
         sort_list.insert(0,last_config)
         result_lines = sort_list + list(result_set - set(sort_list))
 
-    if result_lines:
         if os.path.exists(dst):
-            for e in result_lines:
-                if cmp_file(e,dst):
-                    kubeconfig = e.strip().split("/")[-1]
+            if not os.path.islink(dst):
+                with open(dst,'r') as fr, open(os.environ.get("HOME")+"/.kube/kubeconfig-0",'w') as fw:
+                    fw.write(fr.read())
+                os.unlink(dst)
+                os.symlink(os.environ.get("HOME")+"/.kube/kubeconfig-0",dst)
+                kubeconfig = "kubeconfig-0"
+            else:
+                for e in result_lines:
+                    if cmp_file(e,dst):
+                        kubeconfig = e.strip().split("/")[-1]
         else:
-            with open(result_lines[0],'r') as fr, open(dst,'w') as fw:
-                fw.write(fr.read())
+            try:
+                os.unlink(dst)
+            except:
+                pass
+            os.symlink(result_lines[0],dst)
             kubeconfig = result_lines[0].split("/")[-1]
-    else:
-        if os.path.exists(dst):
-            with open(dst,'r') as fr, open(os.environ.get("HOME")+"/.kube/kubeconfig-0",'w') as fw:
-                fw.write(fr.read())
-            kubeconfig = "kubeconfig-0"
-
     return kubeconfig,result_lines,result_num
 def find_history(config):
     dc = {}

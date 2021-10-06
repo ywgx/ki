@@ -166,9 +166,9 @@ def find_config():
             kubeconfig = result_lines[0].split("/")[-1]
     else:
         if os.path.exists(dst):
-            with open(dst,'r') as fr, open(os.environ.get("HOME")+"/.kube/kubeconfig",'w') as fw:
+            with open(dst,'r') as fr, open(os.environ.get("HOME")+"/.kube/kubeconfig-0",'w') as fw:
                 fw.write(fr.read())
-            kubeconfig = "kubeconfig"
+            kubeconfig = "kubeconfig-0"
 
     return kubeconfig,result_lines,result_num
 def find_history(config):
@@ -251,7 +251,7 @@ def ki():
                 for j in result_lines:
                     if cmp_file(i,j) and i != j:
                         e = i if len(i) < len(j) else j
-                        if e != dst:
+                        if e != dst and e != os.path.realpath(dst):
                             lr.add(e)
             for e in lr:
                 os.remove(e)

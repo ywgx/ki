@@ -209,6 +209,7 @@ def find_history(config):
 def find_ns():
     l = find_config()
     result_num = l[-1]
+    switch = False
     if result_num > 0:
         p1 = subprocess.Popen("kubectl get ns --no-headers",shell=True,stdout=subprocess.PIPE,stderr=subprocess.PIPE,universal_newlines=True)
         ns_set = list({ e.split()[0] for e in p1.stdout.readlines() })
@@ -237,14 +238,15 @@ def find_ns():
                             os.symlink(config,dst)
                             l = find_config()
                             kubeconfig = config
-                            print("\033[5;32;40m%s\033[0m"%("[ switch to "+config.split("/")[-1]+" / "+ns+" ] "+str(n+1)))
+                            print("\033[5;32;40m%s\033[0m"%("[ "+str(n+1)+" SWITCH TO "+config.split("/")[-1]+" / "+ns+" ] "))
                             find_history(config)
+                            switch = True
                             break
         kubeconfig = l[0]
     else:
         ns = None
         kubeconfig = None
-    return ns,kubeconfig,result_num
+    return ns,kubeconfig,switch,result_num
 def ki():
     if len(sys.argv) == 1:
         sys.argv.append('-h')
@@ -309,6 +311,7 @@ def ki():
         l = find_ns()
         ns = l[0]
         kubeconfig = l[1]
+        switch = l[2]
         result_num = l[-1]
         if ns:
             pod = ""
@@ -331,7 +334,9 @@ def ki():
                     for n,e in enumerate(result_lines):
                         print("\033[1;32;40m%s\033[0m"%n,e.strip())
                     if result_num > 1 and n > 7:
-                        print("\033[1;32;40m%s\033[0m"%("[ "+kubeconfig+" / "+ns+" ]"))
+                        style = "\033[5;32;40m%s\033[0m" if switch else "\033[1;32;40m%s\033[0m"
+                        print(style%("[ "+kubeconfig+" / "+ns+" ]"))
+                        switch = False
                     try:
                         pod = input("\033[1;32;35m%s\033[0m\033[5;32;35m%s\033[0m" % ("grep",":")).strip()
                     except:

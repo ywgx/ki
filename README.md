@@ -14,7 +14,7 @@ ki.py 可以自动的在多个 kubeconfig 中切换,管理几十/几百个 kuber
 
 当然有的 Namespace 名称比较长,所以支持了相似度匹配比如`ki.py -n sys`就可以匹配到 kube-system,然后带索引输出目标 Namespace 的 Pods 列表,可以快速选择登陆/查看日志/编辑/重启/删除等日常管理操作
 
-如果你正在使用 kubectx/kubens/kubecm/k9s 管理你多个集群的话,这个小工具体验或许更加方便,也更轻量,因为 kubectx/kubens/kubecm/k9s 等设计理念总是需要人主动管理,而 ki.py 最大限度让程序帮人自动管理
+ki.py 最大限度让程序帮人自动管理,如果你正在使用 kubectx/kubens/kubecm/k9s 管理你多个集群的话,这个小工具体验或许更加方便和轻量
 
 考虑规模化的场景,比如几百个/几千个集群需要管理,如果一个 dev 存在多个 k8s 里,那么也可以快速过滤主动选择需要连接哪一个集群,`ki.py -s` 输出集群列表,输入过滤字符串,快速选择
 

@@ -61,15 +61,13 @@ def cmd_obj(ns,obj,res,args,iip="x"):
             cmd = "kubectl -n "+ns+" delete pod "+res+" &"
         elif args == "cle":
             obj = "sts" if end.isdigit() else "deploy"
-            res2 = name
             action = "delete"
-            cmd = "kubectl -n "+ns+" "+action+" "+obj+" "+res2
+            cmd = "kubectl -n "+ns+" "+action+" "+obj+" "+name
         elif args[0] == "r":
             obj = "sts" if end.isdigit() else "deploy"
             cmd = "kubectl -n "+ns+" rollout restart "+obj+" "+name
         elif args[0] in ('o'):
             obj = "sts" if end.isdigit() else "deploy"
-            res2 = name
             action = "get"
             if len(args) > 1:
                 if str(args)[1] == "d":
@@ -82,10 +80,9 @@ def cmd_obj(ns,obj,res,args,iip="x"):
                     obj = "sts"
                 else:
                     obj = "deploy"
-            cmd = "kubectl -n "+ns+" "+action+" "+obj+" "+res2+" -o yaml > "+res2+"."+obj+".yml"
+            cmd = "kubectl -n "+ns+" "+action+" "+obj+" "+name+" -o yaml > "+name+"."+obj+".yml"
         elif args[0] in ('d','e'):
             obj = "sts" if end.isdigit() else "deploy"
-            res2 = name
             action = "describe" if args[0] == 'd' else "edit"
             if len(args) > 1:
                 if str(args)[1] == "d":
@@ -98,8 +95,14 @@ def cmd_obj(ns,obj,res,args,iip="x"):
                     obj = "sts"
                 elif str(args)[1] == "p":
                     obj = "pod"
-                    res2 = res
-            cmd = "kubectl -n "+ns+" "+action+" "+obj+" "+res2
+                    name = res
+            cmd = "kubectl -n "+ns+" "+action+" "+obj+" "+name
+        elif args[0] == 'c':
+            obj = "sts" if end.isdigit() else "deploy"
+            regular = args.split('c')[-1]
+            action = "scale"
+            replicas = regular if regular.isdigit() and int(regular) < 50 else str(1)
+            cmd = "kubectl -n "+ns+" "+action+" --replicas="+replicas+" "+obj+"/"+name
         elif args[0] == 'l':
             regular = args.split('l')[-1]
             p = subprocess.Popen("kubectl -n "+ns+" get pod "+res+" -o jsonpath='{.spec.containers[:].name}'",shell=True,stdout=subprocess.PIPE,universal_newlines=True)

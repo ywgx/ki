@@ -8,6 +8,7 @@ B站指路 https://www.bilibili.com/video/BV14h411J7QH
 
 <iframe src="//player.bilibili.com/player.html?aid=208477746&bvid=BV14h411J7QH&cid=422349573&page=1" scrolling="no" border="0" frameborder="no" framespacing="0" allowfullscreen="true"> </iframe>
 
+
 ki.py 可以自动的在多个 kubeconfig 中切换,管理几十/几百个 kubernetes 集群就好比一个那样方便,而且免去输出长长的指令,无论是登录 Pod 还是查看 Pod 日志都非常便捷
 
 自动管理策略是这样的,比如你~/.kube/下有多个配置文件

@@ -10,9 +10,9 @@ ki.py 可以自动的在多个 kubeconfig 中切换,管理几十/几百个 kuber
 
 1. 第一步在当前 k8s 匹配 Namespace
 2. 其次寻找上一次连接的 k8s 匹配 Namespace
-3. 如果没有找到则继续寻找下一个集群概率比较大的k8s,依次循环直到找到第一个非空 Namespace,然后 ~/.kube/config 软链接指向新集群,切换的时候会有显性提示所在[ 集群/空间 ]
+3. 如果没有找到则继续寻找下一个集群概率比较大(历史自动切换次数降序排序)的k8s,依次循环直到找到第一个非空 Namespace,然后 ~/.kube/config 软链接指向新集群,切换的时候会有显性闪烁提示所在[ 集群/空间 ]
 
-当然有的 Namespace 名称比较长,所以支持了相似度匹配比如`ki.py -n sys`就可以匹配到 kube-system,然后带索引输出目标 Namespace 的 Pods 列表,可以快速选择登陆/查看日志/编辑/重启/删除等日常管理操作
+有的 Namespace 名称比较长,所以支持了相似度匹配比如`ki.py -n sys`就可以匹配到 kube-system,然后带索引输出目标 Namespace 的 Pods 列表,可以快速选择登陆/查看日志/编辑/重启/删除等日常管理操作
 
 ki.py 最大限度让程序帮人自动管理,如果你正在使用 kubectx/kubens/kubecm/k9s 管理你多个集群的话,这个小工具体验或许更加方便和轻量
 
@@ -37,6 +37,7 @@ ki.py 最大限度让程序帮人自动管理,如果你正在使用 kubectx/kube
          grep: index del (可选参数 [ del ] 表示删除目标 Pod,根据 k8s 的默认编排策略会重新拉起,类似重启 Pod)
          grep: index cle (可选参数 [ cle ] 表示删除目标 Deployment/StatefulSet)
          grep: index e[si] (可选参数 [ e[si] ] 表示编辑目标 Deploy/Service/Ingress)
+         grep: index c5 (可选参数 [ c5 ] 表示编辑目标 Deploy/StatefulSet replicas=5)
 
 4. ki xx d 列出某 Namespace 的 Deployment
 5. ki xx f 列出某 Namespace 的 StatefulSet
@@ -57,6 +58,7 @@ ki.py 最大限度让程序帮人自动管理,如果你正在使用 kubectx/kube
          grep: index del ( [ del ] Delete the pod )
          grep: index cle ( [ cle ] Delete the Deployment/StatefulSet )
          grep: index e[si] ( [ e[si] ] Edit the Deploy/Service/Ingress )
+         grep: index c5 ( [ c5 ] Set the Deploy/StatefulSet replicas=5 )
 
 4. ki xx d List the Deployment of a Namespace
 5. ki xx f List the StatefulSet of a Namespace

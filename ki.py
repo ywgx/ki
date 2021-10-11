@@ -259,14 +259,15 @@ def ki():
         cmd = "kubectl get ns"
         print("\033[1;32;40m%s\033[0m" % cmd)
         os.system(cmd)
-        print("\033[1;32;40m%s\033[0m" % "\nKubectl Pro controls the Kubernetes cluster manager")
-        print("\033[1;32;40m%s\033[0m" % "1. ki -s","Select the kubernetes to be connected ( if there are multiple ~/.kube/kubeconfig*,the kubeconfig storage can be kubeconfig-hz,kubeconfig-sh,etc. )")
-        print("\033[1;32;40m%s\033[0m" % "2. ki","List all namespaces")
-        print("\033[1;32;40m%s\033[0m" % "3. ki xx","List all pods in the namespace ( if there are multiple ~/.kube/kubeconfig*,the best matching kubeconfig will be found ),the namespace parameter supports fuzzy matching,after outputting the pod list, grep: XXX filters the query\n         grep: index l ( [ l ] Print the logs for a container in a pod or specified resource )\n         grep: index l 100 ( Print the logs of the latest 100 lines )\n         grep: index l xxx ( Print the logs and filters the specified characters )\n         grep: index r ( [ r ] Rollout restart the pod )\n         grep: index o ( [ o ] Output the [Deployment,StatefulSet,Service,Ingress,Configmap,Secret].yml file )\n         grep: index del ( [ del ] Delete the pod )\n         grep: index cle ( [ cle ] Delete the Deployment/StatefulSet )\n         grep: index e[si] ( [ e[si] ] Edit the Deploy/Service/Ingress )")
-        print("\033[1;32;40m%s\033[0m" % "4. ki xx d","List the Deployment of a namespace")
-        print("\033[1;32;40m%s\033[0m" % "5. ki xx f","List the StatefulSet of a namespace")
-        print("\033[1;32;40m%s\033[0m" % "6. ki xx s","List the Service of a namespace")
-        print("\033[1;32;40m%s\033[0m" % "7. ki xx i","List the Ingress of a namespace")
+        style = "\033[1;32;40m%s\033[0m"
+        print(style % "\nKubectl Pro controls the Kubernetes cluster manager")
+        print(style % "1. ki -s","Select the kubernetes to be connected ( if there are multiple ~/.kube/kubeconfig*,the kubeconfig storage can be kubeconfig-hz,kubeconfig-sh,etc. )")
+        print(style % "2. ki","List all namespaces")
+        print(style % "3. ki xx","List all pods in the namespace ( if there are multiple ~/.kube/kubeconfig*,the best matching kubeconfig will be found ),the namespace parameter supports fuzzy matching,after outputting the pod list, grep: xxx filters the query\n         grep: index l ( [ l ] Print the logs for a container in a pod or specified resource )\n         grep: index l 100 ( Print the logs of the latest 100 lines )\n         grep: index l xxx ( Print the logs and filters the specified characters )\n         grep: index r ( [ r ] Rollout restart the pod )\n         grep: index o ( [ o ] Output the [Deployment,StatefulSet,Service,Ingress,Configmap,Secret].yml file )\n         grep: index del ( [ del ] Delete the pod )\n         grep: index cle ( [ cle ] Delete the Deployment/StatefulSet )\n         grep: index e[si] ( [ e[si] ] Edit the Deploy/Service/Ingress )\n         grep: index c5 ( [ c5 ] Set the Deploy/StatefulSet replicas=5 )")
+        print(style % "4. ki xx d","List the Deployment of a namespace")
+        print(style % "5. ki xx f","List the StatefulSet of a namespace")
+        print(style % "6. ki xx s","List the Service of a namespace")
+        print(style % "7. ki xx i","List the Ingress of a namespace")
     elif len(sys.argv) == 2 and sys.argv[1] == '-s':
         result_lines = find_config()[1]
         if result_lines and len(result_lines) > 1:
@@ -348,7 +349,7 @@ def ki():
                     pod = podList[0] if podList else ""
                     args = ''.join(podList[1:]) if len(podList) > 1 else "p"
                     if pod.isdigit() and int(pod) < len(result_lines) or len(result_lines) == 1:
-                        index = int(pod) if pod.isdigit() else 0
+                        index = int(pod) if pod.isdigit() and int(pod) < len(result_lines) else 0
                         res = result_lines[index].split()[0]
                         iip = result_lines[index].split()[5] if len(result_lines[index].split()) > 5 else ''
                         cmd = cmd_obj(ns,obj,res,args,iip)

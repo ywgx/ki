@@ -30,6 +30,7 @@ ki.py 最大限度让程序帮人自动管理,如果你正在使用 kubectx/kube
 # Kubectl Pro 管理使用说明
 
 1. ki -s 主动选择需要连接的kubernetes(如果存在多个~/.kube/kubeconfig*,可以把 kubeconfig 存放命令为 kubeconfig-hz,kubeconfig-sh)
+2. ki k8s.ns 一步到位直接连接到指定的kubernetes/Namespace(如果存在多个~/.kube/kubeconfig*,这种方式一步到位;首先解析 $k8s 模糊匹配对应要连接的 kubeconfig,然后查看该 k8s 下模糊匹配 $ns)
 2. ki 列出当前 kubeconfig Namespace
 3. ki xx 列出某 Namespace (如果存在多个 ~/.kube/kubeconfig*,将在其中找到最优匹配) 的 Pod,Namespace 参数支持模糊匹配,例如要查看 Namespace 为 dev 里的 pod,可以简写为 'ki d',输出 pod 列表后 grep: xxx 过滤查询
 
@@ -51,8 +52,9 @@ ki.py 最大限度让程序帮人自动管理,如果你正在使用 kubectx/kube
 # Kubectl Pro controls the Kubernetes cluster manager
 
 1. ki -s Select the kubernetes to be connected ( if there are multiple ~/.kube/kubeconfig*,the kubeconfig storage can be kubeconfig-hz,kubeconfig-sh,etc. )
-2. ki List all namespaces
-3. ki xx List all pods in the namespace ( if there are multiple ~/.kube/kubeconfig*,the best matching kubeconfig will be found ),the namespace parameter supports fuzzy matching,after outputting the pod list, grep: XXX filters the query
+2. ki k8s.ns Select the kubernetes which namespace in the kubernetes ( if there are multiple ~/.kube/kubeconfig*,this way can be one-stop. )
+3. ki List all namespaces
+4. ki xx List all pods in the namespace ( if there are multiple ~/.kube/kubeconfig*,the best matching kubeconfig will be found ),the namespace parameter supports fuzzy matching,after outputting the pod list, grep: XXX filters the query
 
          grep: index l ( [ l ] Print the logs for a container in a pod or specified resource )
          grep: index l 100 ( Print the logs of the latest 100 lines )
@@ -64,7 +66,7 @@ ki.py 最大限度让程序帮人自动管理,如果你正在使用 kubectx/kube
          grep: index e[si] ( [ e[si] ] Edit the Deploy/Service/Ingress )
          grep: index c5 ( [ c5 ] Set the Deploy/StatefulSet replicas=5 )
 
-4. ki xx d List the Deployment of a Namespace
-5. ki xx f List the StatefulSet of a Namespace
-6. ki xx s List the Service of a Namespace
+5. ki xx d List the Deployment of a Namespace
+6. ki xx f List the StatefulSet of a Namespace
+7. ki xx s List the Service of a Namespace
 7. ki xx i List the Ingress of a Namespace

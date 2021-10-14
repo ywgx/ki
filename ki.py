@@ -19,7 +19,7 @@ def cmp_file(f1, f2):
                 return False
             if not b1:
                 return True
-def cmd_obj(ns,obj,res,args,iip="x"):
+def cmd_obj(ns, obj, res, args, iip="x"):
     if obj in ("node","no"):
         if args[0] == 'c':
             action = "cordon"
@@ -214,37 +214,34 @@ def find_ns():
     result_num = l[-1]
     switch = False
     if result_num > 0:
-        p1 = subprocess.Popen("kubectl get ns --no-headers",shell=True,stdout=subprocess.PIPE,stderr=subprocess.PIPE,universal_newlines=True)
+        dst = os.environ.get("HOME")+"/.kube/config"
+        kn = sys.argv[2].split('.')
+        ns_pattern = kn[-1] if len(kn) > 1 else kn[0]
+        config = find_optimal(l[1],kn[0]) or dst if len(kn) > 1 else dst
+        p1 = subprocess.Popen("kubectl get ns --no-headers --kubeconfig "+config,shell=True,stdout=subprocess.PIPE,stderr=subprocess.PIPE,universal_newlines=True)
         ns_set = list({ e.split()[0] for e in p1.stdout.readlines() })
-        ns = find_optimal(ns_set,sys.argv[2])
-        flag = True
-        if ns:
-            p2 = subprocess.Popen("kubectl get pods --no-headers -n "+ns,shell=True,stdout=subprocess.PIPE,stderr=subprocess.PIPE,universal_newlines=True)
-            if list({ e.split()[0] for e in p2.stdout.readlines() }):
-                flag = False
-                pass
-        if flag and result_num > 1:
-            l[1].remove(os.environ.get("HOME")+"/.kube/"+l[0])
-            for n,config in enumerate(l[1]):
-                p1 = subprocess.Popen("kubectl get ns --no-headers --kubeconfig "+config,shell=True,stdout=subprocess.PIPE,stderr=subprocess.PIPE,universal_newlines=True)
-                ns_set = list({ e.split()[0] for e in p1.stdout.readlines() })
-                ns = find_optimal(ns_set,sys.argv[2])
-                if ns:
-                    p2 = subprocess.Popen("kubectl get pods --no-headers --kubeconfig "+config+" -n "+ns,shell=True,stdout=subprocess.PIPE,stderr=subprocess.PIPE,universal_newlines=True)
-                    if list({ e.split()[0] for e in p2.stdout.readlines() }):
-                        dst = os.environ.get("HOME")+"/.kube/config"
-                        if os.path.exists(dst) and config != dst:
-                            if dst != os.path.realpath(dst):
-                                with open(os.environ.get("HOME")+"/.kube/.last",'w') as f:
-                                    f.write(os.path.realpath(dst))
-                            os.unlink(dst)
-                            os.symlink(config,dst)
-                            l = find_config()
-                            kubeconfig = config
-                            print("\033[5;32;40m%s\033[0m"%("[ "+str(n+1)+" SWITCH TO "+config.split("/")[-1]+" / "+ns+" ] "))
-                            find_history(config)
-                            switch = True
-                            break
+        ns = find_optimal(ns_set,ns_pattern)
+        l[1].remove(os.path.realpath(config))
+        l[1].insert(0,config)
+        for n,config in enumerate(l[1]):
+            p1 = subprocess.Popen("kubectl get ns --no-headers --kubeconfig "+config,shell=True,stdout=subprocess.PIPE,stderr=subprocess.PIPE,universal_newlines=True)
+            ns_set = list({ e.split()[0] for e in p1.stdout.readlines() })
+            ns = find_optimal(ns_set,ns_pattern)
+            if ns:
+                p2 = subprocess.Popen("kubectl get pods --no-headers --kubeconfig "+config+" -n "+ns,shell=True,stdout=subprocess.PIPE,stderr=subprocess.PIPE,universal_newlines=True)
+                if list({ e.split()[0] for e in p2.stdout.readlines() }):
+                    if os.path.exists(dst) and config not in {dst,os.path.realpath(dst)}:
+                        if dst != os.path.realpath(dst):
+                            with open(os.environ.get("HOME")+"/.kube/.last",'w') as f:
+                                f.write(os.path.realpath(dst))
+                        os.unlink(dst)
+                        os.symlink(config,dst)
+                        l = find_config()
+                        kubeconfig = config
+                        print("\033[5;32;40m%s\033[0m"%("[ "+str(n+1)+" SWITCH TO "+config.split("/")[-1]+" / "+ns+" ] "))
+                        find_history(config)
+                        switch = True
+                    break
         kubeconfig = l[0]
     else:
         ns = None
@@ -262,12 +259,13 @@ def ki():
         style = "\033[1;32;40m%s\033[0m"
         print(style % "\nKubectl Pro controls the Kubernetes cluster manager")
         print(style % "1. ki -s","Select the kubernetes to be connected ( if there are multiple ~/.kube/kubeconfig*,the kubeconfig storage can be kubeconfig-hz,kubeconfig-sh,etc. )")
-        print(style % "2. ki","List all namespaces")
-        print(style % "3. ki xx","List all pods in the namespace ( if there are multiple ~/.kube/kubeconfig*,the best matching kubeconfig will be found ),the namespace parameter supports fuzzy matching,after outputting the pod list, grep: xxx filters the query\n         grep: index l ( [ l ] Print the logs for a container in a pod or specified resource )\n         grep: index l 100 ( Print the logs of the latest 100 lines )\n         grep: index l xxx ( Print the logs and filters the specified characters )\n         grep: index r ( [ r ] Rollout restart the pod )\n         grep: index o ( [ o ] Output the [Deployment,StatefulSet,Service,Ingress,Configmap,Secret].yml file )\n         grep: index del ( [ del ] Delete the pod )\n         grep: index cle ( [ cle ] Delete the Deployment/StatefulSet )\n         grep: index e[si] ( [ e[si] ] Edit the Deploy/Service/Ingress )\n         grep: index c5 ( [ c5 ] Set the Deploy/StatefulSet replicas=5 )")
-        print(style % "4. ki xx d","List the Deployment of a namespace")
-        print(style % "5. ki xx f","List the StatefulSet of a namespace")
-        print(style % "6. ki xx s","List the Service of a namespace")
-        print(style % "7. ki xx i","List the Ingress of a namespace")
+        print(style % "2. ki k8s.ns","Select the kubernetes which namespace in the kubernetes ( if there are multiple ~/.kube/kubeconfig*,this way can be one-stop. )")
+        print(style % "3. ki","List all namespaces")
+        print(style % "4. ki xx","List all pods in the namespace ( if there are multiple ~/.kube/kubeconfig*,the best matching kubeconfig will be found ),the namespace parameter supports fuzzy matching,after outputting the pod list, grep: xxx filters the query\n         grep: index l ( [ l ] Print the logs for a container in a pod or specified resource )\n         grep: index l 100 ( Print the logs of the latest 100 lines )\n         grep: index l xxx ( Print the logs and filters the specified characters )\n         grep: index r ( [ r ] Rollout restart the pod )\n         grep: index o ( [ o ] Output the [Deployment,StatefulSet,Service,Ingress,Configmap,Secret].yml file )\n         grep: index del ( [ del ] Delete the pod )\n         grep: index cle ( [ cle ] Delete the Deployment/StatefulSet )\n         grep: index e[si] ( [ e[si] ] Edit the Deploy/Service/Ingress )\n         grep: index c5 ( [ c5 ] Set the Deploy/StatefulSet replicas=5 )")
+        print(style % "5. ki xx d","List the Deployment of a namespace")
+        print(style % "6. ki xx f","List the StatefulSet of a namespace")
+        print(style % "7. ki xx s","List the Service of a namespace")
+        print(style % "8. ki xx i","List the Ingress of a namespace")
     elif len(sys.argv) == 2 and sys.argv[1] == '-s':
         result_lines = find_config()[1]
         if result_lines and len(result_lines) > 1:
@@ -283,11 +281,11 @@ def ki():
                 os.remove(e)
                 result_lines.remove(e)
             if os.path.exists(dst):
-                k8s = ""
+                pattern = ""
                 res = None
                 temp = result_lines
                 while True:
-                    result_lines = list(filter(lambda x: x.find(k8s) >= 0, result_lines)) if k8s else temp
+                    result_lines = list(filter(lambda x: x.find(pattern) >= 0, result_lines)) if pattern else temp
                     if result_lines:
                         for n,e in enumerate(result_lines):
                             if cmp_file(e,dst):
@@ -295,11 +293,11 @@ def ki():
                             else:
                                 print("\033[1;32;40m%s\033[0m"%n,e.strip())
                         try:
-                            k8s = input("\033[1;32;35m%s\033[0m\033[5;32;35m%s\033[0m" % ("select",":")).strip()
+                            pattern = input("\033[1;32;35m%s\033[0m\033[5;32;35m%s\033[0m" % ("select",":")).strip()
                         except:
                             sys.exit()
-                        if k8s.isdigit() and 0 <= int(k8s) < len(result_lines) or len(result_lines) == 1:
-                            index = int(k8s) if k8s.isdigit() else 0
+                        if pattern.isdigit() and 0 <= int(pattern) < len(result_lines) or len(result_lines) == 1:
+                            index = int(pattern) if pattern.isdigit() else 0
                             res = (result_lines[index]).split()[0]
                         if res and res != dst:
                             os.unlink(dst)
@@ -308,7 +306,7 @@ def ki():
                             find_history(res)
                             break
                     else:
-                        k8s = ""
+                        pattern = ""
             else:
                 print("\033[1;32;35m%s\033[0m\033[5;32;35m%s\033[0m " % ("File not found ",dst))
     elif 2 < len(sys.argv) < 5 and sys.argv[1] == '-n':
@@ -337,7 +335,7 @@ def ki():
                 if result_lines:
                     for n,e in enumerate(result_lines):
                         print("\033[1;32;40m%s\033[0m"%n,e.strip())
-                    if result_num > 1 and n > 7:
+                    if result_num > 1 and n > 5:
                         style = "\033[5;32;40m%s\033[0m" if switch else "\033[1;32;40m%s\033[0m"
                         print(style%("[ "+kubeconfig+" / "+ns+" ]"))
                         switch = False
@@ -355,10 +353,12 @@ def ki():
                         cmd = cmd_obj(ns,obj,res,args,iip)
                         print("\033[1;32;40m%s\033[0m" % cmd)
                         os.system(cmd)
+                        if args[0] in ('d'):
+                            pod = res
                 else:
                     pod = ""
         else:
-            print("No namespace found in the kubenetes.")
+            print("No namespace found in the kubernetes.")
 def main():
     ki()
 #-----------------PROG----------------------------

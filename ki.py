@@ -3,7 +3,7 @@
 # Description : Kubectl Pro
 # Version     : 0.1
 #*************************************************
-import os,re,sys,json,subprocess
+import os,sys,json,subprocess
 #-----------------FUN-----------------------------
 def cmp_file(f1, f2):
     st1 = os.stat(f1)
@@ -122,7 +122,7 @@ def find_optimal(namespace_list: list, namespace: str):
     result_list = [(indexes[i] + container) * (1.62 if not words[i] else 1) for i, container in enumerate(contains)]
     return namespace_list[result_list.index(min(result_list))] if len(set(indexes)) != 1 else None
 def find_config():
-    cmd = '''find $HOME/.kube -maxdepth 2 -type f -name 'kubeconfig*'|egrep '.*' || grep -l "current-context" `find $HOME/.kube -maxdepth 2 -type f`'''
+    cmd = '''find $HOME/.kube -maxdepth 2 -type f -name 'kubeconfig*'|egrep '.*' && grep -l "current-context" `find $HOME/.kube -maxdepth 2 -type f`'''
     k8s_list = subprocess.Popen(cmd,shell=True,stdout=subprocess.PIPE,stderr=subprocess.PIPE,universal_newlines=True)
     dst = os.environ.get("HOME")+"/.kube/config"
     result_set = { e.split('\n')[0] for e in k8s_list.stdout.readlines() }
@@ -337,7 +337,7 @@ def ki():
                         print("\033[1;32;40m%s\033[0m"%n,e.strip())
                     if result_num > 1 and n > 5:
                         style = "\033[5;32;40m%s\033[0m" if switch else "\033[1;32;40m%s\033[0m"
-                        print(style%("[ "+kubeconfig+" / "+ns+" ]"))
+                        print(style%("[ "+kubeconfig+" / "+ns+" --- "+obj.upper()+" ]"))
                         switch = False
                     try:
                         pod = input("\033[1;32;35m%s\033[0m\033[5;32;35m%s\033[0m" % ("grep",":")).strip()

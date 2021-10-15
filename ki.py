@@ -129,7 +129,6 @@ def find_config():
     result_num = len(result_set)
     result_lines = list(result_set)
     kubeconfig = None
-
     if result_num == 1:
         if os.path.exists(dst):
             if not os.path.islink(dst):
@@ -353,8 +352,6 @@ def ki():
                         cmd = cmd_obj(ns,obj,res,args,iip)
                         print("\033[1;32;40m%s\033[0m" % cmd)
                         os.system(cmd)
-                        if args[0] in ('d'):
-                            pod = res
                 else:
                     pod = ""
         else:

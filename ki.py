@@ -113,7 +113,7 @@ def cmd_obj(ns, obj, res, args, iip="x"):
             else:
                 cmd = "kubectl -n "+ns+" logs -f "+res+" "+container+"|grep --color=auto "+regular if regular else "kubectl -n "+ns+" logs -f "+res+" "+container+" --tail 200"
         else:
-            cmd = "kubectl -n "+ns+" exec -it  "+res+"  -- sh"
+            cmd = "kubectl -n "+ns+" exec -it "+res+" -- sh"
     return cmd
 def find_optimal(namespace_list: list, namespace: str):
     indexes = [row.index(namespace) * 0.8 if namespace in row else 10000 for row in namespace_list]
@@ -248,23 +248,24 @@ def find_ns():
     return ns,kubeconfig,switch,result_num
 def ki():
     if len(sys.argv) == 1:
-        sys.argv.append('-h')
-    elif sys.argv[1] not in ('-s','-n','-h','-help'):
+        sys.argv.append('-n')
+    elif sys.argv[1] not in ('-n','-s','-h','-help'):
         sys.argv.insert(1,'-n')
-    if len(sys.argv) == 2 and sys.argv[1] in ('-n','-h','-help'):
-        cmd = "kubectl get ns"
-        print("\033[1;32;40m%s\033[0m" % cmd)
-        os.system(cmd)
+    if len(sys.argv) == 2 and sys.argv[1] in ('-h','-help'):
         style = "\033[1;32;40m%s\033[0m"
-        print(style % "\nKubectl Pro controls the Kubernetes cluster manager")
+        print(style % "Kubectl Pro controls the Kubernetes cluster manager")
         print(style % "1. ki -s","Select the kubernetes to be connected ( if there are multiple ~/.kube/kubeconfig*,the kubeconfig storage can be kubeconfig-hz,kubeconfig-sh,etc. )")
         print(style % "2. ki k8s.ns","Select the kubernetes which namespace in the kubernetes ( if there are multiple ~/.kube/kubeconfig*,this way can be one-stop. )")
         print(style % "3. ki","List all namespaces")
-        print(style % "4. ki xx","List all pods in the namespace ( if there are multiple ~/.kube/kubeconfig*,the best matching kubeconfig will be found ),the namespace parameter supports fuzzy matching,after outputting the pod list, grep: xxx filters the query\n         grep: index l ( [ l ] Print the logs for a container in a pod or specified resource )\n         grep: index l 100 ( Print the logs of the latest 100 lines )\n         grep: index l xxx ( Print the logs and filters the specified characters )\n         grep: index r ( [ r ] Rollout restart the pod )\n         grep: index o ( [ o ] Output the [Deployment,StatefulSet,Service,Ingress,Configmap,Secret].yml file )\n         grep: index del ( [ del ] Delete the pod )\n         grep: index cle ( [ cle ] Delete the Deployment/StatefulSet )\n         grep: index e[si] ( [ e[si] ] Edit the Deploy/Service/Ingress )\n         grep: index c5 ( [ c5 ] Set the Deploy/StatefulSet replicas=5 )")
+        print(style % "4. ki xx","List all pods in the namespace ( if there are multiple ~/.kube/kubeconfig*,the best matching kubeconfig will be found ),the namespace parameter supports fuzzy matching,after outputting the pod list, select: xxx filters the query\n         select: index l ( [ l ] Print the logs for a container in a pod or specified resource )\n         select: index l 100 ( Print the logs of the latest 100 lines )\n         select: index l xxx ( Print the logs and filters the specified characters )\n         select: index r ( [ r ] Rollout restart the pod )\n         select: index o ( [ o ] Output the [Deployment,StatefulSet,Service,Ingress,Configmap,Secret].yml file )\n         select: index del ( [ del ] Delete the pod )\n         select: index cle ( [ cle ] Delete the Deployment/StatefulSet )\n         select: index e[si] ( [ e[si] ] Edit the Deploy/Service/Ingress )\n         select: index c5 ( [ c5 ] Set the Deploy/StatefulSet replicas=5 )")
         print(style % "5. ki xx d","List the Deployment of a namespace")
         print(style % "6. ki xx f","List the StatefulSet of a namespace")
         print(style % "7. ki xx s","List the Service of a namespace")
         print(style % "8. ki xx i","List the Ingress of a namespace")
+    elif len(sys.argv) == 2 and sys.argv[1] == '-n':
+        cmd = "kubectl get ns"
+        print("\033[1;32;40m%s\033[0m" % cmd)
+        os.system(cmd)
     elif len(sys.argv) == 2 and sys.argv[1] == '-s':
         result_lines = find_config()[1]
         if result_lines and len(result_lines) > 1:
@@ -330,7 +331,8 @@ def ki():
                     result_lines = p.stdout.readlines()
                     if not result_lines:
                         break
-                result_lines = list(filter(lambda x: x.find(pod) >= 0, result_lines))
+                if not (pod.isdigit() and int(pod) < len(result_lines)):
+                    result_lines = list(filter(lambda x: x.find(pod) >= 0, result_lines))
                 if result_lines:
                     for n,e in enumerate(result_lines):
                         print("\033[1;32;40m%s\033[0m"%n,e.strip())
@@ -339,7 +341,8 @@ def ki():
                         print(style%("[ "+kubeconfig+" / "+ns+" --- "+obj.upper()+" ]"))
                         switch = False
                     try:
-                        pod = input("\033[1;32;35m%s\033[0m\033[5;32;35m%s\033[0m" % ("grep",":")).strip()
+                        pod = input("\033[1;32;35m%s\033[0m\033[5;32;35m%s\033[0m" % ("select",":")).strip()
+                        num = 10 + len(pod)
                     except:
                         sys.exit()
                     podList = pod.split()
@@ -350,8 +353,10 @@ def ki():
                         res = result_lines[index].split()[0]
                         iip = result_lines[index].split()[5] if len(result_lines[index].split()) > 5 else ''
                         cmd = cmd_obj(ns,obj,res,args,iip)
+                        print('\033[{}C\033[1A'.format(num),end = '')
                         print("\033[1;32;40m%s\033[0m" % cmd)
                         os.system(cmd)
+                        print('\r')
                 else:
                     pod = ""
         else:

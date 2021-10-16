@@ -32,17 +32,17 @@ ki.py 最大限度让程序帮人自动管理,如果你正在使用 kubectx/kube
 1. ki -s 主动选择需要连接的kubernetes(如果存在多个~/.kube/kubeconfig*,可以把 kubeconfig 存放命令为 kubeconfig-hz,kubeconfig-sh)
 2. ki k8s.ns 一步到位直接连接到指定的kubernetes/Namespace(如果存在多个~/.kube/kubeconfig*,这种方式一步到位;首先解析 $k8s 模糊匹配对应要连接的 kubeconfig,然后查看该 k8s 下模糊匹配 $ns)
 2. ki 列出当前 kubeconfig Namespace
-3. ki xx 列出某 Namespace (如果存在多个 ~/.kube/kubeconfig*,将在其中找到最优匹配) 的 Pod,Namespace 参数支持模糊匹配,例如要查看 Namespace 为 dev 里的 pod,可以简写为 'ki d',输出 pod 列表后 grep: xxx 过滤查询
+3. ki xx 列出某 Namespace (如果存在多个 ~/.kube/kubeconfig*,将在其中找到最优匹配) 的 Pod,Namespace 参数支持模糊匹配,例如要查看 Namespace 为 dev 里的 pod,可以简写为 'ki d',输出 pod 列表后 select: xxx 过滤查询
 
-         grep: index l (可选参数 [ l ] 表示输出目标 Pod 的实时日志)
-         grep: index l 100 (表示输出目标 Pod 最新100行的实时日志)
-         grep: index l xxx (表示输出目标 Pod 实时日志并过滤指定字符串)
-         grep: index r (可选参数 [ r ] 表示重启目标 Pod)
-         grep: index o (可选参数 [ o ] 表示导出目标[Deployment,StatefulSet,Service,Ingress,Configmap,Secret] yml文件)
-         grep: index del (可选参数 [ del ] 表示删除目标 Pod,根据 k8s 的默认编排策略会重新拉起,类似重启 Pod)
-         grep: index cle (可选参数 [ cle ] 表示删除目标 Deployment/StatefulSet)
-         grep: index e[si] (可选参数 [ e[si] ] 表示编辑目标 Deploy/Service/Ingress)
-         grep: index c5 (可选参数 [ c5 ] 表示编辑目标 Deploy/StatefulSet replicas=5)
+         select: index l (可选参数 [ l ] 表示输出目标 Pod 的实时日志)
+         select: index l 100 (表示输出目标 Pod 最新100行的实时日志)
+         select: index l xxx (表示输出目标 Pod 实时日志并过滤指定字符串)
+         select: index r (可选参数 [ r ] 表示重启目标 Pod)
+         select: index o (可选参数 [ o ] 表示导出目标[Deployment,StatefulSet,Service,Ingress,Configmap,Secret] yml文件)
+         select: index del (可选参数 [ del ] 表示删除目标 Pod,根据 k8s 的默认编排策略会重新拉起,类似重启 Pod)
+         select: index cle (可选参数 [ cle ] 表示删除目标 Deployment/StatefulSet)
+         select: index e[si] (可选参数 [ e[si] ] 表示编辑目标 Deploy/Service/Ingress)
+         select: index c5 (可选参数 [ c5 ] 表示编辑目标 Deploy/StatefulSet replicas=5)
 
 4. ki xx d 列出某 Namespace 的 Deployment
 5. ki xx f 列出某 Namespace 的 StatefulSet
@@ -54,17 +54,17 @@ ki.py 最大限度让程序帮人自动管理,如果你正在使用 kubectx/kube
 1. ki -s Select the kubernetes to be connected ( if there are multiple ~/.kube/kubeconfig*,the kubeconfig storage can be kubeconfig-hz,kubeconfig-sh,etc. )
 2. ki k8s.ns Select the kubernetes which namespace in the kubernetes ( if there are multiple ~/.kube/kubeconfig*,this way can be one-stop. )
 3. ki List all namespaces
-4. ki xx List all pods in the namespace ( if there are multiple ~/.kube/kubeconfig*,the best matching kubeconfig will be found ),the namespace parameter supports fuzzy matching,after outputting the pod list, grep: XXX filters the query
+4. ki xx List all pods in the namespace ( if there are multiple ~/.kube/kubeconfig*,the best matching kubeconfig will be found ),the namespace parameter supports fuzzy matching,after outputting the pod list, select: XXX filters the query
 
-         grep: index l ( [ l ] Print the logs for a container in a pod or specified resource )
-         grep: index l 100 ( Print the logs of the latest 100 lines )
-         grep: index l xxx ( Print the logs and filters the specified characters )
-         grep: index r ( [ r ] Rollout restart the pod )
-         grep: index o ( [ o ] Output the [Deployment,StatefulSet,Service,Ingress,Configmap,Secret].yml file )
-         grep: index del ( [ del ] Delete the pod )
-         grep: index cle ( [ cle ] Delete the Deployment/StatefulSet )
-         grep: index e[si] ( [ e[si] ] Edit the Deploy/Service/Ingress )
-         grep: index c5 ( [ c5 ] Set the Deploy/StatefulSet replicas=5 )
+         select: index l ( [ l ] Print the logs for a container in a pod or specified resource )
+         select: index l 100 ( Print the logs of the latest 100 lines )
+         select: index l xxx ( Print the logs and filters the specified characters )
+         select: index r ( [ r ] Rollout restart the pod )
+         select: index o ( [ o ] Output the [Deployment,StatefulSet,Service,Ingress,Configmap,Secret].yml file )
+         select: index del ( [ del ] Delete the pod )
+         select: index cle ( [ cle ] Delete the Deployment/StatefulSet )
+         select: index e[si] ( [ e[si] ] Edit the Deploy/Service/Ingress )
+         select: index c5 ( [ c5 ] Set the Deploy/StatefulSet replicas=5 )
 
 5. ki xx d List the Deployment of a Namespace
 6. ki xx f List the StatefulSet of a Namespace

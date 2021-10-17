@@ -325,7 +325,7 @@ def ki():
                 ext = d[str(sys.argv[3])[0]][1]
             while True:
                 if not pod:
-                    cmd = "kubectl --sort-by=.metadata.creationTimestamp get "+obj+ext+" --no-headers -n "+ ns
+                    cmd = "  kubectl --sort-by=.metadata.creationTimestamp get "+obj+ext+" --no-headers -n "+ ns
                     print("\033[1;32;40m%s\033[0m" % cmd)
                     p = subprocess.Popen(cmd,shell=True,stdout=subprocess.PIPE,stderr=subprocess.PIPE,universal_newlines=True)
                     result_lines = p.stdout.readlines()

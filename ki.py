@@ -237,7 +237,7 @@ def find_ns():
                         os.symlink(config,dst)
                         l = find_config()
                         kubeconfig = config
-                        print("\033[5;32;40m%s\033[0m"%("[ "+str(n+1)+" SWITCH TO "+config.split("/")[-1]+" / "+ns+" ] "))
+                        print("\033[5;32m{}\033[0m".format("[ "+str(n+1)+" SWITCH TO "+config.split("/")[-1]+" / "+ns+" ] "))
                         find_history(config)
                         switch = True
                     break
@@ -252,7 +252,7 @@ def ki():
     elif sys.argv[1] not in ('-n','-s','-h','-help'):
         sys.argv.insert(1,'-n')
     if len(sys.argv) == 2 and sys.argv[1] in ('-h','-help'):
-        style = "\033[1;32;40m%s\033[0m"
+        style = "\033[1;32m%s\033[0m"
         print(style % "Kubectl Pro controls the Kubernetes cluster manager")
         print(style % "1. ki -s","Select the kubernetes to be connected ( if there are multiple ~/.kube/kubeconfig*,the kubeconfig storage can be kubeconfig-hz,kubeconfig-sh,etc. )")
         print(style % "2. ki k8s.ns","Select the kubernetes which namespace in the kubernetes ( if there are multiple ~/.kube/kubeconfig*,this way can be one-stop. )")
@@ -264,7 +264,7 @@ def ki():
         print(style % "8. ki xx i","List the Ingress of a namespace")
     elif len(sys.argv) == 2 and sys.argv[1] == '-n':
         cmd = "kubectl get ns"
-        print("\033[1;32;40m%s\033[0m" % cmd)
+        print("\033[1;32m{}\033[0m".format(cmd))
         os.system(cmd)
     elif len(sys.argv) == 2 and sys.argv[1] == '-s':
         result_lines = find_config()[1]
@@ -289,11 +289,11 @@ def ki():
                     if result_lines:
                         for n,e in enumerate(result_lines):
                             if cmp_file(e,dst):
-                                print("\033[5;32;40m%s\033[0m"%n,e.strip())
+                                print("\033[5;32m{} {}\033[0m".format(n,e.strip()))
                             else:
-                                print("\033[1;32;40m%s\033[0m"%n,e.strip())
+                                print("\033[1;32m{}\033[0m {}".format(n,e.strip()))
                         try:
-                            pattern = input("\033[1;32;35m%s\033[0m\033[5;32;35m%s\033[0m" % ("select",":")).strip()
+                            pattern = input("\033[1;35m%s\033[0m\033[5;35m%s\033[0m" % ("select",":")).strip()
                         except:
                             sys.exit()
                         if pattern.isdigit() and 0 <= int(pattern) < len(result_lines) or len(result_lines) == 1:
@@ -302,13 +302,13 @@ def ki():
                         if res and res != dst:
                             os.unlink(dst)
                             os.symlink(res,dst)
-                            print("\033[1;32;40m%s\033[0m" % res)
+                            print("\033[1;32m{}\033[0m".format(res))
                             find_history(res)
                             break
                     else:
                         pattern = ""
             else:
-                print("\033[1;32;35m%s\033[0m\033[5;32;35m%s\033[0m " % ("File not found ",dst))
+                print("\033[1;32m{}\033[0m\033[5;32m{}\033[0m".format("File not found ",dst))
     elif 2 < len(sys.argv) < 5 and sys.argv[1] == '-n':
         l = find_ns()
         ns = l[0]
@@ -325,8 +325,8 @@ def ki():
                 ext = d[str(sys.argv[3])[0]][1]
             while True:
                 if not pod:
-                    cmd = "  kubectl --sort-by=.metadata.creationTimestamp get "+obj+ext+" --no-headers -n "+ ns
-                    print("\033[1;32;40m%s\033[0m" % cmd)
+                    cmd = "kubectl --sort-by=.metadata.creationTimestamp get "+obj+ext+" --no-headers -n "+ ns
+                    print("\033[1;32m  {}\033[0m".format(cmd))
                     p = subprocess.Popen(cmd,shell=True,stdout=subprocess.PIPE,stderr=subprocess.PIPE,universal_newlines=True)
                     result_lines = p.stdout.readlines()
                     if not result_lines:
@@ -335,13 +335,13 @@ def ki():
                     result_lines = list(filter(lambda x: x.find(pod) >= 0, result_lines))
                 if result_lines:
                     for n,e in enumerate(result_lines):
-                        print("\033[1;32;40m%s\033[0m"%n,e.strip())
+                        print("\033[1;32m{}\033[0m {}".format(n,e.strip()))
                     if result_num > 1 and n > 5:
-                        style = "\033[5;32;40m%s\033[0m" if switch else "\033[1;32;40m%s\033[0m"
-                        print(style%("[ "+kubeconfig+" / "+ns+" --- "+obj.upper()+" ]"))
+                        style = "\033[5;32m{}\033[0m" if switch else "\033[1;32m{}\033[0m"
+                        print(style.format("[ "+kubeconfig+" / "+ns+" --- "+obj.upper()+" ]"))
                         switch = False
                     try:
-                        pod = input("\033[1;32;35m%s\033[0m\033[5;32;35m%s\033[0m" % ("select",":")).strip()
+                        pod = input("\033[1;35m%s\033[0m\033[5;35m%s\033[0m" % ("select",":")).strip()
                         num = 10 + len(pod)
                     except:
                         sys.exit()
@@ -354,7 +354,7 @@ def ki():
                         iip = result_lines[index].split()[5] if len(result_lines[index].split()) > 5 else ''
                         cmd = cmd_obj(ns,obj,res,args,iip)
                         print('\033[{}C\033[1A'.format(num),end = '')
-                        print("\033[1;32;40m%s\033[0m" % cmd)
+                        print("\033[1;32m{}\033[0m".format(cmd))
                         os.system(cmd)
                         print('\r')
                 else:

@@ -210,8 +210,10 @@ def find_history(config):
         f.write(json.dumps(dc))
 def find_ns():
     l = find_config()
-    result_num = l[-1]
+    ns = None
+    kubeconfig = None
     switch = False
+    result_num = l[-1]
     if result_num > 0:
         dst = os.environ.get("HOME")+"/.kube/config"
         kn = sys.argv[2].split('.')
@@ -219,32 +221,31 @@ def find_ns():
         config = find_optimal(l[1],kn[0]) or dst if len(kn) > 1 else dst
         p1 = subprocess.Popen("kubectl get ns --no-headers --kubeconfig "+config,shell=True,stdout=subprocess.PIPE,stderr=subprocess.PIPE,universal_newlines=True)
         ns_set = list({ e.split()[0] for e in p1.stdout.readlines() })
-        ns = find_optimal(ns_set,ns_pattern)
-        l[1].remove(os.path.realpath(config))
-        l[1].insert(0,config)
-        for n,config in enumerate(l[1]):
-            p1 = subprocess.Popen("kubectl get ns --no-headers --kubeconfig "+config,shell=True,stdout=subprocess.PIPE,stderr=subprocess.PIPE,universal_newlines=True)
-            ns_set = list({ e.split()[0] for e in p1.stdout.readlines() })
+        if ns_set:
             ns = find_optimal(ns_set,ns_pattern)
-            if ns:
-                p2 = subprocess.Popen("kubectl get pods --no-headers --kubeconfig "+config+" -n "+ns,shell=True,stdout=subprocess.PIPE,stderr=subprocess.PIPE,universal_newlines=True)
-                if list({ e.split()[0] for e in p2.stdout.readlines() }):
-                    if os.path.exists(dst) and config not in {dst,os.path.realpath(dst)}:
-                        if dst != os.path.realpath(dst):
-                            with open(os.environ.get("HOME")+"/.kube/.last",'w') as f:
-                                f.write(os.path.realpath(dst))
-                        os.unlink(dst)
-                        os.symlink(config,dst)
-                        l = find_config()
-                        kubeconfig = config
-                        print("\033[5;32m{}\033[0m".format("[ "+str(n+1)+" SWITCH TO "+config.split("/")[-1]+" / "+ns+" ] "))
-                        find_history(config)
-                        switch = True
-                    break
-        kubeconfig = l[0]
-    else:
-        ns = None
-        kubeconfig = None
+            l[1].remove(os.path.realpath(config))
+            l[1].insert(0,config)
+            for n,config in enumerate(l[1]):
+                p1 = subprocess.Popen("kubectl get ns --no-headers --kubeconfig "+config,shell=True,stdout=subprocess.PIPE,stderr=subprocess.PIPE,universal_newlines=True)
+                ns_set = list({ e.split()[0] for e in p1.stdout.readlines() })
+                if ns_set:
+                    ns = find_optimal(ns_set,ns_pattern)
+                    if ns:
+                        p2 = subprocess.Popen("kubectl get pods --no-headers --kubeconfig "+config+" -n "+ns,shell=True,stdout=subprocess.PIPE,stderr=subprocess.PIPE,universal_newlines=True)
+                        if list({ e.split()[0] for e in p2.stdout.readlines() }):
+                            if os.path.exists(dst) and config not in {dst,os.path.realpath(dst)}:
+                                if dst != os.path.realpath(dst):
+                                    with open(os.environ.get("HOME")+"/.kube/.last",'w') as f:
+                                        f.write(os.path.realpath(dst))
+                                os.unlink(dst)
+                                os.symlink(config,dst)
+                                l = find_config()
+                                kubeconfig = config
+                                print("\033[5;32m{}\033[0m".format("[ "+str(n+1)+" SWITCH TO "+config.split("/")[-1]+" / "+ns+" ] "))
+                                find_history(config)
+                                switch = True
+                            break
+            kubeconfig = l[0]
     return ns,kubeconfig,switch,result_num
 def ki():
     if len(sys.argv) == 1:

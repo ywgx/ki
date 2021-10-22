@@ -50,6 +50,10 @@ ki.py 最大限度让程序帮人自动管理,如果你正在使用 kubectx/kube
 8. ki xx i 列出某 Namespace 的 Ingress
 9. ki xx p 列出某 Namespace 的 PersistentVolumeClaim
 
+# 小贴士
+
+在 Pod 列表操作界面,'$' 匹配新发布的 Pod,'#' 匹配上一次选择的 Pod,比如每次应用新发布,直接 '$' 回车即可登录新容器
+
 # Kubectl Pro controls the Kubernetes cluster manager
 
 1. ki -s Select the kubernetes to be connected ( if there are multiple ~/.kube/kubeconfig*,the kubeconfig storage can be kubeconfig-hz,kubeconfig-sh,etc. )

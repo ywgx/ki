@@ -30,9 +30,9 @@ ki.py 最大限度让程序帮人自动管理,如果你正在使用 kubectx/kube
 # Kubectl Pro 管理使用说明
 
 1. ki -s 主动选择需要连接的kubernetes(如果存在多个~/.kube/kubeconfig*,可以把 kubeconfig 存放命令为 kubeconfig-hz,kubeconfig-sh)
-2. ki k8s.ns 一步到位直接连接到指定的kubernetes/Namespace(如果存在多个~/.kube/kubeconfig*,这种方式一步到位;首先解析 $k8s 模糊匹配对应要连接的 kubeconfig,然后查看该 k8s 下模糊匹配 $ns)
-2. ki 列出当前 kubeconfig Namespace
-3. ki xx 列出某 Namespace (如果存在多个 ~/.kube/kubeconfig*,将在其中找到最优匹配) 的 Pod,Namespace 参数支持模糊匹配,例如要查看 Namespace 为 dev 里的 pod,可以简写为 'ki d',输出 pod 列表后 select: xxx 过滤查询
+2. ki $k8s.$ns 一步到位直接连接到指定的kubernetes/Namespace(如果存在多个~/.kube/kubeconfig*,这种方式一步到位;首先解析 $k8s 模糊匹配对应要连接的 kubeconfig,然后查看该 k8s 下模糊匹配 $ns)
+3. ki 列出当前 kubeconfig Namespace
+4. ki xx 列出某 Namespace (如果存在多个 ~/.kube/kubeconfig*,将在其中找到最优匹配) 的 Pod,Namespace 参数支持模糊匹配,例如要查看 Namespace 为 dev 里的 pod,可以简写为 'ki d',输出 pod 列表后 select: xxx 过滤查询
 
          select: index l (可选参数 [ l ] 表示输出目标 Pod 的实时日志)
          select: index l 100 (表示输出目标 Pod 最新100行的实时日志)
@@ -44,15 +44,16 @@ ki.py 最大限度让程序帮人自动管理,如果你正在使用 kubectx/kube
          select: index e[si] (可选参数 [ e[si] ] 表示编辑目标 Deploy/Service/Ingress)
          select: index c5 (可选参数 [ c5 ] 表示编辑目标 Deploy/StatefulSet replicas=5)
 
-4. ki xx d 列出某 Namespace 的 Deployment
-5. ki xx f 列出某 Namespace 的 StatefulSet
-6. ki xx s 列出某 Namespace 的 Service
-7. ki xx i 列出某 Namespace 的 Ingress
+5. ki xx d 列出某 Namespace 的 Deployment
+6. ki xx f 列出某 Namespace 的 StatefulSet
+7. ki xx s 列出某 Namespace 的 Service
+8. ki xx i 列出某 Namespace 的 Ingress
+9. ki xx p 列出某 Namespace 的 PersistentVolumeClaim
 
 # Kubectl Pro controls the Kubernetes cluster manager
 
 1. ki -s Select the kubernetes to be connected ( if there are multiple ~/.kube/kubeconfig*,the kubeconfig storage can be kubeconfig-hz,kubeconfig-sh,etc. )
-2. ki k8s.ns Select the kubernetes which namespace in the kubernetes ( if there are multiple ~/.kube/kubeconfig*,this way can be one-stop. )
+2. ki $k8s.$ns Select the kubernetes which namespace in the kubernetes ( if there are multiple ~/.kube/kubeconfig*,this way can be one-stop. )
 3. ki List all namespaces
 4. ki xx List all pods in the namespace ( if there are multiple ~/.kube/kubeconfig*,the best matching kubeconfig will be found ),the namespace parameter supports fuzzy matching,after outputting the pod list, select: XXX filters the query
 
@@ -69,4 +70,5 @@ ki.py 最大限度让程序帮人自动管理,如果你正在使用 kubectx/kube
 5. ki xx d List the Deployment of a Namespace
 6. ki xx f List the StatefulSet of a Namespace
 7. ki xx s List the Service of a Namespace
-7. ki xx i List the Ingress of a Namespace
+8. ki xx i List the Ingress of a Namespace
+9. ki xx p List the PersistentVolumeClaim of a namespace

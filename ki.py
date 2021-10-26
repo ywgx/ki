@@ -101,7 +101,7 @@ def cmd_obj(ns, obj, res, args, iip="x"):
             obj = "sts" if end.isdigit() else "deploy"
             regular = args.split('c')[-1]
             action = "scale"
-            replicas = regular if regular.isdigit() and int(regular) < 30 else str(1)
+            replicas = regular if regular.isdigit() and -1 < int(regular) < 30 else str(1)
             cmd = "kubectl -n "+ns+" "+action+" --replicas="+replicas+" "+obj+"/"+name
         elif args[0] == 'l':
             regular = args.split('l')[-1]
@@ -135,10 +135,10 @@ def find_config():
     if result_num == 1:
         if os.path.exists(dst):
             if not os.path.islink(dst):
-                with open(dst,'r') as fr, open(os.environ.get("HOME")+"/.kube/kubeconfig-0",'w') as fw: fw.write(fr.read())
+                with open(dst,'r') as fr, open(os.environ.get("HOME")+"/.kube/config-0",'w') as fw: fw.write(fr.read())
                 os.unlink(dst)
-                os.symlink(os.environ.get("HOME")+"/.kube/kubeconfig-0",dst)
-                kubeconfig = "kubeconfig-0"
+                os.symlink(os.environ.get("HOME")+"/.kube/config-0",dst)
+                kubeconfig = "config-0"
             else:
                 kubeconfig = result_lines[0].split("/")[-1]
         else:
@@ -178,10 +178,10 @@ def find_config():
 
         if os.path.exists(dst):
             if not os.path.islink(dst):
-                with open(dst,'r') as fr, open(os.environ.get("HOME")+"/.kube/kubeconfig-0",'w') as fw: fw.write(fr.read())
+                with open(dst,'r') as fr, open(os.environ.get("HOME")+"/.kube/config-0",'w') as fw: fw.write(fr.read())
                 os.unlink(dst)
-                os.symlink(os.environ.get("HOME")+"/.kube/kubeconfig-0",dst)
-                kubeconfig = "kubeconfig-0"
+                os.symlink(os.environ.get("HOME")+"/.kube/config-0",dst)
+                kubeconfig = "config-0"
             else:
                 for e in result_lines:
                     if cmp_file(e,dst):
@@ -246,6 +246,14 @@ def find_ns():
                             break
             kubeconfig = l[0]
     return ns,kubeconfig,switch,result_num
+def record(res: str,obj: str):
+    with open(os.environ.get("HOME")+"/.kube/.res",'w') as f:
+        if obj == "pod":
+            resList = res.split('-')
+            last_res = ('-').join(resList[:-1]) if resList[-1].isdigit() else ('-').join(resList[:-2])
+        else:
+            last_res = res
+        f.write(last_res)
 def ki():
     if len(sys.argv) == 1:
         sys.argv.append('-n')
@@ -303,7 +311,7 @@ def ki():
                         if res and res != dst:
                             os.unlink(dst)
                             os.symlink(res,dst)
-                            print("\033[1;32m{}\033[0m".format(res))
+                            print("\033[5;32m{}\033[0m".format(res))
                             find_history(res)
                             break
                     else:
@@ -373,17 +381,11 @@ def ki():
                         res = result_lines[index].split()[0]
                         iip = result_lines[index].split()[5] if len(result_lines[index].split()) > 5 else find_ip(res)
                         cmd = cmd_obj(ns,obj,res,args,iip)
+                        record(res,obj)
                         print('\033[{}C\033[1A'.format(num),end = '')
                         print("\033[1;32m{}\033[0m".format(cmd))
                         os.system(cmd)
                         print('\r')
-                        with open(os.environ.get("HOME")+"/.kube/.res",'w') as f:
-                            if obj == "pod":
-                                resList = res.split('-')
-                                last_res = ('-').join(resList[:-1]) if resList[-1].isdigit() else ('-').join(resList[:-2])
-                            else:
-                                last_res = res
-                            f.write(last_res)
                 else:
                     pod = ""
         else:

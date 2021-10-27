@@ -35,14 +35,14 @@ def cmd_obj(ns, obj, res, args, iip="x"):
         cmd = "kubectl -n "+ns+" "+action+" "+obj+" --sort-by=.metadata.creationTimestamp"
     elif obj in ("deployment","deploy","service","svc","ingress","ing","configmap","cm","secret","persistentvolumes","pv","persistentvolumeclaims","pvc","statefulsets","sts"):
         action2 = ""
-        if args[0] == 'e':
+        if args[0] == "e":
             action = "edit"
-        elif args[0] == 'd':
+        elif args[0] == "d":
             action = "describe"
         elif args[0] == 'o':
             action = "get"
             action2 = " -o yaml > "+res+"."+obj+".yml"
-        elif args == 'cle':
+        elif args == "cle":
             action = "delete"
         else:
             action = "get"
@@ -329,7 +329,7 @@ def ki():
             obj = "pod"
             ext = " -o wide"
             if len(sys.argv) == 4:
-                d = {'d':['deploy'," -o wide"],'s':['service'," -o wide"],'i':['ingress'," -o wide"],'c':['configmap'," -o wide"],'t':['secret'," -o wide"],'n':['node'," -o wide"],'p':['pvc'," -o wide"],'v':['pv'," -o wide"],'f':['sts'," -o wide"],'e':['event','']}
+                d = {'d':['deploy'," -o wide"],'s':['service'," -o wide"],'i':['ingress'," -o wide"],'c':['configmap'," -o wide"],'t':['secret'," -o wide"],'n':['node'," -o wide"],'p':['pvc'," -o wide"],'v':['pv'," -o wide"],'f':['sts'," -o wide"],'e':['event',''],'r':['rs','']}
                 obj = d[sys.argv[3][0]][0] if sys.argv[3][0] in d else "pod"
                 ext = d[sys.argv[3][0]][1] if sys.argv[3][0] in d else ""
             while True:
@@ -348,7 +348,7 @@ def ki():
                 if result_lines:
                     for n,e in enumerate(result_lines):
                         print("\033[1;32m{}\033[0m {}".format(n,e.strip()))
-                    if result_num > 1 and n > 5:
+                    if n > 5:
                         style = "\033[5;32m{}\033[0m" if switch else "\033[1;32m{}\033[0m"
                         print(style.format("[ "+kubeconfig+" / "+ns+" --- "+obj.upper()+" ]"))
                         switch = False

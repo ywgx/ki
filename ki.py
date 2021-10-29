@@ -119,6 +119,7 @@ def find_ip(res: str):
     ip = re.findall(r'[0-9]+(?:\.[0-9]+){3}',res)
     return ip[0] if ip else ""
 def find_optimal(namespace_list: list, namespace: str):
+    namespace_list.sort()
     indexes = [row.index(namespace) * 0.8 if namespace in row else 10000 for row in namespace_list]
     contains = [len(row.replace(namespace, '')) * 0.42 for row in namespace_list]
     words = [namespace == row for row in namespace_list]
@@ -323,7 +324,6 @@ def ki():
         ns = l[0]
         kubeconfig = l[1]
         switch = l[2]
-        result_num = l[-1]
         if ns:
             pod = ""
             obj = "pod"

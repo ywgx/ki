@@ -3,7 +3,7 @@
 # Description : Kubectl Pro
 # Version     : 0.1
 #*************************************************
-import os,re,sys,json,subprocess
+import os,re,sys,time,json,subprocess
 #-----------------FUN-----------------------------
 def cmp_file(f1, f2):
     st1 = os.stat(f1)
@@ -51,7 +51,7 @@ def cmd_obj(ns, obj, res, args, iip="x"):
         obj = "pod"
         l = res.split('-')
         end = l[-1]
-        if end.isdigit():
+        if end.isdigit() and int(end) < 10000:
             del l[-1:]
             obj = "sts"
         else:
@@ -60,14 +60,14 @@ def cmd_obj(ns, obj, res, args, iip="x"):
         if args == "del":
             cmd = "kubectl -n "+ns+" delete pod "+res+" &"
         elif args == "cle":
-            obj = "sts" if end.isdigit() else "deploy"
+            obj = "sts" if end.isdigit() and int(end) < 10000 else "deploy"
             action = "delete"
             cmd = "kubectl -n "+ns+" "+action+" "+obj+" "+name
         elif args[0] == "r":
-            obj = "sts" if end.isdigit() else "deploy"
+            obj = "sts" if end.isdigit() and int(end) < 10000 else "deploy"
             cmd = "kubectl -n "+ns+" rollout restart "+obj+" "+name
         elif args[0] in ('o'):
-            obj = "sts" if end.isdigit() else "deploy"
+            obj = "sts" if end.isdigit() and int(end) < 10000 else "deploy"
             action = "get"
             if len(args) > 1:
                 if str(args)[1] == "d":
@@ -82,7 +82,7 @@ def cmd_obj(ns, obj, res, args, iip="x"):
                     obj = "deploy"
             cmd = "kubectl -n "+ns+" "+action+" "+obj+" "+name+" -o yaml > "+name+"."+obj+".yml"
         elif args[0] in ('d','e'):
-            obj = "sts" if end.isdigit() else "deploy"
+            obj = "sts" if end.isdigit() and int(end) < 10000 else "deploy"
             action = "describe" if args[0] == 'd' else "edit"
             if len(args) > 1:
                 if str(args)[1] == "d":
@@ -98,7 +98,7 @@ def cmd_obj(ns, obj, res, args, iip="x"):
                     name = res
             cmd = "kubectl -n "+ns+" "+action+" "+obj+" "+name
         elif args[0] == 'c':
-            obj = "sts" if end.isdigit() else "deploy"
+            obj = "sts" if end.isdigit() and int(end) < 10000 else "deploy"
             regular = args.split('c')[-1]
             action = "scale"
             replicas = regular if regular.isdigit() and -1 < int(regular) < 30 else str(1)
@@ -247,7 +247,11 @@ def find_ns():
                             break
             kubeconfig = l[0]
     return ns,kubeconfig,switch,result_num
-def record(res: str,obj: str):
+def record(res: str,obj: str,cmd: str,kubeconfig: str):
+    l = os.environ['SSH_CONNECTION'].split() if 'SSH_CONNECTION' in os.environ else "NULL NULL NULL".split()
+    USER = os.environ['USER'] if 'USER' in os.environ else "NULL"
+    HOST = l[2]
+    FROM = l[0]
     with open(os.environ.get("HOME")+"/.kube/.res",'w') as f:
         if obj == "pod":
             resList = res.split('-')
@@ -255,6 +259,10 @@ def record(res: str,obj: str):
         else:
             last_res = res
         f.write(last_res)
+    ops_list = os.environ.get("HOME")+"/.kube/.ops-list"
+    os.path.exists(ops_list) or os.mkdir(ops_list)
+    ops_file = time.strftime("%F",time.localtime())
+    with open(ops_list+"/"+ops_file,'a+') as f: f.write( time.strftime("%F %T ",time.localtime())+"[ "+USER+"@"+HOST+" from "+FROM+" ---> "+kubeconfig+" ]  " + cmd + "\n" )
 def ki():
     if len(sys.argv) == 1:
         sys.argv.append('-n')
@@ -381,7 +389,7 @@ def ki():
                         res = result_lines[index].split()[0]
                         iip = result_lines[index].split()[5] if len(result_lines[index].split()) > 5 else find_ip(res)
                         cmd = cmd_obj(ns,obj,res,args,iip)
-                        record(res,obj)
+                        record(res,obj,cmd,kubeconfig)
                         print('\033[{}C\033[1A'.format(num),end = '')
                         print("\033[1;32m{}\033[0m".format(cmd))
                         os.system(cmd)

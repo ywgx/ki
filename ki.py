@@ -224,7 +224,8 @@ def find_ns():
         ns_set = list({ e.split()[0] for e in p1.stdout.readlines() })
         if ns_set:
             ns = find_optimal(ns_set,ns_pattern)
-            l[1].remove(os.path.realpath(config))
+            if os.path.realpath(config) in l[1]:
+                l[1].remove(os.path.realpath(config))
             l[1].insert(0,config)
             for n,config in enumerate(l[1]):
                 p1 = subprocess.Popen("kubectl get ns --no-headers --kubeconfig "+config,shell=True,stdout=subprocess.PIPE,stderr=subprocess.PIPE,universal_newlines=True)
@@ -248,7 +249,7 @@ def find_ns():
             kubeconfig = l[0]
     return ns,kubeconfig,switch,result_num
 def record(res: str,obj: str,cmd: str,kubeconfig: str):
-    l = os.environ['SSH_CONNECTION'].split() if 'SSH_CONNECTION' in os.environ else "NULL NULL NULL".split()
+    l = os.environ['SSH_CONNECTION'].split() if 'SSH_CONNECTION' in os.environ else ['NULL','NULL','NULL']
     USER = os.environ['USER'] if 'USER' in os.environ else "NULL"
     HOST = l[2]
     FROM = l[0]

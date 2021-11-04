@@ -256,7 +256,7 @@ def record(res: str,obj: str,cmd: str,kubeconfig: str):
     with open(os.environ.get("HOME")+"/.kube/.res",'w') as f:
         if obj == "pod":
             resList = res.split('-')
-            last_res = ('-').join(resList[:-1]) if resList[-1].isdigit() else ('-').join(resList[:-2])
+            last_res = ('-').join(resList[:-1]) if resList[-1].isdigit() and int(resList[-1]) < 10000 else ('-').join(resList[:-2])
         else:
             last_res = res
         f.write(last_res)
@@ -280,7 +280,8 @@ def ki():
         print(style % "6. ki xx f","List the StatefulSet of a namespace")
         print(style % "7. ki xx s","List the Service of a namespace")
         print(style % "8. ki xx i","List the Ingress of a namespace")
-        print(style % "9. ki xx p","List the PersistentVolumeClaim of a namespace")
+        print(style % "9. ki xx t","List the Secret of a namespace")
+        print(style % "10. ki xx p","List the PersistentVolumeClaim of a namespace")
     elif len(sys.argv) == 2 and sys.argv[1] == '-n':
         cmd = "kubectl get ns"
         print("\033[1;32m{}\033[0m".format(cmd))
@@ -378,7 +379,7 @@ def ki():
                                 for n,e in enumerate(result_lines):
                                     if obj == "pod":
                                         resList = e.split()[0].split('-')
-                                        res = ('-').join(resList[:-1]) if resList[-1].isdigit() else ('-').join(resList[:-2])
+                                        res = ('-').join(resList[:-1]) if resList[-1].isdigit() and int(resList[-1]) < 10000 else ('-').join(resList[:-2])
                                     else:
                                         res = e.split()[0]
                                     if res == last_res:

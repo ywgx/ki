@@ -6,7 +6,7 @@
 
 B站指路 https://www.bilibili.com/video/BV14h411J7QH
 
-ki.py 可以自动的在多个 kubeconfig 中切换,管理几十/几百个 kubernetes 集群就好比一个那样方便,而且免去输出长长的指令,无论是登录 Pod 还是查看 Pod 日志都非常便捷
+ki.py 可以自动的在多个 kubeconfig 中切换,管理几十/几百/几千/几万个 kubernetes 集群就好比一个那样方便,而且免去输出长长的指令,无论是登录 Pod 还是查看 Pod 日志都非常便捷
 
 自动管理策略是这样的,比如你~/.kube/下有多个配置文件
 
@@ -20,12 +20,12 @@ ki.py 可以自动的在多个 kubeconfig 中切换,管理几十/几百个 kuber
 
 ki.py 最大限度让程序帮人自动管理,如果你正在使用 kubectx/kubens/kubecm/k9s 管理你多个集群的话,这个小工具体验或许更加方便和轻量
 
-考虑规模化的场景,比如几百个/几千个集群需要管理,如果一个 dev 存在多个 k8s 里,那么也可以快速过滤主动选择需要连接哪一个集群,`ki.py -s` 输出集群列表,输入过滤字符串,快速选择
+考虑规模化的场景,比如几百个/几千/几万个集群需要管理,如果一个 dev 存在多个 k8s 里,那么也可以快速过滤主动选择需要连接哪一个集群,`ki.py -s` 输出集群列表,输入过滤字符串,快速选择
 
 # Install 快速安装,即刻上手
 
 `# curl -s xabc.io/ki|bash`
-这条指令会快速把 ki.py 放到所在机器的 /usr/local/bin/ 路径下,然后即刻感受
+这条指令会快速把 ki.py 放到所在机器的 /usr/local/bin/ 路径下,然后即刻感受,同时这条指令也放置了一个结合使用的shell,可以在终端实时显示当前要操作的k8s
 
 # Kubectl Pro 管理使用说明
 
@@ -50,7 +50,7 @@ ki.py 最大限度让程序帮人自动管理,如果你正在使用 kubectx/kube
 8. ki xx i 列出某 Namespace 的 Ingress
 9. ki xx p 列出某 Namespace 的 PersistentVolumeClaim
 
-# 小贴士
+# 小提醒
 
 在 Pod 列表操作界面,'$' 匹配新发布的 Pod,'#' 匹配上一次选择的 Pod,比如每次应用新发布,直接 '$' 回车即可登录新容器
 

@@ -169,14 +169,12 @@ def find_config():
                     last_config = result_lines[0]
         else:
             last_config = result_lines[0]
-
         result_dict = sorted(dc.items(),key = lambda dc:(dc[1], dc[0]),reverse=True)
         sort_list = [ i[0] for i in result_dict ]
         if last_config in sort_list:
             sort_list.remove(last_config)
         sort_list.insert(0,last_config)
         result_lines = sort_list + list(result_set - set(sort_list))
-
         if os.path.exists(dst):
             if not os.path.islink(dst):
                 with open(dst,'r') as fr, open(os.environ.get("HOME")+"/.kube/config-0",'w') as fw: fw.write(fr.read())
@@ -242,7 +240,7 @@ def find_ns():
                                 os.symlink(config,dst)
                                 l = find_config()
                                 kubeconfig = config
-                                print("\033[5;32m{}\033[0m".format("[ "+str(n+1)+" SWITCH TO "+config.split("/")[-1]+" / "+ns+" ] "))
+                                print("\033[5;32m{}\033[0m".format("[ "+str(n+1)+" SWITCH  "+config.split("/")[-1]+" / "+ns+" ] "))
                                 find_history(config)
                                 switch = True
                             break
@@ -286,49 +284,56 @@ def ki():
         cmd = "kubectl get ns"
         print("\033[1;32m{}\033[0m".format(cmd))
         os.system(cmd)
-    elif len(sys.argv) == 2 and sys.argv[1] == '-s':
+    elif 1 < len(sys.argv) < 4 and sys.argv[1] == '-s':
         result_lines = find_config()[1]
         if result_lines and len(result_lines) > 1:
-            lr = set()
             dst = os.environ.get("HOME")+"/.kube/config"
-            for i in result_lines:
-                for j in result_lines:
-                    if cmp_file(i,j) and i != j:
-                        e = i if len(i) < len(j) else j
-                        if e != dst and e != os.path.realpath(dst):
-                            lr.add(e)
-            for e in lr:
-                os.remove(e)
-                result_lines.remove(e)
-            if os.path.exists(dst):
-                pattern = ""
-                res = None
-                temp = result_lines
-                while True:
-                    result_lines = list(filter(lambda x: x.find(pattern) >= 0, result_lines)) if pattern else temp
-                    if result_lines:
-                        for n,e in enumerate(result_lines):
-                            if cmp_file(e,dst):
-                                print("\033[5;32m{}\033[0m \033[1;32m{}\033[0m".format(n,e.strip()))
-                            else:
-                                print("\033[1;32m{}\033[0m {}".format(n,e.strip()))
-                        try:
-                            pattern = input("\033[1;35m%s\033[0m\033[5;35m%s\033[0m" % ("select",":")).strip()
-                        except:
-                            sys.exit()
-                        if pattern.isdigit() and 0 <= int(pattern) < len(result_lines) or len(result_lines) == 1:
-                            index = int(pattern) if pattern.isdigit() else 0
-                            res = (result_lines[index]).split()[0]
-                        if res and res != dst:
-                            os.unlink(dst)
-                            os.symlink(res,dst)
-                            print("\033[5;32m{}\033[0m".format(res))
-                            find_history(res)
-                            break
-                    else:
-                        pattern = ""
+            if len(sys.argv) == 3:
+                config = find_optimal(result_lines,sys.argv[2])
+                if config and os.path.exists(dst) and config not in {dst,os.path.realpath(dst)}:
+                    os.unlink(dst)
+                    os.symlink(config,dst)
+                    print("\033[1;32m{}\033[0m".format("[ SWITCH "+config.split("/")[-1]+" ] "))
             else:
-                print("\033[1;32m{}\033[0m\033[5;32m{}\033[0m".format("File not found ",dst))
+                lr = set()
+                for i in result_lines:
+                    for j in result_lines:
+                        if cmp_file(i,j) and i != j:
+                            e = i if len(i) < len(j) else j
+                            if e != dst and e != os.path.realpath(dst):
+                                lr.add(e)
+                for e in lr:
+                    os.remove(e)
+                    result_lines.remove(e)
+                if os.path.exists(dst):
+                    pattern = ""
+                    res = None
+                    temp = result_lines
+                    while True:
+                        result_lines = list(filter(lambda x: x.find(pattern) >= 0, result_lines)) if pattern else temp
+                        if result_lines:
+                            for n,e in enumerate(result_lines):
+                                if cmp_file(e,dst):
+                                    print("\033[5;32m{}\033[0m \033[1;32m{}\033[0m".format(n,e.strip()))
+                                else:
+                                    print("\033[1;32m{}\033[0m {}".format(n,e.strip()))
+                            try:
+                                pattern = input("\033[1;35m%s\033[0m\033[5;35m%s\033[0m" % ("select",":")).strip()
+                            except:
+                                sys.exit()
+                            if pattern.isdigit() and 0 <= int(pattern) < len(result_lines) or len(result_lines) == 1:
+                                index = int(pattern) if pattern.isdigit() else 0
+                                res = (result_lines[index]).split()[0]
+                            if res and res != dst:
+                                os.unlink(dst)
+                                os.symlink(res,dst)
+                                print("\033[5;32m{}\033[0m".format(res))
+                                find_history(res)
+                                break
+                        else:
+                            pattern = ""
+                else:
+                    print("\033[1;32m{}\033[0m\033[5;32m{}\033[0m".format("File not found ",dst))
     elif 2 < len(sys.argv) < 5 and sys.argv[1] in ('-n','-nr','-t','-t2'):
         l = find_ns()
         ns = l[0]

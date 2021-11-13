@@ -4,7 +4,7 @@
 
 # 演示视频
 
-B站指路 https://www.bilibili.com/video/BV14h411J7QH
+B站指路 https://www.bilibili.com/video/BV1TF411h73g
 
 ki.py 可以自动的在多个 kubeconfig 中切换,管理几十/几百/几千/几万个 kubernetes 集群就好比一个那样方便,而且免去输出长长的指令,无论是登录 Pod 还是查看 Pod 日志都非常便捷
 

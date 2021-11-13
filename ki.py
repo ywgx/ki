@@ -1,7 +1,7 @@
 #!/usr/bin/python3
 #*************************************************
 # Description : Kubectl Pro
-# Version     : 0.1
+# Version     : 0.2
 #*************************************************
 import os,re,sys,time,json,subprocess
 #-----------------FUN-----------------------------
@@ -171,8 +171,7 @@ def find_config():
             last_config = result_lines[0]
         result_dict = sorted(dc.items(),key = lambda dc:(dc[1], dc[0]),reverse=True)
         sort_list = [ i[0] for i in result_dict ]
-        if last_config in sort_list:
-            sort_list.remove(last_config)
+        last_config in sort_list and sort_list.remove(last_config)
         sort_list.insert(0,last_config)
         result_lines = sort_list + list(result_set - set(sort_list))
         if os.path.exists(dst):
@@ -183,8 +182,7 @@ def find_config():
                 kubeconfig = "config-0"
             else:
                 for e in result_lines:
-                    if cmp_file(e,dst):
-                        kubeconfig = e.strip().split("/")[-1]
+                    if cmp_file(e,dst): kubeconfig = e.strip().split("/")[-1]
         else:
             try:
                 os.unlink(dst)
@@ -202,8 +200,7 @@ def find_history(config):
             dc[config] = dc[config] + 1 if config in dc else 1
             dc.pop(os.environ.get("HOME")+"/.kube/config",404)
             for config in list(dc.keys()):
-                if not os.path.exists(config):
-                    del dc[config]
+                if not os.path.exists(config): del dc[config]
     else:
         dc[config] = 1
     with open(dic,'w') as f: f.write(json.dumps(dc))
@@ -222,8 +219,7 @@ def find_ns():
         ns_set = list({ e.split()[0] for e in p1.stdout.readlines() })
         if ns_set:
             ns = find_optimal(ns_set,ns_pattern)
-            if os.path.realpath(config) in l[1]:
-                l[1].remove(os.path.realpath(config))
+            os.path.realpath(config) in l[1] and l[1].remove(os.path.realpath(config))
             l[1].insert(0,config)
             for n,config in enumerate(l[1]):
                 p1 = subprocess.Popen("kubectl get ns --no-headers --kubeconfig "+config,shell=True,stdout=subprocess.PIPE,stderr=subprocess.PIPE,universal_newlines=True)
@@ -246,6 +242,23 @@ def find_ns():
                             break
             kubeconfig = l[0]
     return ns,kubeconfig,switch,result_num
+def info(k8s_path: str):
+    l = k8s_path.split('/')
+    dst = os.environ.get("HOME")+"/.kube/config"
+    lock = os.environ.get("HOME")+"/.kube/.lock"
+    if not os.path.exists(lock) and 'K8S' in l and len(l) > l.index('K8S')+1:
+        k8s_str = l[l.index('K8S')+1].split('-')[0]
+        result_lines = find_config()[1]
+        if result_lines and len(result_lines) > 1:
+            config = find_optimal(result_lines,k8s_str)
+            if config and os.path.exists(dst) and config not in {dst,os.path.realpath(dst)}:
+                os.unlink(dst)
+                os.symlink(config,dst)
+                print("\033[1;32m{}\033[0m".format("[ SWITCH "+config.split("/")[-1]+" ] "))
+            else:
+                print("\033[1;32m{}\033[0m".format("[ "+os.path.realpath(dst).split("/")[-1])+" ]")
+    else:
+        print("\033[1;32m{}\033[0m".format("[ "+os.path.realpath(dst).split("/")[-1])+" ]")
 def record(res: str,obj: str,cmd: str,kubeconfig: str):
     l = os.environ['SSH_CONNECTION'].split() if 'SSH_CONNECTION' in os.environ else ['NULL','NULL','NULL']
     USER = os.environ['USER'] if 'USER' in os.environ else "NULL"
@@ -263,28 +276,20 @@ def record(res: str,obj: str,cmd: str,kubeconfig: str):
     ops_file = time.strftime("%F",time.localtime())
     with open(ops_list+"/"+ops_file,'a+') as f: f.write( time.strftime("%F %T ",time.localtime())+"[ "+USER+"@"+HOST+" from "+FROM+" ---> "+kubeconfig+" ]  " + cmd + "\n" )
 def ki():
-    if len(sys.argv) == 1:
-        sys.argv.append('-n')
-    elif sys.argv[1] not in ('-n','-nr','-s','-t','-t2','-h','-help'):
-        sys.argv.insert(1,'-n')
-    if len(sys.argv) == 2 and sys.argv[1] in ('-h','-help'):
-        style = "\033[1;32m%s\033[0m"
-        print(style % "Kubectl Pro controls the Kubernetes cluster manager")
-        print(style % "1. ki -s","Select the kubernetes to be connected ( if there are multiple ~/.kube/kubeconfig*,the kubeconfig storage can be kubeconfig-hz,kubeconfig-sh,etc. )")
-        print(style % "2. ki $k8s.$ns","Select the kubernetes which namespace in the kubernetes ( if there are multiple ~/.kube/kubeconfig*,this way can be one-stop. )")
-        print(style % "3. ki","List all namespaces")
-        print(style % "4. ki xx","List all pods in the namespace ( if there are multiple ~/.kube/kubeconfig*,the best matching kubeconfig will be found ),the namespace parameter supports fuzzy matching,after outputting the pod list, select: xxx filters the query\n         select: index l ( [ l ] Print the logs for a container in a pod or specified resource )\n         select: index l 100 ( Print the logs of the latest 100 lines )\n         select: index l xxx ( Print the logs and filters the specified characters )\n         select: index r ( [ r ] Rollout restart the pod )\n         select: index o ( [ o ] Output the [Deployment,StatefulSet,Service,Ingress,Configmap,Secret].yml file )\n         select: index del ( [ del ] Delete the pod )\n         select: index cle ( [ cle ] Delete the Deployment/StatefulSet )\n         select: index e[si] ( [ e[si] ] Edit the Deploy/Service/Ingress )\n         select: index c5 ( [ c5 ] Set the Deploy/StatefulSet replicas=5 )")
-        print(style % "5. ki xx d","List the Deployment of a namespace")
-        print(style % "6. ki xx f","List the StatefulSet of a namespace")
-        print(style % "7. ki xx s","List the Service of a namespace")
-        print(style % "8. ki xx i","List the Ingress of a namespace")
-        print(style % "9. ki xx t","List the Secret of a namespace")
-        print(style % "10. ki xx p","List the PersistentVolumeClaim of a namespace")
+    ( len(sys.argv) == 1 or sys.argv[1] not in ('-n','-nr','-t','-t2','-s','-select','-l','-lock','-u','-unlock','-w','-watch','-h','-help') ) and sys.argv.insert(1,'-n')
+    if len(sys.argv) == 2 and sys.argv[1] in ('-w','-watch'):
+        info(os.environ.get("PWD"))
+    elif len(sys.argv) == 2 and sys.argv[1] in ('-l','-lock'):
+        lock = os.environ.get("HOME")+"/.kube/.lock"
+        os.path.exists(lock) or open(os.environ.get("HOME")+"/.kube/.lock","a").close()
+    elif len(sys.argv) == 2 and sys.argv[1] in ('-u','-unlock'):
+        lock = os.environ.get("HOME")+"/.kube/.lock"
+        os.path.exists(lock) and os.unlink(lock)
     elif len(sys.argv) == 2 and sys.argv[1] == '-n':
         cmd = "kubectl get ns"
         print("\033[1;32m{}\033[0m".format(cmd))
         os.system(cmd)
-    elif 1 < len(sys.argv) < 4 and sys.argv[1] == '-s':
+    elif 1 < len(sys.argv) < 4 and sys.argv[1] in ('-s','-select'):
         result_lines = find_config()[1]
         if result_lines and len(result_lines) > 1:
             dst = os.environ.get("HOME")+"/.kube/config"
@@ -329,6 +334,7 @@ def ki():
                                 os.symlink(res,dst)
                                 print("\033[5;32m{}\033[0m".format(res))
                                 find_history(res)
+                                open(os.environ.get("HOME")+"/.kube/.lock","a").close()
                                 break
                         else:
                             pattern = ""
@@ -405,6 +411,19 @@ def ki():
                     pod = ""
         else:
             print("No namespace found in the kubernetes.")
+    elif len(sys.argv) == 2 and sys.argv[1] in ('-h','-help'):
+        style = "\033[1;32m%s\033[0m"
+        print(style % "Kubectl Pro controls the Kubernetes cluster manager")
+        print(style % "1. ki -s","Select the kubernetes to be connected ( if there are multiple ~/.kube/kubeconfig*,the kubeconfig storage can be kubeconfig-hz,kubeconfig-sh,etc. )")
+        print(style % "2. ki $k8s.$ns","Select the kubernetes which namespace in the kubernetes ( if there are multiple ~/.kube/kubeconfig*,this way can be one-stop. )")
+        print(style % "3. ki","List all namespaces")
+        print(style % "4. ki xx","List all pods in the namespace ( if there are multiple ~/.kube/kubeconfig*,the best matching kubeconfig will be found ),the namespace parameter supports fuzzy matching,after outputting the pod list, select: xxx filters the query\n         select: index l ( [ l ] Print the logs for a container in a pod or specified resource )\n         select: index l 100 ( Print the logs of the latest 100 lines )\n         select: index l xxx ( Print the logs and filters the specified characters )\n         select: index r ( [ r ] Rollout restart the pod )\n         select: index o ( [ o ] Output the [Deployment,StatefulSet,Service,Ingress,Configmap,Secret].yml file )\n         select: index del ( [ del ] Delete the pod )\n         select: index cle ( [ cle ] Delete the Deployment/StatefulSet )\n         select: index e[si] ( [ e[si] ] Edit the Deploy/Service/Ingress )\n         select: index c5 ( [ c5 ] Set the Deploy/StatefulSet replicas=5 )")
+        print(style % "5. ki xx d","List the Deployment of a namespace")
+        print(style % "6. ki xx f","List the StatefulSet of a namespace")
+        print(style % "7. ki xx s","List the Service of a namespace")
+        print(style % "8. ki xx i","List the Ingress of a namespace")
+        print(style % "9. ki xx t","List the Secret of a namespace")
+        print(style % "10. ki xx p","List the PersistentVolumeClaim of a namespace")
 def main():
     ki()
 #-----------------PROG----------------------------

@@ -256,9 +256,9 @@ def info(k8s_path: str):
                 os.symlink(config,dst)
                 print("\033[1;32m{}\033[0m".format("[ SWITCH "+config.split("/")[-1]+" ] "))
             else:
-                print("\033[1;32m{}\033[0m".format("[ "+os.path.realpath(dst).split("/")[-1])+" ]")
+                print("\033[1;32m{}\033[0m".format("[ "+os.path.realpath(dst).split("/")[-1]+" ]"))
     else:
-        print("\033[1;32m{}\033[0m".format("[ "+os.path.realpath(dst).split("/")[-1])+" ]")
+        print("\033[1;32m{}\033[0m".format("[ "+os.path.realpath(dst).split("/")[-1]+" ]"))
 def record(res: str,obj: str,cmd: str,kubeconfig: str):
     l = os.environ['SSH_CONNECTION'].split() if 'SSH_CONNECTION' in os.environ else ['NULL','NULL','NULL']
     USER = os.environ['USER'] if 'USER' in os.environ else "NULL"

@@ -4,6 +4,13 @@
 # Version     : 0.2
 #*************************************************
 import os,re,sys,time,json,subprocess
+#-----------------VAR-----------------------------
+home = os.environ["HOME"]
+ki_history = home + "/.ki_history"
+ki_lock = ki_history + "/.lock"
+ki_dict = ki_history + "/.dict"
+ki_last = ki_history + "/.last"
+default_config = home + "/.kube/config"
 #-----------------FUN-----------------------------
 def cmp_file(f1, f2):
     st1 = os.stat(f1)
@@ -128,42 +135,39 @@ def find_optimal(namespace_list: list, namespace: str):
 def find_config():
     cmd = '''find $HOME/.kube -maxdepth 2 -type f -name 'kubeconfig*' 2>/dev/null|egrep '.*' || ( find $HOME/.kube -maxdepth 1 -type f 2>/dev/null|egrep '.*' &>/dev/null && grep -l "current-context" `find $HOME/.kube -maxdepth 1 -type f` )'''
     k8s_list = subprocess.Popen(cmd,shell=True,stdout=subprocess.PIPE,stderr=subprocess.PIPE,universal_newlines=True)
-    dst = os.environ.get("HOME")+"/.kube/config"
     result_set = { e.split('\n')[0] for e in k8s_list.stdout.readlines() }
     result_num = len(result_set)
     result_lines = list(result_set)
     kubeconfig = None
     if result_num == 1:
-        if os.path.exists(dst):
-            if not os.path.islink(dst):
-                with open(dst,'r') as fr, open(os.environ.get("HOME")+"/.kube/config-0",'w') as fw: fw.write(fr.read())
-                os.unlink(dst)
-                os.symlink(os.environ.get("HOME")+"/.kube/config-0",dst)
+        if os.path.exists(default_config):
+            if not os.path.islink(default_config):
+                with open(default_config,'r') as fr, open(home+"/.kube/config-0",'w') as fw: fw.write(fr.read())
+                os.unlink(default_config)
+                os.symlink(home+"/.kube/config-0",default_config)
                 kubeconfig = "config-0"
             else:
                 kubeconfig = result_lines[0].split("/")[-1]
         else:
             try:
-                os.unlink(dst)
+                os.unlink(default_config)
             except:
                 pass
-            os.symlink(result_lines[0],dst)
+            os.symlink(result_lines[0],default_config)
             kubeconfig = result_lines[0].split("/")[-1]
     elif result_num > 1:
         dc = {}
-        dic = os.environ.get("HOME")+"/.kube/.dict"
-        last = os.environ.get("HOME")+"/.kube/.last"
-        if os.path.exists(dic) and os.path.getsize(dic) > 5:
-            with open(dic,'r') as f:
+        if os.path.exists(ki_dict) and os.path.getsize(ki_dict) > 5:
+            with open(ki_dict,'r') as f:
                 try:
                     dc = json.loads(f.read())
                     for config in list(dc.keys()):
                         if not os.path.exists(config):
                             del dc[config]
                 except:
-                    os.remove(dic)
-        if os.path.exists(last) and os.path.getsize(last) > 0:
-            with open(last,'r') as f:
+                    os.remove(ki_dict)
+        if os.path.exists(ki_last) and os.path.getsize(ki_last) > 0:
+            with open(ki_last,'r') as f:
                 last_config = f.read()
                 if not os.path.exists(last_config):
                     last_config = result_lines[0]
@@ -174,36 +178,35 @@ def find_config():
         last_config in sort_list and sort_list.remove(last_config)
         sort_list.insert(0,last_config)
         result_lines = sort_list + list(result_set - set(sort_list))
-        if os.path.exists(dst):
-            if not os.path.islink(dst):
-                with open(dst,'r') as fr, open(os.environ.get("HOME")+"/.kube/config-0",'w') as fw: fw.write(fr.read())
-                os.unlink(dst)
-                os.symlink(os.environ.get("HOME")+"/.kube/config-0",dst)
+        if os.path.exists(default_config):
+            if not os.path.islink(default_config):
+                with open(default_config,'r') as fr, open(home+"/.kube/config-0",'w') as fw: fw.write(fr.read())
+                os.unlink(default_config)
+                os.symlink(home+"/.kube/config-0",default_config)
                 kubeconfig = "config-0"
             else:
                 for e in result_lines:
-                    if cmp_file(e,dst): kubeconfig = e.strip().split("/")[-1]
+                    if cmp_file(e,default_config): kubeconfig = e.strip().split("/")[-1]
         else:
             try:
-                os.unlink(dst)
+                os.unlink(default_config)
             except:
                 pass
-            os.symlink(result_lines[0],dst)
+            os.symlink(result_lines[0],default_config)
             kubeconfig = result_lines[0].split("/")[-1]
     return kubeconfig,result_lines,result_num
 def find_history(config):
     dc = {}
-    dic = os.environ.get("HOME")+"/.kube/.dict"
-    if os.path.exists(dic) and os.path.getsize(dic) > 5:
-        with open(dic,'r') as f:
+    if os.path.exists(ki_dict) and os.path.getsize(ki_dict) > 5:
+        with open(ki_dict,'r') as f:
             dc = json.loads(f.read())
             dc[config] = dc[config] + 1 if config in dc else 1
-            dc.pop(os.environ.get("HOME")+"/.kube/config",404)
+            dc.pop(default_config,404)
             for config in list(dc.keys()):
                 if not os.path.exists(config): del dc[config]
     else:
         dc[config] = 1
-    with open(dic,'w') as f: f.write(json.dumps(dc))
+    with open(ki_dict,'w') as f: f.write(json.dumps(dc))
 def find_ns():
     l = find_config()
     ns = None
@@ -211,10 +214,9 @@ def find_ns():
     switch = False
     result_num = l[-1]
     if result_num > 0:
-        dst = os.environ.get("HOME")+"/.kube/config"
         kn = sys.argv[2].split('.')
         ns_pattern = kn[-1] if len(kn) > 1 else kn[0]
-        config = find_optimal(l[1],kn[0]) or dst if len(kn) > 1 else dst
+        config = find_optimal(l[1],kn[0]) or default_config if len(kn) > 1 else default_config
         p1 = subprocess.Popen("kubectl get ns --no-headers --kubeconfig "+config,shell=True,stdout=subprocess.PIPE,stderr=subprocess.PIPE,universal_newlines=True)
         ns_set = list({ e.split()[0] for e in p1.stdout.readlines() })
         if ns_set:
@@ -229,11 +231,11 @@ def find_ns():
                     if ns:
                         p2 = subprocess.Popen("kubectl get pods --no-headers --kubeconfig "+config+" -n "+ns,shell=True,stdout=subprocess.PIPE,stderr=subprocess.PIPE,universal_newlines=True)
                         if list({ e.split()[0] for e in p2.stdout.readlines() }):
-                            if os.path.exists(dst) and config not in {dst,os.path.realpath(dst)}:
-                                if dst != os.path.realpath(dst):
-                                    with open(os.environ.get("HOME")+"/.kube/.last",'w') as f: f.write(os.path.realpath(dst))
-                                os.unlink(dst)
-                                os.symlink(config,dst)
+                            if os.path.exists(default_config) and config not in {default_config,os.path.realpath(default_config)}:
+                                if default_config != os.path.realpath(default_config):
+                                    with open(ki_last,'w') as f: f.write(os.path.realpath(default_config))
+                                os.unlink(default_config)
+                                os.symlink(config,default_config)
                                 l = find_config()
                                 kubeconfig = config
                                 print("\033[5;32m{}\033[0m".format("[ "+str(n+1)+" SWITCH  "+config.split("/")[-1]+" / "+ns+" ] "))
@@ -244,60 +246,55 @@ def find_ns():
     return ns,kubeconfig,switch,result_num
 def info(k8s_path: str):
     l = k8s_path.split('/')
-    dst = os.environ.get("HOME")+"/.kube/config"
-    lock = os.environ.get("HOME")+"/.kube/.lock"
-    if not os.path.exists(lock) and 'K8S' in l and len(l) > l.index('K8S')+1:
+    if not os.path.exists(ki_lock) and 'K8S' in l and len(l) > l.index('K8S')+1:
         k8s_str = l[l.index('K8S')+1].split('-')[0]
         result_lines = find_config()[1]
         if result_lines and len(result_lines) > 1:
             config = find_optimal(result_lines,k8s_str)
-            if config and os.path.exists(dst) and config not in {dst,os.path.realpath(dst)}:
-                os.unlink(dst)
-                os.symlink(config,dst)
+            if config and os.path.exists(default_config) and config not in {default_config,os.path.realpath(default_config)}:
+                os.unlink(default_config)
+                os.symlink(config,default_config)
                 print("\033[1;32m{}\033[0m".format("[ SWITCH "+config.split("/")[-1]+" ] "))
             else:
-                print("\033[1;32m{}\033[0m".format("[ "+os.path.realpath(dst).split("/")[-1]+" ]"))
+                print("\033[1;32m{}\033[0m".format("[ "+os.path.realpath(default_config).split("/")[-1]+" ]"))
     else:
-        print("\033[1;32m{}\033[0m".format("[ "+os.path.realpath(dst).split("/")[-1]+" ]"))
+        print("\033[1;32m{}\033[0m".format("[ "+os.path.realpath(default_config).split("/")[-1]+" ]"))
 def record(res: str,obj: str,cmd: str,kubeconfig: str):
     l = os.environ['SSH_CONNECTION'].split() if 'SSH_CONNECTION' in os.environ else ['NULL','NULL','NULL']
     USER = os.environ['USER'] if 'USER' in os.environ else "NULL"
     HOST = l[2]
     FROM = l[0]
-    with open(os.environ.get("HOME")+"/.kube/.res",'w') as f:
+    with open(ki_history+"/.res",'w') as f:
         if obj == "pod":
             resList = res.split('-')
             last_res = ('-').join(resList[:-1]) if resList[-1].isdigit() and int(resList[-1]) < 10000 else ('-').join(resList[:-2])
         else:
             last_res = res
         f.write(last_res)
-    ops_list = os.environ.get("HOME")+"/.kube/.ops-list"
-    os.path.exists(ops_list) or os.mkdir(ops_list)
-    ops_file = time.strftime("%F",time.localtime())
-    with open(ops_list+"/"+ops_file,'a+') as f: f.write( time.strftime("%F %T ",time.localtime())+"[ "+USER+"@"+HOST+" from "+FROM+" ---> "+kubeconfig+" ]  " + cmd + "\n" )
+    ki_file = time.strftime("%F",time.localtime())
+    with open(ki_history+"/"+ki_file,'a+') as f: f.write( time.strftime("%F %T ",time.localtime())+"[ "+USER+"@"+HOST+" from "+FROM+" ---> "+kubeconfig+" ]  " + cmd + "\n" )
 def ki():
+    os.path.exists(ki_history) or os.mkdir(ki_history)
     ( len(sys.argv) == 1 or sys.argv[1] not in ('-n','-nr','-t','-t2','-s','-select','-l','-lock','-u','-unlock','-w','-watch','-h','-help') ) and sys.argv.insert(1,'-n')
     if len(sys.argv) == 2 and sys.argv[1] in ('-w','-watch'):
         info(os.environ.get("PWD"))
     elif len(sys.argv) == 2 and sys.argv[1] in ('-l','-lock'):
-        lock = os.environ.get("HOME")+"/.kube/.lock"
-        os.path.exists(lock) or open(os.environ.get("HOME")+"/.kube/.lock","a").close()
+        os.path.exists(ki_lock) or open(ki_lock,"a").close()
     elif len(sys.argv) == 2 and sys.argv[1] in ('-u','-unlock'):
-        lock = os.environ.get("HOME")+"/.kube/.lock"
-        os.path.exists(lock) and os.unlink(lock)
+        os.path.exists(ki_lock) and os.unlink(ki_lock)
     elif len(sys.argv) == 2 and sys.argv[1] == '-n':
         cmd = "kubectl get ns"
         print("\033[1;32m{}\033[0m".format(cmd))
+        os.environ['KUBECONFIG'] = os.path.realpath(default_config)
         os.system(cmd)
     elif 1 < len(sys.argv) < 4 and sys.argv[1] in ('-s','-select'):
         result_lines = find_config()[1]
         if result_lines and len(result_lines) > 1:
-            dst = os.environ.get("HOME")+"/.kube/config"
             if len(sys.argv) == 3:
                 config = find_optimal(result_lines,sys.argv[2])
-                if config and os.path.exists(dst) and config not in {dst,os.path.realpath(dst)}:
-                    os.unlink(dst)
-                    os.symlink(config,dst)
+                if config and os.path.exists(default_config) and config not in {default_config,os.path.realpath(default_config)}:
+                    os.unlink(default_config)
+                    os.symlink(config,default_config)
                     print("\033[1;32m{}\033[0m".format("[ SWITCH "+config.split("/")[-1]+" ] "))
             else:
                 lr = set()
@@ -305,12 +302,12 @@ def ki():
                     for j in result_lines:
                         if cmp_file(i,j) and i != j:
                             e = i if len(i) < len(j) else j
-                            if e != dst and e != os.path.realpath(dst):
+                            if e != default_config and e != os.path.realpath(default_config):
                                 lr.add(e)
                 for e in lr:
                     os.remove(e)
                     result_lines.remove(e)
-                if os.path.exists(dst):
+                if os.path.exists(default_config):
                     pattern = ""
                     res = None
                     temp = result_lines
@@ -318,7 +315,7 @@ def ki():
                         result_lines = list(filter(lambda x: x.find(pattern) >= 0, result_lines)) if pattern else temp
                         if result_lines:
                             for n,e in enumerate(result_lines):
-                                if cmp_file(e,dst):
+                                if cmp_file(e,default_config):
                                     print("\033[5;32m{}\033[0m \033[1;32m{}\033[0m".format(n,e.strip()))
                                 else:
                                     print("\033[1;32m{}\033[0m {}".format(n,e.strip()))
@@ -329,17 +326,17 @@ def ki():
                             if pattern.isdigit() and 0 <= int(pattern) < len(result_lines) or len(result_lines) == 1:
                                 index = int(pattern) if pattern.isdigit() else 0
                                 res = (result_lines[index]).split()[0]
-                            if res and res != dst:
-                                os.unlink(dst)
-                                os.symlink(res,dst)
+                            if res and res != default_config:
+                                os.unlink(default_config)
+                                os.symlink(res,default_config)
                                 print("\033[5;32m{}\033[0m".format(res))
                                 find_history(res)
-                                open(os.environ.get("HOME")+"/.kube/.lock","a").close()
+                                open(ki_lock,"a").close()
                                 break
                         else:
                             pattern = ""
                 else:
-                    print("\033[1;32m{}\033[0m\033[5;32m{}\033[0m".format("File not found ",dst))
+                    print("\033[1;32m{}\033[0m\033[5;32m{}\033[0m".format("File not found ",default_config))
     elif 2 < len(sys.argv) < 5 and sys.argv[1] in ('-n','-nr','-t','-t2'):
         l = find_ns()
         ns = l[0]
@@ -353,6 +350,7 @@ def ki():
                 d = {'d':['deploy'," -o wide"],'s':['service'," -o wide"],'i':['ingress'," -o wide"],'c':['configmap'," -o wide"],'t':['secret'," -o wide"],'n':['node'," -o wide"],'p':['pvc'," -o wide"],'v':['pv'," -o wide"],'f':['sts'," -o wide"],'e':['event',''],'r':['rs','']}
                 obj = d[sys.argv[3][0]][0] if sys.argv[3][0] in d else "pod"
                 ext = d[sys.argv[3][0]][1] if sys.argv[3][0] in d else ""
+            os.environ['KUBECONFIG'] = os.path.realpath(default_config)
             while True:
                 if not pod:
                     if sys.argv[1] in ('-n','-nr'):
@@ -385,7 +383,7 @@ def ki():
                         if pod == '$':
                             pod = str(result_len - 1)
                         else:
-                            with open(os.environ.get("HOME")+"/.kube/.res",'r') as f:
+                            with open(ki_history+"/.res",'r') as f:
                                 last_res = f.read()
                                 for n,e in enumerate(result_lines):
                                     if obj == "pod":

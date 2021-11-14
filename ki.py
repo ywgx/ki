@@ -133,6 +133,7 @@ def find_optimal(namespace_list: list, namespace: str):
     result_list = [(indexes[i] + container) * (1.62 if not words[i] else 1) for i, container in enumerate(contains)]
     return namespace_list[result_list.index(min(result_list))] if len(set(indexes)) != 1 else None
 def find_config():
+    os.path.exists(ki_history) or os.mkdir(ki_history)
     cmd = '''find $HOME/.kube -maxdepth 2 -type f -name 'kubeconfig*' 2>/dev/null|egrep '.*' || ( find $HOME/.kube -maxdepth 1 -type f 2>/dev/null|egrep '.*' &>/dev/null && grep -l "current-context" `find $HOME/.kube -maxdepth 1 -type f` )'''
     k8s_list = subprocess.Popen(cmd,shell=True,stdout=subprocess.PIPE,stderr=subprocess.PIPE,universal_newlines=True)
     result_set = { e.split('\n')[0] for e in k8s_list.stdout.readlines() }
@@ -246,10 +247,10 @@ def find_ns():
     return ns,kubeconfig,switch,result_num
 def info(k8s_path: str):
     l = k8s_path.split('/')
-    if not os.path.exists(ki_lock) and 'K8S' in l and len(l) > l.index('K8S')+1:
+    if not os.path.exists(ki_lock) and 'K8S' in l and len(l) >= l.index('K8S')+1:
         k8s_str = l[l.index('K8S')+1].split('-')[0]
         result_lines = find_config()[1]
-        if result_lines and len(result_lines) > 1:
+        if result_lines:
             config = find_optimal(result_lines,k8s_str)
             if config and os.path.exists(default_config) and config not in {default_config,os.path.realpath(default_config)}:
                 os.unlink(default_config)
@@ -258,7 +259,9 @@ def info(k8s_path: str):
             else:
                 print("\033[1;32m{}\033[0m".format("[ "+os.path.realpath(default_config).split("/")[-1]+" ]"))
     else:
-        print("\033[1;32m{}\033[0m".format("[ "+os.path.realpath(default_config).split("/")[-1]+" ]"))
+        os.path.exists(ki_history) or os.mkdir(ki_history)
+        comment = " (lock)" if os.path.exists(ki_lock) else ""
+        print("\033[1;32m{}\033[0m".format("[ "+os.path.realpath(default_config).split("/")[-1]+comment+" ]"))
 def record(res: str,obj: str,cmd: str,kubeconfig: str):
     l = os.environ['SSH_CONNECTION'].split() if 'SSH_CONNECTION' in os.environ else ['NULL','NULL','NULL']
     USER = os.environ['USER'] if 'USER' in os.environ else "NULL"
@@ -274,11 +277,11 @@ def record(res: str,obj: str,cmd: str,kubeconfig: str):
     ki_file = time.strftime("%F",time.localtime())
     with open(ki_history+"/"+ki_file,'a+') as f: f.write( time.strftime("%F %T ",time.localtime())+"[ "+USER+"@"+HOST+" from "+FROM+" ---> "+kubeconfig+" ]  " + cmd + "\n" )
 def ki():
-    os.path.exists(ki_history) or os.mkdir(ki_history)
     ( len(sys.argv) == 1 or sys.argv[1] not in ('-n','-nr','-t','-t2','-s','-select','-l','-lock','-u','-unlock','-w','-watch','-h','-help') ) and sys.argv.insert(1,'-n')
     if len(sys.argv) == 2 and sys.argv[1] in ('-w','-watch'):
-        info(os.environ.get("PWD"))
+        info(os.environ["PWD"])
     elif len(sys.argv) == 2 and sys.argv[1] in ('-l','-lock'):
+        os.path.exists(ki_history) or os.mkdir(ki_history)
         os.path.exists(ki_lock) or open(ki_lock,"a").close()
     elif len(sys.argv) == 2 and sys.argv[1] in ('-u','-unlock'):
         os.path.exists(ki_lock) and os.unlink(ki_lock)
@@ -382,7 +385,7 @@ def ki():
                     if pod in ('$','#','@','!'):
                         if pod == '$':
                             pod = str(result_len - 1)
-                        else:
+                        elif os.path.exists(ki_history+"/.res"):
                             with open(ki_history+"/.res",'r') as f:
                                 last_res = f.read()
                                 for n,e in enumerate(result_lines):

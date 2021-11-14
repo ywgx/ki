@@ -247,7 +247,7 @@ def find_ns():
     return ns,kubeconfig,switch,result_num
 def info(k8s_path: str):
     l = k8s_path.split('/')
-    if not os.path.exists(ki_lock) and 'K8S' in l and len(l) >= l.index('K8S')+1:
+    if not os.path.exists(ki_lock) and 'K8S' in l and len(l) > l.index('K8S')+1:
         k8s_str = l[l.index('K8S')+1].split('-')[0]
         result_lines = find_config()[1]
         if result_lines:
@@ -424,7 +424,8 @@ def ki():
         print(style % "7. ki xx s","List the Service of a namespace")
         print(style % "8. ki xx i","List the Ingress of a namespace")
         print(style % "9. ki xx t","List the Secret of a namespace")
-        print(style % "10. ki xx p","List the PersistentVolumeClaim of a namespace")
+        print(style % "10. ki xx v","List the PersistentVolume of a namespace")
+        print(style % "11. ki xx p","List the PersistentVolumeClaim of a namespace")
 def main():
     ki()
 #-----------------PROG----------------------------

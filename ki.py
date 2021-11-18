@@ -10,6 +10,7 @@ ki_history = home + "/.ki_history"
 ki_lock = ki_history + "/.lock"
 ki_dict = ki_history + "/.dict"
 ki_last = ki_history + "/.last"
+ki_name = ki_history + "/.name"
 default_config = home + "/.kube/config"
 #-----------------FUN-----------------------------
 def cmp_file(f1, f2):
@@ -42,15 +43,15 @@ def cmd_obj(ns, obj, res, args, iip="x"):
         cmd = "kubectl -n "+ns+" "+action+" "+obj+" --sort-by=.metadata.creationTimestamp"
     elif obj in ("deployment","deploy","service","svc","ingress","ing","configmap","cm","secret","persistentvolumes","pv","persistentvolumeclaims","pvc","statefulsets","sts"):
         action2 = ""
-        if args[0] == "e":
+        if args == "cle":
+            action = "delete"
+        elif args[0] == "e":
             action = "edit"
-        elif args[0] == "d":
-            action = "describe"
         elif args[0] == 'o':
             action = "get"
             action2 = " -o yaml > "+res+"."+obj+".yml"
-        elif args == "cle":
-            action = "delete"
+        elif args[0] == "d":
+            action = "describe"
         else:
             action = "get"
         cmd = "kubectl -n "+ns+" "+action+" "+obj+" "+res+action2
@@ -70,6 +71,10 @@ def cmd_obj(ns, obj, res, args, iip="x"):
             obj = "sts" if end.isdigit() and int(end) < 10000 else "deploy"
             action = "delete"
             cmd = "kubectl -n "+ns+" "+action+" "+obj+" "+name
+        elif args == "destory":
+            action = "delete"
+            obj = "sts" if end.isdigit() and int(end) < 10000 else "deploy"
+            cmd = "kubectl -n "+ns+" "+action+" "+obj+",service,ingress "+name
         elif args[0] == "r":
             obj = "sts" if end.isdigit() and int(end) < 10000 else "deploy"
             cmd = "kubectl -n "+ns+" rollout restart "+obj+" "+name
@@ -247,27 +252,29 @@ def find_ns():
     return ns,kubeconfig,switch,result_num
 def info(k8s_path: str):
     l = k8s_path.split('/')
-    if not os.path.exists(ki_lock) and 'K8S' in l and len(l) > l.index('K8S')+1:
-        k8s_str = l[l.index('K8S')+1].split('-')[0]
-        result_lines = find_config()[1]
-        if result_lines:
-            config = find_optimal(result_lines,k8s_str)
-            if config and os.path.exists(default_config) and config not in {default_config,os.path.realpath(default_config)}:
-                os.unlink(default_config)
-                os.symlink(config,default_config)
-                print("\033[1;32m{}\033[0m".format("[ SWITCH "+config.split("/")[-1]+" ] "))
-            else:
-                print("\033[1;32m{}\033[0m".format("[ "+os.path.realpath(default_config).split("/")[-1]+" ]"))
+    if 'K8S' in l:
+        if not os.path.exists(ki_lock) and len(l) > l.index('K8S')+1:
+            k8s_str = l[l.index('K8S')+1].split('-')[0]
+            result_lines = find_config()[1]
+            if result_lines:
+                config = find_optimal(result_lines,k8s_str)
+                if config and os.path.exists(default_config) and config not in {default_config,os.path.realpath(default_config)}:
+                    os.unlink(default_config)
+                    os.symlink(config,default_config)
+                    print("\033[1;35m{}\033[0m".format("[ "+config.split("/")[-1]+" (switch) ] "))
+                else:
+                    print("\033[1;36m{}\033[0m".format("[ "+os.path.realpath(default_config).split("/")[-1]+" ]"))
+        else:
+            print("\033[1;36m{}\033[0m".format("[ "+os.path.realpath(default_config).split("/")[-1]+(" (lock)" if os.path.exists(ki_lock) else "")+" ]"))
     else:
-        os.path.exists(ki_history) or os.mkdir(ki_history)
-        comment = " (lock)" if os.path.exists(ki_lock) else ""
-        print("\033[1;32m{}\033[0m".format("[ "+os.path.realpath(default_config).split("/")[-1]+comment+" ]"))
+        print("\033[1;32m{}\033[0m".format("[ "+os.path.realpath(default_config).split("/")[-1]+" ]"))
+        os.path.exists(ki_lock) and int(time.time()-os.stat(ki_lock).st_mtime) > 3600 and os.unlink(ki_lock)
 def record(res: str,obj: str,cmd: str,kubeconfig: str):
     l = os.environ['SSH_CONNECTION'].split() if 'SSH_CONNECTION' in os.environ else ['NULL','NULL','NULL']
     USER = os.environ['USER'] if 'USER' in os.environ else "NULL"
     HOST = l[2]
     FROM = l[0]
-    with open(ki_history+"/.res",'w') as f:
+    with open(ki_name,'w') as f:
         if obj == "pod":
             resList = res.split('-')
             last_res = ('-').join(resList[:-1]) if resList[-1].isdigit() and int(resList[-1]) < 10000 else ('-').join(resList[:-2])
@@ -385,8 +392,8 @@ def ki():
                     if pod in ('$','#','@','!'):
                         if pod == '$':
                             pod = str(result_len - 1)
-                        elif os.path.exists(ki_history+"/.res"):
-                            with open(ki_history+"/.res",'r') as f:
+                        elif os.path.exists(ki_name):
+                            with open(ki_name,'r') as f:
                                 last_res = f.read()
                                 for n,e in enumerate(result_lines):
                                     if obj == "pod":

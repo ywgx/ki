@@ -1,6 +1,6 @@
 # Kubectl Pro
 
-![pro](https://filelist.cn/disk/public/ywgx/pro.gif)
+![pro](https://asciinema.org/a/cXmjj7EWCKCfMy1UTuZhmILyt)
 
 # 演示视频
 

@@ -1,6 +1,6 @@
 # Kubectl Pro
 
-[![asciicast](https://asciinema.org/a/cXmjj7EWCKCfMy1UTuZhmILyt.png)](https://asciinema.org/a/cXmjj7EWCKCfMy1UTuZhmILyt)
+[![asciicast](https://asciinema.org/a/cXmjj7EWCKCfMy1UTuZhmILyt.svg)](https://asciinema.org/a/cXmjj7EWCKCfMy1UTuZhmILyt)
 
 # 演示视频
 

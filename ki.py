@@ -1,7 +1,7 @@
 #!/usr/bin/python3
 #*************************************************
 # Description : Kubectl Pro
-# Version     : 0.2
+# Version     : 0.3
 #*************************************************
 import os,re,sys,time,json,subprocess
 #-----------------VAR-----------------------------
@@ -41,7 +41,7 @@ def cmd_obj(ns, obj, res, args, iip="x"):
     elif obj in ("event"):
         action = "get"
         cmd = "kubectl -n "+ns+" "+action+" "+obj+" --sort-by=.metadata.creationTimestamp"
-    elif obj in ("deployment","deploy","service","svc","ingress","ing","configmap","cm","secret","persistentvolumes","pv","persistentvolumeclaims","pvc","statefulsets","sts"):
+    elif obj in ("deployment","deploy","daemonset","service","svc","ingress","ing","configmap","cm","secret","persistentvolumes","pv","persistentvolumeclaims","pvc","statefulset","sts"):
         action2 = ""
         if args == "cle":
             action = "delete"
@@ -56,61 +56,53 @@ def cmd_obj(ns, obj, res, args, iip="x"):
             action = "get"
         cmd = "kubectl -n "+ns+" "+action+" "+obj+" "+res+action2
     else:
-        obj = "pod"
+        obj = get_obj(ns,res)
         l = res.split('-')
-        end = l[-1]
-        if end.isdigit() and int(end) < 10000:
+        if obj in ("StatefulSet","DaemonSet"):
             del l[-1:]
-            obj = "sts"
-        else:
+        elif obj in ("Deployment"):
             del l[-2:]
         name = ('-').join(l)
         if args == "del":
             cmd = "kubectl -n "+ns+" delete pod "+res+" &"
         elif args == "cle":
-            obj = "sts" if end.isdigit() and int(end) < 10000 else "deploy"
             action = "delete"
             cmd = "kubectl -n "+ns+" "+action+" "+obj+" "+name
         elif args == "destory":
             action = "delete"
-            obj = "sts" if end.isdigit() and int(end) < 10000 else "deploy"
             cmd = "kubectl -n "+ns+" "+action+" "+obj+",service,ingress "+name
         elif args[0] == "r":
-            obj = "sts" if end.isdigit() and int(end) < 10000 else "deploy"
             cmd = "kubectl -n "+ns+" rollout restart "+obj+" "+name
         elif args[0] in ('o'):
-            obj = "sts" if end.isdigit() and int(end) < 10000 else "deploy"
             action = "get"
             if len(args) > 1:
                 if str(args)[1] == "d":
-                    obj = "deploy"
+                    obj = "Deployment"
                 elif str(args)[1] == "s":
-                    obj = "service"
+                    obj = "Service"
                 elif str(args)[1] == "i":
-                    obj = "ingress"
+                    obj = "Ingress"
                 elif str(args)[1] == "f":
-                    obj = "sts"
-                else:
-                    obj = "deploy"
+                    obj = "StatefulSet"
             cmd = "kubectl -n "+ns+" "+action+" "+obj+" "+name+" -o yaml > "+name+"."+obj+".yml"
         elif args[0] in ('d','e'):
-            obj = "sts" if end.isdigit() and int(end) < 10000 else "deploy"
             action = "describe" if args[0] == 'd' else "edit"
             if len(args) > 1:
                 if str(args)[1] == "d":
-                    obj = "deploy"
+                    obj = "deployment"
                 elif str(args)[1] == "s":
                     obj = "service"
                 elif str(args)[1] == "i":
                     obj = "ingress"
                 elif str(args)[1] == "f":
-                    obj = "sts"
+                    obj = "statefulset"
+                elif str(args)[1] == "a":
+                    obj = "daemonset"
                 elif str(args)[1] == "p":
                     obj = "pod"
                     name = res
             cmd = "kubectl -n "+ns+" "+action+" "+obj+" "+name
         elif args[0] == 'c':
-            obj = "sts" if end.isdigit() and int(end) < 10000 else "deploy"
             regular = args.split('c')[-1]
             action = "scale"
             replicas = regular if regular.isdigit() and -1 < int(regular) < 30 else str(1)
@@ -250,6 +242,11 @@ def find_ns():
                             break
             kubeconfig = l[0]
     return ns,kubeconfig,switch,result_num
+def get_obj(ns: str,res: str):
+    cmd = "kubectl -n "+ns+" get pod "+res+" -o jsonpath='{.metadata.ownerReferences[0].kind}'"
+    l = subprocess.Popen(cmd,shell=True,stdout=subprocess.PIPE,stderr=subprocess.PIPE,universal_newlines=True).stdout.readlines()
+    obj = l[0] if l else "Pod"
+    return obj if obj != "ReplicaSet" else "Deployment"
 def info(k8s_path: str):
     l = k8s_path.split('/')
     if 'K8S' in l:
@@ -357,7 +354,7 @@ def ki():
             obj = "pod"
             ext = " -o wide"
             if len(sys.argv) == 4:
-                d = {'d':['deploy'," -o wide"],'s':['service'," -o wide"],'i':['ingress'," -o wide"],'c':['configmap'," -o wide"],'t':['secret'," -o wide"],'n':['node'," -o wide"],'p':['pvc'," -o wide"],'v':['pv'," -o wide"],'f':['sts'," -o wide"],'e':['event',''],'r':['rs','']}
+                d = {'d':['deploy'," -o wide"],'s':['service'," -o wide"],'i':['ingress'," -o wide"],'c':['configmap'," -o wide"],'t':['secret'," -o wide"],'n':['node'," -o wide"],'p':['pvc'," -o wide"],'v':['pv'," -o wide"],'f':['sts'," -o wide"],'e':['event',''],'r':['rs',''],'a':['daemonset',""]}
                 obj = d[sys.argv[3][0]][0] if sys.argv[3][0] in d else "pod"
                 ext = d[sys.argv[3][0]][1] if sys.argv[3][0] in d else ""
             os.environ['KUBECONFIG'] = os.path.realpath(default_config)
@@ -431,8 +428,9 @@ def ki():
         print(style % "7. ki xx s","List the Service of a namespace")
         print(style % "8. ki xx i","List the Ingress of a namespace")
         print(style % "9. ki xx t","List the Secret of a namespace")
-        print(style % "10. ki xx v","List the PersistentVolume of a namespace")
-        print(style % "11. ki xx p","List the PersistentVolumeClaim of a namespace")
+        print(style % "10. ki xx a","List the DaemonSet of a namespace")
+        print(style % "11. ki xx v","List the PersistentVolume of a namespace")
+        print(style % "12. ki xx p","List the PersistentVolumeClaim of a namespace")
 def main():
     ki()
 #-----------------PROG----------------------------

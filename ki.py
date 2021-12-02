@@ -36,7 +36,7 @@ def cmd_obj(ns, obj, res, args, iip="x"):
             action = "uncordon"
             cmd = "kubectl "+action+" "+res
         elif args[0] == 'd':
-            action = "describe node "
+            action = "describe node"
             cmd = "kubectl "+action+" "+res
         else:
             action = "ssh"
@@ -285,7 +285,7 @@ def record(res: str,obj: str,cmd: str,kubeconfig: str):
     ki_file = time.strftime("%F",time.localtime())
     with open(history+"/"+ki_file,'a+') as f: f.write( time.strftime("%F %T ",time.localtime())+"[ "+USER+"@"+HOST+" from "+FROM+" ---> "+kubeconfig+" ]  " + cmd + "\n" )
 def ki():
-    ( len(sys.argv) == 1 or sys.argv[1] not in ('-n','-t','-t1','-t2','-r','-i','-restart','-s','-select','-l','-lock','-u','-unlock','-w','-watch','-h','-help') ) and sys.argv.insert(1,'-n')
+    ( len(sys.argv) == 1 or sys.argv[1] not in ('-n','-t','-t1','-t2','-r','-i','-il','-restart','-s','-select','-l','-lock','-u','-unlock','-w','-watch','-h','-help') ) and sys.argv.insert(1,'-n')
     if len(sys.argv) == 2 and sys.argv[1] in ('-w','-watch'):
         info(os.environ["PWD"])
     elif len(sys.argv) == 2 and sys.argv[1] in ('-l','-lock'):
@@ -348,7 +348,7 @@ def ki():
                             pattern = ""
                 else:
                     print("\033[1;32m{}\033[0m\033[5;32m{}\033[0m".format("File not found ",default_config))
-    elif 2 < len(sys.argv) < 5 and sys.argv[1] in ('-n','-r','-t','-t1','-t2','-i'):
+    elif 2 < len(sys.argv) < 5 and sys.argv[1] in ('-n','-r','-t','-t1','-t2','-i','-il'):
         l = find_ns()
         ns = l[0]
         kubeconfig = l[1]
@@ -362,18 +362,20 @@ def ki():
                 d = {'d':['deploy'," -o wide"],'s':['service'," -o wide"],'i':['ingress'," -o wide"],'c':['configmap'," -o wide"],'t':['secret'," -o wide"],'n':['node'," -o wide"],'p':['pvc'," -o wide"],'v':['pv'," -o wide"],'f':['sts'," -o wide"],'e':['event',''],'r':['rs',''],'a':['daemonset','']}
                 obj = d[sys.argv[3][0]][0] if sys.argv[3][0] in d else "pod"
                 ext = d[sys.argv[3][0]][1] if sys.argv[3][0] in d else ""
-                if sys.argv[1] in ('-i'):
+                if sys.argv[1] in ('-i','-il'):
                     pod = find_optimal(l[4],sys.argv[3])
                     if pod:
-                        cmd = "kubectl -n "+ns+" exec -it "+pod+" -- sh"
+                        cmd = "kubectl -n "+ns+(" exec -it "+pod+" -- sh" if sys.argv[1] == '-i' else " logs -f "+pod+" --all-containers --tail 10")
+                        record(pod,obj,cmd,kubeconfig)
                         print("\033[1;32m{}\033[0m".format(cmd))
                         os.system(cmd)
+                        print('\r')
                     else:
                         print("Pod not found")
                     sys.exit()
             while True:
                 if not pod:
-                    if sys.argv[1] in ('-n','-r'):
+                    if sys.argv[1] in ('-n','-r','-i','-il'):
                         cmd = "kubectl "+("--sort-by=.status.containerStatuses[0].restartCount" if sys.argv[1].split('n')[-1] else "--sort-by=.metadata.creationTimestamp")+" get "+obj+ext+" --no-headers -n "+ ns
                     else:
                         cmd = "kubectl top "+obj+" --no-headers -n "+ ns +"|sort --key "+(sys.argv[1].split('t')[-1] or "3")+" --numeric"
@@ -432,19 +434,20 @@ def ki():
     elif len(sys.argv) == 2 and sys.argv[1] in ('-h','-help'):
         style = "\033[1;32m%s\033[0m"
         print(style % "Kubectl Pro controls the Kubernetes cluster manager")
-        print(style % "1. ki -s","Select the kubernetes to be connected ( if there are multiple ~/.kube/kubeconfig*,the kubeconfig storage can be kubeconfig-hz,kubeconfig-sh,etc. )")
-        print(style % "2. ki $k8s.$ns","Select the kubernetes which namespace in the kubernetes ( if there are multiple ~/.kube/kubeconfig*,this way can be one-stop. )")
-        print(style % "3. ki","List all namespaces")
-        print(style % "4. ki xx","List all pods in the namespace ( if there are multiple ~/.kube/kubeconfig*,the best matching kubeconfig will be found ),the namespace parameter supports fuzzy matching,after outputting the pod list, select: xxx filters the query\n         select: index l ( [ l ] Print the logs for a container in a pod or specified resource )\n         select: index l 100 ( Print the logs of the latest 100 lines )\n         select: index l xxx ( Print the logs and filters the specified characters )\n         select: index r ( [ r ] Rollout restart the pod )\n         select: index o ( [ o ] Output the [Deployment,StatefulSet,Service,Ingress,Configmap,Secret].yml file )\n         select: index del ( [ del ] Delete the pod )\n         select: index cle ( [ cle ] Delete the Deployment/StatefulSet )\n         select: index e[si] ( [ e[si] ] Edit the Deploy/Service/Ingress )\n         select: index c5 ( [ c5 ] Set the Deploy/StatefulSet replicas=5 )")
-        print(style % "5. ki xx d","List the Deployment of a namespace")
-        print(style % "6. ki xx f","List the StatefulSet of a namespace")
-        print(style % "7. ki xx s","List the Service of a namespace")
-        print(style % "8. ki xx i","List the Ingress of a namespace")
-        print(style % "9. ki xx t","List the Secret of a namespace")
-        print(style % "10. ki xx a","List the DaemonSet of a namespace")
-        print(style % "11. ki xx v","List the PersistentVolume of a namespace")
-        print(style % "12. ki xx p","List the PersistentVolumeClaim of a namespace")
-        print(style % "13. ki -i $ns $pod","Login in the container,this way can be one-stop")
+        print(style % "1. ki","List all namespaces")
+        print(style % "2. ki xx","List all pods in the namespace ( if there are multiple ~/.kube/kubeconfig*,the best matching kubeconfig will be found ),the namespace parameter supports fuzzy matching,after outputting the pod list, select: xxx filters the query\n         select: index l ( [ l ] Print the logs for a container in a pod or specified resource )\n         select: index l 100 ( Print the logs of the latest 100 lines )\n         select: index l xxx ( Print the logs and filters the specified characters )\n         select: index r ( [ r ] Rollout restart the pod )\n         select: index o ( [ o ] Output the [Deployment,StatefulSet,Service,Ingress,Configmap,Secret].yml file )\n         select: index del ( [ del ] Delete the pod )\n         select: index cle ( [ cle ] Delete the Deployment/StatefulSet )\n         select: index e[si] ( [ e[si] ] Edit the Deploy/Service/Ingress )\n         select: index c5 ( [ c5 ] Set the Deploy/StatefulSet replicas=5 )")
+        print(style % "3. ki xx d","List the Deployment of a namespace")
+        print(style % "4. ki xx f","List the StatefulSet of a namespace")
+        print(style % "5. ki xx s","List the Service of a namespace")
+        print(style % "6. ki xx i","List the Ingress of a namespace")
+        print(style % "7. ki xx t","List the Secret of a namespace")
+        print(style % "8. ki xx a","List the DaemonSet of a namespace")
+        print(style % "9. ki xx v","List the PersistentVolume of a namespace")
+        print(style % "10. ki xx p","List the PersistentVolumeClaim of a namespace")
+        print(style % "11. ki -s","Select the kubernetes to be connected ( if there are multiple ~/.kube/kubeconfig*,the kubeconfig storage can be kubeconfig-hz,kubeconfig-sh,etc. )")
+        print(style % "12. ki -i $ns $pod","Login in the container,this way can be one-stop")
+        print(style % "13. ki -il $ns $pod","Print the logs for a container,this way can be one-stop")
+        print(style % "14. ki $k8s.$ns","Select the kubernetes which namespace in the kubernetes ( if there are multiple ~/.kube/kubeconfig*,this way can be one-stop. )")
 def main():
     ki()
 #-----------------PROG----------------------------

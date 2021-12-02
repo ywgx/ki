@@ -35,6 +35,9 @@ def cmd_obj(ns, obj, res, args, iip="x"):
         elif args[0] == 'u':
             action = "uncordon"
             cmd = "kubectl "+action+" "+res
+        elif args[0] == 'd':
+            action = "describe node "
+            cmd = "kubectl "+action+" "+res
         else:
             action = "ssh"
             cmd = action +" root@"+iip
@@ -70,7 +73,7 @@ def cmd_obj(ns, obj, res, args, iip="x"):
             cmd = "kubectl -n "+ns+" "+action+" "+obj+" "+name
         elif args == "destory":
             action = "delete"
-            cmd = "kubectl -n "+ns+" "+action+" "+obj+",service,ingress "+name
+            cmd = "kubectl -n "+ns+" "+action+" "+obj+",Service,Ingress "+name
         elif args[0] == "r":
             cmd = "kubectl -n "+ns+" rollout restart "+obj+" "+name
         elif args[0] in ('o'):
@@ -228,7 +231,8 @@ def find_ns():
                     ns = find_optimal(ns_set,ns_pattern)
                     if ns:
                         p2 = subprocess.Popen("kubectl get pods --no-headers --kubeconfig "+config+" -n "+ns,shell=True,stdout=subprocess.PIPE,stderr=subprocess.PIPE,universal_newlines=True)
-                        if list({ e.split()[0] for e in p2.stdout.readlines() }):
+                        pods = list({ e.split()[0] for e in p2.stdout.readlines() })
+                        if pods:
                             if os.path.exists(default_config) and config not in {default_config,os.path.realpath(default_config)}:
                                 if default_config != os.path.realpath(default_config):
                                     with open(ki_last,'w') as f: f.write(os.path.realpath(default_config))
@@ -236,12 +240,12 @@ def find_ns():
                                 os.symlink(config,default_config)
                                 l = find_config()
                                 kubeconfig = config
-                                print("\033[5;32m{}\033[0m".format("[ "+str(n+1)+" SWITCH  "+config.split("/")[-1]+" / "+ns+" ] "))
+                                print("\033[5;33m{}\033[0m".format("[ "+str(n+1)+" SWITCH  "+config.split("/")[-1]+" / "+ns+" ] "))
                                 find_history(config)
                                 switch = True
                             break
             kubeconfig = l[0]
-    return ns,kubeconfig,switch,result_num
+    return ns,kubeconfig,switch,result_num,pods
 def get_obj(ns: str,res: str):
     cmd = "kubectl -n "+ns+" get pod "+res+" -o jsonpath='{.metadata.ownerReferences[0].kind}'"
     l = subprocess.Popen(cmd,shell=True,stdout=subprocess.PIPE,stderr=subprocess.PIPE,universal_newlines=True).stdout.readlines()
@@ -281,7 +285,7 @@ def record(res: str,obj: str,cmd: str,kubeconfig: str):
     ki_file = time.strftime("%F",time.localtime())
     with open(history+"/"+ki_file,'a+') as f: f.write( time.strftime("%F %T ",time.localtime())+"[ "+USER+"@"+HOST+" from "+FROM+" ---> "+kubeconfig+" ]  " + cmd + "\n" )
 def ki():
-    ( len(sys.argv) == 1 or sys.argv[1] not in ('-n','-t','-t2','-r','-restart','-s','-select','-l','-lock','-u','-unlock','-w','-watch','-h','-help') ) and sys.argv.insert(1,'-n')
+    ( len(sys.argv) == 1 or sys.argv[1] not in ('-n','-t','-t1','-t2','-r','-i','-restart','-s','-select','-l','-lock','-u','-unlock','-w','-watch','-h','-help') ) and sys.argv.insert(1,'-n')
     if len(sys.argv) == 2 and sys.argv[1] in ('-w','-watch'):
         info(os.environ["PWD"])
     elif len(sys.argv) == 2 and sys.argv[1] in ('-l','-lock'):
@@ -302,7 +306,7 @@ def ki():
                 if config and os.path.exists(default_config) and config not in {default_config,os.path.realpath(default_config)}:
                     os.unlink(default_config)
                     os.symlink(config,default_config)
-                    print("\033[1;32m{}\033[0m".format("[ SWITCH "+config.split("/")[-1]+" ] "))
+                    print("\033[1;33m{}\033[0m".format("[ SWITCH "+config.split("/")[-1]+" ] "))
             else:
                 lr = set()
                 for i in result_lines:
@@ -333,7 +337,7 @@ def ki():
                             if pattern.isdigit() and 0 <= int(pattern) < len(result_lines) or len(result_lines) == 1:
                                 index = int(pattern) if pattern.isdigit() else 0
                                 res = (result_lines[index]).split()[0]
-                            if res and res != default_config:
+                            if res and res not in {default_config,os.path.realpath(default_config)}:
                                 os.unlink(default_config)
                                 os.symlink(res,default_config)
                                 print("\033[5;32m{}\033[0m".format(res))
@@ -344,7 +348,7 @@ def ki():
                             pattern = ""
                 else:
                     print("\033[1;32m{}\033[0m\033[5;32m{}\033[0m".format("File not found ",default_config))
-    elif 2 < len(sys.argv) < 5 and sys.argv[1] in ('-n','-r','-t','-t2'):
+    elif 2 < len(sys.argv) < 5 and sys.argv[1] in ('-n','-r','-t','-t1','-t2','-i'):
         l = find_ns()
         ns = l[0]
         kubeconfig = l[1]
@@ -353,18 +357,27 @@ def ki():
             pod = ""
             obj = "pod"
             ext = " -o wide"
+            os.environ['KUBECONFIG'] = os.path.realpath(default_config)
             if len(sys.argv) == 4:
-                d = {'d':['deploy'," -o wide"],'s':['service'," -o wide"],'i':['ingress'," -o wide"],'c':['configmap'," -o wide"],'t':['secret'," -o wide"],'n':['node'," -o wide"],'p':['pvc'," -o wide"],'v':['pv'," -o wide"],'f':['sts'," -o wide"],'e':['event',''],'r':['rs',''],'a':['daemonset',""]}
+                d = {'d':['deploy'," -o wide"],'s':['service'," -o wide"],'i':['ingress'," -o wide"],'c':['configmap'," -o wide"],'t':['secret'," -o wide"],'n':['node'," -o wide"],'p':['pvc'," -o wide"],'v':['pv'," -o wide"],'f':['sts'," -o wide"],'e':['event',''],'r':['rs',''],'a':['daemonset','']}
                 obj = d[sys.argv[3][0]][0] if sys.argv[3][0] in d else "pod"
                 ext = d[sys.argv[3][0]][1] if sys.argv[3][0] in d else ""
-            os.environ['KUBECONFIG'] = os.path.realpath(default_config)
+                if sys.argv[1] in ('-i'):
+                    pod = find_optimal(l[4],sys.argv[3])
+                    if pod:
+                        cmd = "kubectl -n "+ns+" exec -it "+pod+" -- sh"
+                        print("\033[1;32m{}\033[0m".format(cmd))
+                        os.system(cmd)
+                    else:
+                        print("Pod not found")
+                    sys.exit()
             while True:
                 if not pod:
                     if sys.argv[1] in ('-n','-r'):
                         cmd = "kubectl "+("--sort-by=.status.containerStatuses[0].restartCount" if sys.argv[1].split('n')[-1] else "--sort-by=.metadata.creationTimestamp")+" get "+obj+ext+" --no-headers -n "+ ns
                     else:
                         cmd = "kubectl top "+obj+" --no-headers -n "+ ns +"|sort --key "+(sys.argv[1].split('t')[-1] or "3")+" --numeric"
-                    print("\033[1;32m  {}\033[0m".format(cmd))
+                    print("\033[1;32m{}\033[0m".format(cmd))
                     p = subprocess.Popen(cmd,shell=True,stdout=subprocess.PIPE,stderr=subprocess.PIPE,universal_newlines=True)
                     result_lines = p.stdout.readlines()
                     if not result_lines:
@@ -375,7 +388,7 @@ def ki():
                     for n,e in enumerate(result_lines):
                         print("\033[1;32m{}\033[0m {}".format(n,e.strip()))
                     if n > 5:
-                        style = "\033[5;32m{}\033[0m" if switch else "\033[1;32m{}\033[0m"
+                        style = "\033[5;33m{}\033[0m" if switch else "\033[1;32m{}\033[0m"
                         print(style.format("[ "+kubeconfig+" / "+ns+" --- "+obj.upper()+" ]"))
                         switch = False
                     try:
@@ -431,6 +444,7 @@ def ki():
         print(style % "10. ki xx a","List the DaemonSet of a namespace")
         print(style % "11. ki xx v","List the PersistentVolume of a namespace")
         print(style % "12. ki xx p","List the PersistentVolumeClaim of a namespace")
+        print(style % "13. ki -i $ns $pod","Login in the container,this way can be one-stop")
 def main():
     ki()
 #-----------------PROG----------------------------

@@ -1,7 +1,7 @@
 #!/usr/bin/python3
 #*************************************************
 # Description : Kubectl Pro
-# Version     : 0.3
+# Version     : 0.5
 #*************************************************
 import os,re,sys,time,json,subprocess
 #-----------------VAR-----------------------------
@@ -59,21 +59,28 @@ def cmd_obj(ns, obj, res, args, iip="x"):
             action = "get"
         cmd = "kubectl -n "+ns+" "+action+" "+obj+" "+res+action2
     else:
-        obj = get_obj(ns,res)
-        l = res.split('-')
-        if obj in ("StatefulSet","DaemonSet"):
-            del l[-1:]
-        elif obj in ("Deployment"):
-            del l[-2:]
-        name = ('-').join(l)
-        if args == "del":
-            cmd = "kubectl -n "+ns+" delete pod "+res+" &"
+        l = get_obj(ns,res)
+        obj = l[0]
+        name = l[1]
+        if args == "p":
+            cmd = "kubectl -n "+ns+" exec -it "+res+" -- sh"
+        elif args == "del":
+            cmd = "kubectl -n "+ns+" delete pod "+res+" --now &"
         elif args == "cle":
             action = "delete"
             cmd = "kubectl -n "+ns+" "+action+" "+obj+" "+name
         elif args == "destory":
             action = "delete"
             cmd = "kubectl -n "+ns+" "+action+" "+obj+",Service,Ingress "+name
+        elif args[0] == 'l':
+            regular = args.split('l')[-1]
+            p = subprocess.Popen("kubectl -n "+ns+" get pod "+res+" -o jsonpath='{.spec.containers[:].name}'",shell=True,stdout=subprocess.PIPE,universal_newlines=True)
+            result_list = p.stdout.readlines()[0].split()
+            container = name if name in result_list else "--all-containers"
+            if regular.isdigit():
+                cmd = "kubectl -n "+ns+" logs -f "+res+" "+container+" --tail "+regular
+            else:
+                cmd = "kubectl -n "+ns+" logs -f "+res+" "+container+"|grep --color=auto "+regular if regular else "kubectl -n "+ns+" logs -f "+res+" "+container+" --tail 200"
         elif args[0] == "r":
             cmd = "kubectl -n "+ns+" rollout restart "+obj+" "+name
         elif args[0] in ('o'):
@@ -110,15 +117,6 @@ def cmd_obj(ns, obj, res, args, iip="x"):
             action = "scale"
             replicas = regular if regular.isdigit() and -1 < int(regular) < 30 else str(1)
             cmd = "kubectl -n "+ns+" "+action+" --replicas="+replicas+" "+obj+"/"+name
-        elif args[0] == 'l':
-            regular = args.split('l')[-1]
-            p = subprocess.Popen("kubectl -n "+ns+" get pod "+res+" -o jsonpath='{.spec.containers[:].name}'",shell=True,stdout=subprocess.PIPE,universal_newlines=True)
-            result_list = p.stdout.readlines()[0].split()
-            container = name if name in result_list else "--all-containers"
-            if regular.isdigit():
-                cmd = "kubectl -n "+ns+" logs -f "+res+" "+container+" --tail "+regular
-            else:
-                cmd = "kubectl -n "+ns+" logs -f "+res+" "+container+"|grep --color=auto "+regular if regular else "kubectl -n "+ns+" logs -f "+res+" "+container+" --tail 200"
         else:
             cmd = "kubectl -n "+ns+" exec -it "+res+" -- sh"
     return cmd
@@ -214,6 +212,7 @@ def find_ns():
     kubeconfig = None
     switch = False
     result_num = l[-1]
+    pods = []
     if result_num > 0:
         kn = sys.argv[2].split('.')
         ns_pattern = kn[-1] if len(kn) > 1 else kn[0]
@@ -248,9 +247,16 @@ def find_ns():
     return ns,kubeconfig,switch,result_num,pods
 def get_obj(ns: str,res: str):
     cmd = "kubectl -n "+ns+" get pod "+res+" -o jsonpath='{.metadata.ownerReferences[0].kind}'"
-    l = subprocess.Popen(cmd,shell=True,stdout=subprocess.PIPE,stderr=subprocess.PIPE,universal_newlines=True).stdout.readlines()
-    obj = l[0] if l else "Pod"
-    return obj if obj != "ReplicaSet" else "Deployment"
+    l1 = subprocess.Popen(cmd,shell=True,stdout=subprocess.PIPE,stderr=subprocess.PIPE,universal_newlines=True).stdout.readlines()
+    l2 = res.split('-')
+    obj = l1[0] if l1 else "Pod"
+    if obj in ("StatefulSet","DaemonSet"):
+        del l2[-1:]
+    elif obj in ("ReplicaSet","Deployment"):
+        del l2[-2:]
+        obj = "Deployment"
+    name = ('-').join(l2)
+    return obj,name
 def info(k8s_path: str):
     l = k8s_path.split('/')
     if 'K8S' in l:
@@ -285,7 +291,8 @@ def record(res: str,obj: str,cmd: str,kubeconfig: str):
     ki_file = time.strftime("%F",time.localtime())
     with open(history+"/"+ki_file,'a+') as f: f.write( time.strftime("%F %T ",time.localtime())+"[ "+USER+"@"+HOST+" from "+FROM+" ---> "+kubeconfig+" ]  " + cmd + "\n" )
 def ki():
-    ( len(sys.argv) == 1 or sys.argv[1] not in ('-n','-t','-t1','-t2','-r','-i','-il','-restart','-s','-select','-l','-lock','-u','-unlock','-w','-watch','-h','-help') ) and sys.argv.insert(1,'-n')
+    ( len(sys.argv) == 1 or sys.argv[1] not in ('-n','-t','-t1','-t2','-r','-i','-e','-es','-ei','-restart','-s','-select','-l','-lock','-u','-unlock','-w','-watch','-h','-help') ) and sys.argv.insert(1,'-n')
+    len(sys.argv) == 2 and sys.argv[1] in ('-i','-e','-es','-ei') and sys.argv.insert(1,'-n')
     if len(sys.argv) == 2 and sys.argv[1] in ('-w','-watch'):
         info(os.environ["PWD"])
     elif len(sys.argv) == 2 and sys.argv[1] in ('-l','-lock'):
@@ -348,7 +355,7 @@ def ki():
                             pattern = ""
                 else:
                     print("\033[1;32m{}\033[0m\033[5;32m{}\033[0m".format("File not found ",default_config))
-    elif 2 < len(sys.argv) < 5 and sys.argv[1] in ('-n','-r','-t','-t1','-t2','-i','-il'):
+    elif 2 < len(sys.argv) < 5 and sys.argv[1] in ('-n','-r','-t','-t1','-t2','-i','-l','-e','-es','-ei'):
         l = find_ns()
         ns = l[0]
         kubeconfig = l[1]
@@ -362,20 +369,33 @@ def ki():
                 d = {'d':['deploy'," -o wide"],'s':['service'," -o wide"],'i':['ingress'," -o wide"],'c':['configmap'," -o wide"],'t':['secret'," -o wide"],'n':['node'," -o wide"],'p':['pvc'," -o wide"],'v':['pv'," -o wide"],'f':['sts'," -o wide"],'e':['event',''],'r':['rs',''],'a':['daemonset','']}
                 obj = d[sys.argv[3][0]][0] if sys.argv[3][0] in d else "pod"
                 ext = d[sys.argv[3][0]][1] if sys.argv[3][0] in d else ""
-                if sys.argv[1] in ('-i','-il'):
-                    pod = find_optimal(l[4],sys.argv[3])
-                    if pod:
-                        cmd = "kubectl -n "+ns+(" exec -it "+pod+" -- sh" if sys.argv[1] == '-i' else " logs -f "+pod+" --all-containers --tail 10")
-                        record(pod,obj,cmd,kubeconfig)
+                if sys.argv[1] in ('-i','-l','-e','-es','-ei'):
+                    res = find_optimal(l[4],sys.argv[3])
+                    if res:
+                        if sys.argv[1] in ('-i'):
+                            cmd = "kubectl -n "+ns+" exec -it "+res+" -- sh"
+                        elif sys.argv[1] in ('-l'):
+                            cmd = "kubectl -n "+ns+" logs -f "+res+" --all-containers --tail 10"
+                        else:
+                            l = get_obj(ns,res)
+                            if sys.argv[1] == '-e':
+                                obj = l[0]
+                            elif sys.argv[1] == '-es':
+                                obj = "Service"
+                            else:
+                                obj = "Ingress"
+                            name = l[1]
+                            cmd = "kubectl -n "+ns+" edit "+obj+" "+name
                         print("\033[1;32m{}\033[0m".format(cmd))
                         os.system(cmd)
+                        record(res,obj,cmd,kubeconfig)
                         print('\r')
                     else:
                         print("Pod not found")
                     sys.exit()
             while True:
                 if not pod:
-                    if sys.argv[1] in ('-n','-r','-i','-il'):
+                    if sys.argv[1] in ('-n','-r'):
                         cmd = "kubectl "+("--sort-by=.status.containerStatuses[0].restartCount" if sys.argv[1].split('n')[-1] else "--sort-by=.metadata.creationTimestamp")+" get "+obj+ext+" --no-headers -n "+ ns
                     else:
                         cmd = "kubectl top "+obj+" --no-headers -n "+ ns +"|sort --key "+(sys.argv[1].split('t')[-1] or "3")+" --numeric"
@@ -422,10 +442,10 @@ def ki():
                         res = result_lines[index].split()[0]
                         iip = result_lines[index].split()[5] if len(result_lines[index].split()) > 5 else find_ip(res)
                         cmd = cmd_obj(ns,obj,res,args,iip)
-                        record(res,obj,cmd,kubeconfig)
                         print('\033[{}C\033[1A'.format(num),end = '')
                         print("\033[1;32m{}\033[0m".format(cmd))
                         os.system(cmd)
+                        record(res,obj,cmd,kubeconfig)
                         print('\r')
                 else:
                     pod = ""
@@ -446,8 +466,9 @@ def ki():
         print(style % "10. ki xx p","List the PersistentVolumeClaim of a namespace")
         print(style % "11. ki -s","Select the kubernetes to be connected ( if there are multiple ~/.kube/kubeconfig*,the kubeconfig storage can be kubeconfig-hz,kubeconfig-sh,etc. )")
         print(style % "12. ki -i $ns $pod","Login in the container,this way can be one-stop")
-        print(style % "13. ki -il $ns $pod","Print the logs for a container,this way can be one-stop")
-        print(style % "14. ki $k8s.$ns","Select the kubernetes which namespace in the kubernetes ( if there are multiple ~/.kube/kubeconfig*,this way can be one-stop. )")
+        print(style % "13. ki -l $ns $pod","Print the logs for a container,this way can be one-stop")
+        print(style % "14. ki -e[si] $ns $pod","Edit the Deploy/Service/Ingress for a container,this way can be one-stop")
+        print(style % "15. ki $k8s.$ns","Select the kubernetes which namespace in the kubernetes ( if there are multiple ~/.kube/kubeconfig*,this way can be one-stop. )")
 def main():
     ki()
 #-----------------PROG----------------------------

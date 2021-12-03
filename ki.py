@@ -1,7 +1,7 @@
 #!/usr/bin/python3
 #*************************************************
 # Description : Kubectl Pro
-# Version     : 0.5
+# Version     : 0.6
 #*************************************************
 import os,re,sys,time,json,subprocess
 #-----------------VAR-----------------------------
@@ -62,6 +62,7 @@ def cmd_obj(ns, obj, res, args, iip="x"):
         l = get_obj(ns,res)
         obj = l[0]
         name = l[1]
+        d = {'d':'Deployment','s':'Service','i':'Ingress','f':'StatefulSet','a':'DaemonSet','p':'Pod'}
         if args == "p":
             cmd = "kubectl -n "+ns+" exec -it "+res+" -- sh"
         elif args == "del":
@@ -86,31 +87,14 @@ def cmd_obj(ns, obj, res, args, iip="x"):
         elif args[0] in ('o'):
             action = "get"
             if len(args) > 1:
-                if str(args)[1] == "d":
-                    obj = "Deployment"
-                elif str(args)[1] == "s":
-                    obj = "Service"
-                elif str(args)[1] == "i":
-                    obj = "Ingress"
-                elif str(args)[1] == "f":
-                    obj = "StatefulSet"
+                obj = d.get(args[1],'Pod')
+                if obj == 'Pod': name = res
             cmd = "kubectl -n "+ns+" "+action+" "+obj+" "+name+" -o yaml > "+name+"."+obj+".yml"
         elif args[0] in ('d','e'):
             action = "describe" if args[0] == 'd' else "edit"
             if len(args) > 1:
-                if str(args)[1] == "d":
-                    obj = "deployment"
-                elif str(args)[1] == "s":
-                    obj = "service"
-                elif str(args)[1] == "i":
-                    obj = "ingress"
-                elif str(args)[1] == "f":
-                    obj = "statefulset"
-                elif str(args)[1] == "a":
-                    obj = "daemonset"
-                elif str(args)[1] == "p":
-                    obj = "pod"
-                    name = res
+                obj = d.get(args[1],'Pod')
+                if obj == 'Pod': name = res
             cmd = "kubectl -n "+ns+" "+action+" "+obj+" "+name
         elif args[0] == 'c':
             regular = args.split('c')[-1]
@@ -245,17 +229,21 @@ def find_ns():
                             break
             kubeconfig = l[0]
     return ns,kubeconfig,switch,result_num,pods
-def get_obj(ns: str,res: str):
+def get_obj(ns: str,res: str,args='x'):
     cmd = "kubectl -n "+ns+" get pod "+res+" -o jsonpath='{.metadata.ownerReferences[0].kind}'"
-    l1 = subprocess.Popen(cmd,shell=True,stdout=subprocess.PIPE,stderr=subprocess.PIPE,universal_newlines=True).stdout.readlines()
-    l2 = res.split('-')
-    obj = l1[0] if l1 else "Pod"
+    l1 = res.split('-')
+    l2 = subprocess.Popen(cmd,shell=True,stdout=subprocess.PIPE,stderr=subprocess.PIPE,universal_newlines=True).stdout.readlines()
+    obj = l2[0] if l2 else "Pod"
     if obj in ("StatefulSet","DaemonSet"):
-        del l2[-1:]
+        del l1[-1:]
     elif obj in ("ReplicaSet","Deployment"):
-        del l2[-2:]
+        del l1[-2:]
         obj = "Deployment"
-    name = ('-').join(l2)
+    name = ('-').join(l1)
+    if args in ('-es','-os'):
+        obj = "Service"
+    elif args in ('-ei','-oi'):
+        obj = "Ingress"
     return obj,name
 def info(k8s_path: str):
     l = k8s_path.split('/')
@@ -291,8 +279,8 @@ def record(res: str,obj: str,cmd: str,kubeconfig: str):
     ki_file = time.strftime("%F",time.localtime())
     with open(history+"/"+ki_file,'a+') as f: f.write( time.strftime("%F %T ",time.localtime())+"[ "+USER+"@"+HOST+" from "+FROM+" ---> "+kubeconfig+" ]  " + cmd + "\n" )
 def ki():
-    ( len(sys.argv) == 1 or sys.argv[1] not in ('-n','-t','-t1','-t2','-r','-i','-e','-es','-ei','-restart','-s','-select','-l','-lock','-u','-unlock','-w','-watch','-h','-help') ) and sys.argv.insert(1,'-n')
-    len(sys.argv) == 2 and sys.argv[1] in ('-i','-e','-es','-ei') and sys.argv.insert(1,'-n')
+    ( len(sys.argv) == 1 or sys.argv[1] not in ('-n','-t','-t1','-t2','-r','-i','-e','-es','-ei','-o','-os','-oi','-restart','-s','-select','-l','-lock','-u','-unlock','-w','-watch','-h','-help') ) and sys.argv.insert(1,'-n')
+    len(sys.argv) == 2 and sys.argv[1] in ('-i','-e','-es','-ei','-o','-os','-oi') and sys.argv.insert(1,'-n')
     if len(sys.argv) == 2 and sys.argv[1] in ('-w','-watch'):
         info(os.environ["PWD"])
     elif len(sys.argv) == 2 and sys.argv[1] in ('-l','-lock'):
@@ -355,7 +343,7 @@ def ki():
                             pattern = ""
                 else:
                     print("\033[1;32m{}\033[0m\033[5;32m{}\033[0m".format("File not found ",default_config))
-    elif 2 < len(sys.argv) < 5 and sys.argv[1] in ('-n','-r','-t','-t1','-t2','-i','-l','-e','-es','-ei'):
+    elif 2 < len(sys.argv) < 5 and sys.argv[1] in ('-n','-r','-t','-t1','-t2','-i','-l','-e','-es','-ei','-o','-os','-oi'):
         l = find_ns()
         ns = l[0]
         kubeconfig = l[1]
@@ -369,7 +357,7 @@ def ki():
                 d = {'d':['deploy'," -o wide"],'s':['service'," -o wide"],'i':['ingress'," -o wide"],'c':['configmap'," -o wide"],'t':['secret'," -o wide"],'n':['node'," -o wide"],'p':['pvc'," -o wide"],'v':['pv'," -o wide"],'f':['sts'," -o wide"],'e':['event',''],'r':['rs',''],'a':['daemonset','']}
                 obj = d[sys.argv[3][0]][0] if sys.argv[3][0] in d else "pod"
                 ext = d[sys.argv[3][0]][1] if sys.argv[3][0] in d else ""
-                if sys.argv[1] in ('-i','-l','-e','-es','-ei'):
+                if sys.argv[1] in ('-i','-l','-e','-es','-ei','-o','-os','-oi'):
                     res = find_optimal(l[4],sys.argv[3])
                     if res:
                         if sys.argv[1] in ('-i'):
@@ -377,18 +365,19 @@ def ki():
                         elif sys.argv[1] in ('-l'):
                             cmd = "kubectl -n "+ns+" logs -f "+res+" --all-containers --tail 10"
                         else:
-                            l = get_obj(ns,res)
-                            if sys.argv[1] == '-e':
-                                obj = l[0]
-                            elif sys.argv[1] == '-es':
-                                obj = "Service"
-                            else:
-                                obj = "Ingress"
+                            l = get_obj(ns,res,sys.argv[1])
+                            obj = l[0]
                             name = l[1]
-                            cmd = "kubectl -n "+ns+" edit "+obj+" "+name
+                            action2 = ""
+                            if sys.argv[1] in ('-e','-es','-ei'):
+                                action = "edit"
+                            else:
+                                action = "get"
+                                action2 = " -o yaml > "+name+"."+obj+".yml"
+                            cmd = "kubectl -n "+ns+" "+action+" "+obj+" "+name+action2
                         print("\033[1;32m{}\033[0m".format(cmd))
-                        os.system(cmd)
                         record(res,obj,cmd,kubeconfig)
+                        os.system(cmd)
                         print('\r')
                     else:
                         print("Pod not found")
@@ -428,12 +417,7 @@ def ki():
                             with open(ki_name,'r') as f:
                                 last_res = f.read()
                                 for n,e in enumerate(result_lines):
-                                    if obj == "pod":
-                                        resList = e.split()[0].split('-')
-                                        res = ('-').join(resList[:-1]) if resList[-1].isdigit() and int(resList[-1]) < 10000 else ('-').join(resList[:-2])
-                                    else:
-                                        res = e.split()[0]
-                                    if res == last_res:
+                                    if last_res in e:
                                         pod = str(n)
                                         break
                     args = ''.join(podList[1:]) if len(podList) > 1 else "p"
@@ -444,8 +428,8 @@ def ki():
                         cmd = cmd_obj(ns,obj,res,args,iip)
                         print('\033[{}C\033[1A'.format(num),end = '')
                         print("\033[1;32m{}\033[0m".format(cmd))
-                        os.system(cmd)
                         record(res,obj,cmd,kubeconfig)
+                        os.system(cmd)
                         print('\r')
                 else:
                     pod = ""

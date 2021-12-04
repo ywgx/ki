@@ -29,15 +29,12 @@ def cmp_file(f1, f2):
                 return True
 def cmd_obj(ns, obj, res, args, iip="x"):
     if obj in ("node","no"):
-        if args[0] == 'c':
-            action = "cordon"
+        if args[0] in ('c','u'):
+            action = "cordon" if args[0] == 'c' else "uncordon"
             cmd = "kubectl "+action+" "+res
-        elif args[0] == 'u':
-            action = "uncordon"
-            cmd = "kubectl "+action+" "+res
-        elif args[0] == 'd':
-            action = "describe node"
-            cmd = "kubectl "+action+" "+res
+        elif args[0] in ('d','e'):
+            action = "describe" if args[0] == 'd' else "edit"
+            cmd = "kubectl "+action+" "+obj+" "+res
         else:
             action = "ssh"
             cmd = action +" root@"+iip
@@ -50,11 +47,11 @@ def cmd_obj(ns, obj, res, args, iip="x"):
             action = "delete"
         elif args[0] == "e":
             action = "edit"
+        elif args[0] == "d":
+            action = "describe"
         elif args[0] == 'o':
             action = "get"
             action2 = " -o yaml > "+res+"."+obj+".yml"
-        elif args[0] == "d":
-            action = "describe"
         else:
             action = "get"
         cmd = "kubectl -n "+ns+" "+action+" "+obj+" "+res+action2
@@ -412,13 +409,13 @@ def ki():
                     pod = podList[0] if podList else ""
                     if pod in ('$','#','@','!'):
                         if pod == '$':
-                            pod = str(result_len - 1)
+                            pod = str(result_len-1)
                         elif os.path.exists(ki_name):
                             with open(ki_name,'r') as f:
                                 last_res = f.read()
-                                for n,e in enumerate(result_lines):
+                                for n,e in enumerate(result_lines[::-1]):
                                     if last_res in e:
-                                        pod = str(n)
+                                        pod = str(result_len-n-1)
                                         break
                     args = ''.join(podList[1:]) if len(podList) > 1 else "p"
                     if pod.isdigit() and int(pod) < result_len or result_len == 1:
@@ -438,6 +435,7 @@ def ki():
     elif len(sys.argv) == 2 and sys.argv[1] in ('-h','-help'):
         style = "\033[1;32m%s\033[0m"
         print(style % "Kubectl Pro controls the Kubernetes cluster manager")
+        print("\nFind more information at: https://ki.xabc.io\n")
         print(style % "1. ki","List all namespaces")
         print(style % "2. ki xx","List all pods in the namespace ( if there are multiple ~/.kube/kubeconfig*,the best matching kubeconfig will be found ),the namespace parameter supports fuzzy matching,after outputting the pod list, select: xxx filters the query\n         select: index l ( [ l ] Print the logs for a container in a pod or specified resource )\n         select: index l 100 ( Print the logs of the latest 100 lines )\n         select: index l xxx ( Print the logs and filters the specified characters )\n         select: index r ( [ r ] Rollout restart the pod )\n         select: index o ( [ o ] Output the [Deployment,StatefulSet,Service,Ingress,Configmap,Secret].yml file )\n         select: index del ( [ del ] Delete the pod )\n         select: index cle ( [ cle ] Delete the Deployment/StatefulSet )\n         select: index e[si] ( [ e[si] ] Edit the Deploy/Service/Ingress )\n         select: index c5 ( [ c5 ] Set the Deploy/StatefulSet replicas=5 )")
         print(style % "3. ki xx d","List the Deployment of a namespace")

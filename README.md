@@ -1,6 +1,6 @@
 # Kubectl Pro
 
-[![asciicast](https://asciinema.org/a/cXmjj7EWCKCfMy1UTuZhmILyt.svg)](https://asciinema.org/a/cXmjj7EWCKCfMy1UTuZhmILyt)
+[使用文档 ki.xabc.io](https://ki.xabc.io)
 
 # 演示视频
 
@@ -21,11 +21,6 @@ ki.py 可以自动的在多个 kubeconfig 中切换,管理几十/几百/几千/�
 ki.py 最大限度让程序帮人自动管理,如果你正在使用 kubectx/kubens/kubecm/k9s 管理你多个集群的话,这个小工具体验或许更加方便和轻量
 
 考虑规模化的场景,比如几百个/几千/几万个集群需要管理,如果一个 dev 存在多个 k8s 里,那么也可以快速过滤主动选择需要连接哪一个集群,`ki.py -s` 输出集群列表,输入过滤字符串,快速选择
-
-# Install 快速安装,即刻上手
-
-`# curl -s xabc.io/ki|bash`
-这条指令会快速把 ki.py 放到所在机器的 /usr/local/bin/ 路径下,然后即刻感受,同时这条指令也放置了一个结合使用的shell,可以在终端实时显示当前要操作的k8s
 
 # Kubectl Pro 管理使用说明
 
@@ -56,11 +51,8 @@ ki.py 最大限度让程序帮人自动管理,如果你正在使用 kubectx/kube
 
 # Kubectl Pro controls the Kubernetes cluster manager
 
-1. ki -s Select the kubernetes to be connected ( if there are multiple ~/.kube/kubeconfig*,the kubeconfig storage can be kubeconfig-hz,kubeconfig-sh,etc. )
-2. ki $k8s.$ns Select the kubernetes which namespace in the kubernetes ( if there are multiple ~/.kube/kubeconfig*,this way can be one-stop. )
-3. ki List all namespaces
-4. ki xx List all pods in the namespace ( if there are multiple ~/.kube/kubeconfig*,the best matching kubeconfig will be found ),the namespace parameter supports fuzzy matching,after outputting the pod list, select: XXX filters the query
-
+1. ki List all namespaces
+2. ki xx List all pods in the namespace ( if there are multiple ~/.kube/kubeconfig*,the best matching kubeconfig will be found ),the namespace parameter supports fuzzy matching,after outputting the pod list, select: xxx filters the query
          select: index l ( [ l ] Print the logs for a container in a pod or specified resource )
          select: index l 100 ( Print the logs of the latest 100 lines )
          select: index l xxx ( Print the logs and filters the specified characters )
@@ -70,9 +62,16 @@ ki.py 最大限度让程序帮人自动管理,如果你正在使用 kubectx/kube
          select: index cle ( [ cle ] Delete the Deployment/StatefulSet )
          select: index e[si] ( [ e[si] ] Edit the Deploy/Service/Ingress )
          select: index c5 ( [ c5 ] Set the Deploy/StatefulSet replicas=5 )
-
-5. ki xx d List the Deployment of a Namespace
-6. ki xx f List the StatefulSet of a Namespace
-7. ki xx s List the Service of a Namespace
-8. ki xx i List the Ingress of a Namespace
-9. ki xx p List the PersistentVolumeClaim of a namespace
+3. ki xx d List the Deployment of a namespace
+4. ki xx f List the StatefulSet of a namespace
+5. ki xx s List the Service of a namespace
+6. ki xx i List the Ingress of a namespace
+7. ki xx t List the Secret of a namespace
+8. ki xx a List the DaemonSet of a namespace
+9. ki xx v List the PersistentVolume of a namespace
+10. ki xx p List the PersistentVolumeClaim of a namespace
+11. ki -s Select the kubernetes to be connected ( if there are multiple ~/.kube/kubeconfig*,the kubeconfig storage can be kubeconfig-hz,kubeconfig-sh,etc. )
+12. ki -i $ns $pod Login in the container,this way can be one-stop
+13. ki -l $ns $pod Print the logs for a container,this way can be one-stop
+14. ki -e[si] $ns $pod Edit the Deploy/Service/Ingress for a container,this way can be one-stop
+15. ki $k8s.$ns Select the kubernetes which namespace in the kubernetes ( if there are multiple ~/.kube/kubeconfig*,this way can be one-stop. )

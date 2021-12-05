@@ -40,7 +40,7 @@ def cmd_obj(ns, obj, res, args, iip="x"):
             cmd = action +" root@"+iip
     elif obj in ("event"):
         action = "get"
-        cmd = "kubectl -n "+ns+" "+action+" "+obj+" --sort-by=.metadata.creationTimestamp"
+        cmd = "kubectl -n "+ns+" "+action+" "+obj+"  --sort-by=.metadata.creationTimestamp"
     elif obj in ("deployment","deploy","daemonset","service","svc","ingress","ing","configmap","cm","secret","persistentvolumes","pv","persistentvolumeclaims","pvc","statefulset","sts"):
         action2 = ""
         if args == "cle":
@@ -63,7 +63,7 @@ def cmd_obj(ns, obj, res, args, iip="x"):
         if args == "p":
             cmd = "kubectl -n "+ns+" exec -it "+res+" -- sh"
         elif args == "del":
-            cmd = "kubectl -n "+ns+" delete pod "+res+" --now &"
+            cmd = "kubectl -n "+ns+" delete pod "+res+"  --now &"
         elif args == "cle":
             action = "delete"
             cmd = "kubectl -n "+ns+" "+action+" "+obj+" "+name
@@ -261,15 +261,14 @@ def info(k8s_path: str):
     else:
         print("\033[1;32m{}\033[0m".format("[ "+os.path.realpath(default_config).split("/")[-1]+" ]"))
         os.path.exists(ki_lock) and int(time.time()-os.stat(ki_lock).st_mtime) > 3600 and os.unlink(ki_lock)
-def record(res: str,obj: str,cmd: str,kubeconfig: str):
+def record(res: str,obj: str,cmd: str,kubeconfig: str,ns: str):
     l = os.environ['SSH_CONNECTION'].split() if 'SSH_CONNECTION' in os.environ else ['NULL','NULL','NULL']
     USER = os.environ['USER'] if 'USER' in os.environ else "NULL"
     HOST = l[2]
     FROM = l[0]
     with open(ki_name,'w') as f:
         if obj == "pod":
-            resList = res.split('-')
-            last_res = ('-').join(resList[:-1]) if resList[-1].isdigit() and int(resList[-1]) < 10000 else ('-').join(resList[:-2])
+            last_res = get_obj(ns,res)[1]
         else:
             last_res = res
         f.write(last_res)
@@ -373,7 +372,7 @@ def ki():
                                 action2 = " -o yaml > "+name+"."+obj+".yml"
                             cmd = "kubectl -n "+ns+" "+action+" "+obj+" "+name+action2
                         print("\033[1;32m{}\033[0m".format(cmd))
-                        record(res,obj,cmd,kubeconfig)
+                        record(res,obj,cmd,kubeconfig,ns)
                         os.system(cmd)
                         print('\r')
                     else:
@@ -382,10 +381,10 @@ def ki():
             while True:
                 if not pod:
                     if sys.argv[1] in ('-n','-r'):
-                        cmd = "kubectl "+("--sort-by=.status.containerStatuses[0].restartCount" if sys.argv[1].split('n')[-1] else "--sort-by=.metadata.creationTimestamp")+" get "+obj+ext+" --no-headers -n "+ ns
+                        cmd = "kubectl"+" get "+obj+ext+" -n "+ ns+("  --sort-by=.status.containerStatuses[0].restartCount" if sys.argv[1].split('n')[-1] else "  --sort-by=.metadata.creationTimestamp") + " --no-headers"
                     else:
-                        cmd = "kubectl top "+obj+" --no-headers -n "+ ns +"|sort --key "+(sys.argv[1].split('t')[-1] or "3")+" --numeric"
-                    print("\033[1;32m{}\033[0m".format(cmd))
+                        cmd = "kubectl top "+obj+" -n "+ ns +"  --no-headers|sort --key "+(sys.argv[1].split('t')[-1] or "3")+" --numeric"
+                    print("\033[1;32m{}\033[0m".format(cmd.split(' --')[0]))
                     p = subprocess.Popen(cmd,shell=True,stdout=subprocess.PIPE,stderr=subprocess.PIPE,universal_newlines=True)
                     result_lines = p.stdout.readlines()
                     if not result_lines:
@@ -424,8 +423,8 @@ def ki():
                         iip = result_lines[index].split()[5] if len(result_lines[index].split()) > 5 else find_ip(res)
                         cmd = cmd_obj(ns,obj,res,args,iip)
                         print('\033[{}C\033[1A'.format(num),end = '')
-                        print("\033[1;32m{}\033[0m".format(cmd))
-                        record(res,obj,cmd,kubeconfig)
+                        print("\033[1;32m{}\033[0m".format(cmd.split('  --')[0]))
+                        record(res,obj,cmd,kubeconfig,ns)
                         os.system(cmd)
                         print('\r')
                 else:

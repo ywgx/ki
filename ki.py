@@ -28,6 +28,7 @@ def cmp_file(f1, f2):
             if not b1:
                 return True
 def cmd_obj(ns, obj, res, args, iip="x"):
+    name = res
     if obj in ("node","no"):
         if args[0] in ('c','u'):
             action = "cordon" if args[0] == 'c' else "uncordon"
@@ -100,7 +101,7 @@ def cmd_obj(ns, obj, res, args, iip="x"):
             cmd = "kubectl -n "+ns+" "+action+" --replicas="+replicas+" "+obj+"/"+name
         else:
             cmd = "kubectl -n "+ns+" exec -it "+res+" -- sh"
-    return cmd
+    return cmd,obj,name
 def find_ip(res: str):
     ip = re.findall(r'[0-9]+(?:\.[0-9]+){3}',res)
     return ip[0] if ip else ""
@@ -227,6 +228,7 @@ def find_ns():
             kubeconfig = l[0]
     return ns,kubeconfig,switch,result_num,pods
 def get_obj(ns: str,res: str,args='x'):
+    d = {'s':"Service",'i':"Ingress"}
     cmd = "kubectl -n "+ns+" get pod "+res+" -o jsonpath='{.metadata.ownerReferences[0].kind}'"
     l1 = res.split('-')
     l2 = subprocess.Popen(cmd,shell=True,stdout=subprocess.PIPE,stderr=subprocess.PIPE,universal_newlines=True).stdout.readlines()
@@ -237,10 +239,8 @@ def get_obj(ns: str,res: str,args='x'):
         del l1[-2:]
         obj = "Deployment"
     name = ('-').join(l1)
-    if args in ('-es','-os'):
-        obj = "Service"
-    elif args in ('-ei','-oi'):
-        obj = "Ingress"
+    if args[-1] in d.keys():
+        obj = d[args[-1]]
     return obj,name
 def info(k8s_path: str):
     l = k8s_path.split('/')
@@ -261,18 +261,13 @@ def info(k8s_path: str):
     else:
         print("\033[1;32m{}\033[0m".format("[ "+os.path.realpath(default_config).split("/")[-1]+" ]"))
         os.path.exists(ki_lock) and int(time.time()-os.stat(ki_lock).st_mtime) > 3600 and os.unlink(ki_lock)
-def record(res: str,obj: str,cmd: str,kubeconfig: str,ns: str):
+def record(res: str,name: str,obj: str,cmd: str,kubeconfig: str):
     l = os.environ['SSH_CONNECTION'].split() if 'SSH_CONNECTION' in os.environ else ['NULL','NULL','NULL']
     USER = os.environ['USER'] if 'USER' in os.environ else "NULL"
     HOST = l[2]
     FROM = l[0]
-    with open(ki_name,'w') as f:
-        if obj == "pod":
-            last_res = get_obj(ns,res)[1]
-        else:
-            last_res = res
-        f.write(last_res)
     ki_file = time.strftime("%F",time.localtime())
+    with open(ki_name,'w') as f: f.write(name)
     with open(history+"/"+ki_file,'a+') as f: f.write( time.strftime("%F %T ",time.localtime())+"[ "+USER+"@"+HOST+" from "+FROM+" ---> "+kubeconfig+" ]  " + cmd + "\n" )
 def ki():
     ( len(sys.argv) == 1 or sys.argv[1] not in ('-n','-t','-t1','-t2','-r','-i','-e','-es','-ei','-o','-os','-oi','-restart','-s','-select','-l','-lock','-u','-unlock','-w','-watch','-h','-help') ) and sys.argv.insert(1,'-n')
@@ -356,6 +351,7 @@ def ki():
                 if sys.argv[1] in ('-i','-l','-e','-es','-ei','-o','-os','-oi'):
                     res = find_optimal(l[4],sys.argv[3])
                     if res:
+                        name = res
                         if sys.argv[1] in ('-i'):
                             cmd = "kubectl -n "+ns+" exec -it "+res+" -- sh"
                         elif sys.argv[1] in ('-l'):
@@ -372,11 +368,11 @@ def ki():
                                 action2 = " -o yaml > "+name+"."+obj+".yml"
                             cmd = "kubectl -n "+ns+" "+action+" "+obj+" "+name+action2
                         print("\033[1;32m{}\033[0m".format(cmd))
-                        record(res,obj,cmd,kubeconfig,ns)
+                        record(res,name,obj,cmd,kubeconfig)
                         os.system(cmd)
                         print('\r')
                     else:
-                        print("Pod not found")
+                        print("NotFound")
                     sys.exit()
             while True:
                 if not pod:
@@ -421,11 +417,11 @@ def ki():
                         index = int(pod) if pod.isdigit() and int(pod) < result_len else 0
                         res = result_lines[index].split()[0]
                         iip = result_lines[index].split()[5] if len(result_lines[index].split()) > 5 else find_ip(res)
-                        cmd = cmd_obj(ns,obj,res,args,iip)
+                        l = cmd_obj(ns,obj,res,args,iip)
                         print('\033[{}C\033[1A'.format(num),end = '')
-                        print("\033[1;32m{}\033[0m".format(cmd.split('  --')[0]))
-                        record(res,obj,cmd,kubeconfig,ns)
-                        os.system(cmd)
+                        print("\033[1;32m{}\033[0m".format(l[0].split('  --')[0]))
+                        record(res,l[2],l[1],l[0],kubeconfig)
+                        os.system(l[0])
                         print('\r')
                 else:
                     pod = ""

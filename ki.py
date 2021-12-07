@@ -1,7 +1,7 @@
 #!/usr/bin/python3
 #*************************************************
 # Description : Kubectl Pro
-# Version     : 0.6
+# Version     : 0.7
 #*************************************************
 import os,re,sys,time,json,subprocess
 #-----------------VAR-----------------------------
@@ -29,17 +29,17 @@ def cmp_file(f1, f2):
                 return True
 def cmd_obj(ns, obj, res, args, iip="x"):
     name = res
-    if obj in ("node","no"):
+    if obj in ("Node"):
         if args[0] in ('c','u'):
             action = "cordon" if args[0] == 'c' else "uncordon"
             cmd = "kubectl "+action+" "+res
         elif args[0] in ('d','e'):
             action = "describe" if args[0] == 'd' else "edit"
-            cmd = "kubectl "+action+" "+obj+" "+res
+            cmd = "kubectl "+action+" "+obj.lower()+" "+res
         else:
             action = "ssh"
             cmd = action +" root@"+iip
-    elif obj in ("event"):
+    elif obj in ("Event"):
         action = "get"
         cmd = "kubectl -n "+ns+" "+action+" "+obj+"  --sort-by=.metadata.creationTimestamp"
     elif obj in ("Deployment","DaemonSet","Service","StatefulSet","Ingress","ConfigMap","Secret","PersistentVolume","PersistentVolumeClaim"):
@@ -52,10 +52,10 @@ def cmd_obj(ns, obj, res, args, iip="x"):
             action = "describe"
         elif args[0] == 'o':
             action = "get"
-            action2 = " -o yaml > "+res+"."+obj+".yml"
+            action2 = " -o yaml > "+res+"."+obj.lower()+".yml"
         else:
             action = "get"
-        cmd = "kubectl -n "+ns+" "+action+" "+obj+" "+res+action2
+        cmd = "kubectl -n "+ns+" "+action+" "+obj.lower()+" "+res+action2
     else:
         l = get_obj(ns,res)
         obj = l[0]
@@ -67,10 +67,10 @@ def cmd_obj(ns, obj, res, args, iip="x"):
             cmd = "kubectl -n "+ns+" delete pod "+res+"  --now &"
         elif args == "cle":
             action = "delete"
-            cmd = "kubectl -n "+ns+" "+action+" "+obj+" "+name
+            cmd = "kubectl -n "+ns+" "+action+" "+obj.lower()+" "+name
         elif args == "destory":
             action = "delete"
-            cmd = "kubectl -n "+ns+" "+action+" "+obj+",Service,Ingress "+name
+            cmd = "kubectl -n "+ns+" "+action+" "+obj.lower()+",service,ingress "+name
         elif args[0] == 'l':
             regular = args.split('l')[-1]
             p = subprocess.Popen("kubectl -n "+ns+" get pod "+res+" -o jsonpath='{.spec.containers[:].name}'",shell=True,stdout=subprocess.PIPE,universal_newlines=True)
@@ -81,24 +81,24 @@ def cmd_obj(ns, obj, res, args, iip="x"):
             else:
                 cmd = "kubectl -n "+ns+" logs -f "+res+" "+container+"|grep --color=auto "+regular if regular else "kubectl -n "+ns+" logs -f "+res+" "+container+" --tail 200"
         elif args[0] == "r":
-            cmd = "kubectl -n "+ns+" rollout restart "+obj+" "+name
+            cmd = "kubectl -n "+ns+" rollout restart "+obj.lower()+" "+name
         elif args[0] in ('o'):
             action = "get"
             if len(args) > 1:
                 obj = d.get(args[1],'Pod')
                 if obj == 'Pod': name = res
-            cmd = "kubectl -n "+ns+" "+action+" "+obj+" "+name+" -o yaml > "+name+"."+obj+".yml"
+            cmd = "kubectl -n "+ns+" "+action+" "+obj.lower()+" "+name+" -o yaml > "+name+"."+obj+".yml"
         elif args[0] in ('d','e'):
             action = "describe" if args[0] == 'd' else "edit"
             if len(args) > 1:
                 obj = d.get(args[1],'Pod')
                 if obj == 'Pod': name = res
-            cmd = "kubectl -n "+ns+" "+action+" "+obj+" "+name
+            cmd = "kubectl -n "+ns+" "+action+" "+obj.lower()+" "+name
         elif args[0] == 'c':
             regular = args.split('c')[-1]
             action = "scale"
             replicas = regular if regular.isdigit() and -1 < int(regular) < 30 else str(1)
-            cmd = "kubectl -n "+ns+" "+action+" --replicas="+replicas+" "+obj+"/"+name
+            cmd = "kubectl -n "+ns+" "+action+" --replicas="+replicas+" "+obj.lower()+"/"+name
         else:
             cmd = "kubectl -n "+ns+" exec -it "+res+" -- sh"
     return cmd,obj,name
@@ -379,7 +379,7 @@ def ki():
                                 else:
                                     action = "get"
                                     action2 = " -o yaml > "+name+"."+obj+".yml"
-                                cmd = "kubectl -n "+ns+" "+action+" "+obj+" "+name+action2
+                                cmd = "kubectl -n "+ns+" "+action+" "+obj.lower()+" "+name+action2
                             print("\033[1;32m{}\033[0m".format(cmd))
                             record(pod,name,obj,cmd,k8s)
                             os.system(cmd)
@@ -389,9 +389,10 @@ def ki():
             while True:
                 if not pod:
                     if sys.argv[1] in ('-n','-r'):
-                        cmd = "kubectl"+" get "+obj+ext+" -n "+ ns+("  --sort-by=.status.containerStatuses[0].restartCount" if sys.argv[1].split('n')[-1] else "  --sort-by=.metadata.creationTimestamp") + " --no-headers"
+                        cmd = "kubectl"+" get "+obj.lower()+ext+" -n "+ ns+("  --sort-by=.status.containerStatuses[0].restartCount" if sys.argv[1].split('n')[-1] else "  --sort-by=.metadata.creationTimestamp") + " --no-headers"
                     else:
-                        cmd = "kubectl top "+obj+" -n "+ ns +"  --no-headers|sort --key "+(sys.argv[1].split('t')[-1] or "3")+" --numeric"
+                        key = sys.argv[1].split('t')[-1] if sys.argv[1].split('t')[-1].isdigit() else "3"
+                        cmd = "kubectl top "+obj.lower()+" -n "+ ns +"  --no-headers|sort --key "+key+" --numeric"
                     p = subprocess.Popen(cmd,shell=True,stdout=subprocess.PIPE,stderr=subprocess.PIPE,universal_newlines=True)
                     result_lines = p.stdout.readlines()
                     if not result_lines:
@@ -419,7 +420,7 @@ def ki():
                 if result_lines:
                     for n,e in enumerate(result_lines):
                         print("\033[1;32m{}\033[0m {}".format(n,e.strip()))
-                    if n > 5:
+                    if n > 3:
                         style = "\033[5;33m{}\033[0m" if switch else "\033[1;32m{}\033[0m"
                         print(style.format("[ "+k8s+" / "+ns+" --- "+obj+" ]"))
                         switch = False

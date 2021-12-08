@@ -109,9 +109,9 @@ def find_optimal(namespace_list: list, namespace: str):
     namespace_list.sort()
     indexes = [row.index(namespace) * 0.8 if namespace in row else 10000 for row in namespace_list]
     contains = [len(row.replace(namespace, '')) * 0.42 for row in namespace_list]
-    words = [namespace == row for row in namespace_list]
-    result_list = [(indexes[i] + container) * (1.62 if not words[i] else 1) for i, container in enumerate(contains)]
-    return namespace_list[result_list.index(min(result_list))] if len(set(indexes)) != 1 else None
+    words = [namespace in row for row in namespace_list]
+    result_list = [(indexes[i] + container) * (1 if words[i] else 1.62) for i, container in enumerate(contains)]
+    return namespace_list[result_list.index(min(result_list))] if len(set(indexes)) != 1 else ( namespace_list[words.index(True)] if True in words else None )
 def find_config():
     os.path.exists(history) or os.mkdir(history)
     cmd = '''find $HOME/.kube -maxdepth 2 -type f -name 'kubeconfig*' 2>/dev/null|egrep '.*' || ( find $HOME/.kube -maxdepth 1 -type f 2>/dev/null|egrep '.*' &>/dev/null && grep -l "current-context" `find $HOME/.kube -maxdepth 1 -type f` )'''
@@ -208,14 +208,14 @@ def find_ns(config_struct: list):
                 kubeconfig = config
                 break
     return ns,kubeconfig,switch,result_num
-def change_config(switch_num: int,k8s: str,ns: str):
+def switch_config(switch_num: int,k8s: str,ns: str):
     switch = False
     if os.path.exists(default_config) and os.environ['KUBECONFIG'] not in {default_config,os.path.realpath(default_config)}:
         if default_config != os.path.realpath(default_config):
             with open(ki_last,'w') as f: f.write(os.path.realpath(default_config))
         os.unlink(default_config)
         os.symlink(os.environ['KUBECONFIG'],default_config)
-        print("\033[5;33m{}\033[0m".format("[ "+str(switch_num+1)+" SWITCH  "+k8s+" / "+ns+" ] "))
+        print("\033[1;33m{}\033[0m".format("[ "+str(switch_num+1)+" SWITCH  "+k8s+" / "+ns+" ] "))
         find_history(os.environ['KUBECONFIG'])
         switch = True
     return switch
@@ -318,7 +318,8 @@ def ki():
                             if res and res not in {default_config,os.path.realpath(default_config)}:
                                 os.unlink(default_config)
                                 os.symlink(res,default_config)
-                                print("\033[5;33m{}\033[0m".format(res))
+                                print('\033[{}C\033[1A'.format(10),end = '')
+                                print("\033[1;33m{}\033[0m".format(res))
                                 find_history(res)
                                 open(ki_lock,"a").close()
                                 break
@@ -363,7 +364,7 @@ def ki():
                                 break
                         else:
                             k8s = os.environ['KUBECONFIG'].split('/')[-1]
-                            change_config(switch_num,k8s,ns)
+                            switch_config(switch_num,k8s,ns)
                             name = pod
                             if sys.argv[1] in ('-i'):
                                 cmd = "kubectl -n "+ns+" exec -it "+pod+" -- sh"
@@ -413,7 +414,7 @@ def ki():
                             break
                     else:
                         k8s = os.environ['KUBECONFIG'].split('/')[-1]
-                        switch = change_config(switch_num,k8s,ns)
+                        switch = switch_config(switch_num,k8s,ns)
                         print("\033[1;32m{}\033[0m".format(cmd.split(' --')[0]))
                 if not (pod.isdigit() and int(pod) < len(result_lines)):
                     result_lines = list(filter(lambda x: x.find(pod) >= 0, result_lines))
@@ -421,7 +422,7 @@ def ki():
                     for n,e in enumerate(result_lines):
                         print("\033[1;32m{}\033[0m {}".format(n,e.strip()))
                     if n > 3:
-                        style = "\033[5;33m{}\033[0m" if switch else "\033[1;32m{}\033[0m"
+                        style = "\033[1;33m{}\033[0m" if switch else "\033[1;32m{}\033[0m"
                         print(style.format("[ "+k8s+" / "+ns+" --- "+obj+" ]"))
                         switch = False
                     try:

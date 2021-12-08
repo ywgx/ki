@@ -208,14 +208,14 @@ def find_ns(config_struct: list):
                 kubeconfig = config
                 break
     return ns,kubeconfig,switch,result_num
-def switch_config(switch_num: int,k8s: str,ns: str):
+def switch_config(switch_num: int,k8s: str,ns: str,time: str):
     switch = False
     if os.path.exists(default_config) and os.environ['KUBECONFIG'] not in {default_config,os.path.realpath(default_config)}:
         if default_config != os.path.realpath(default_config):
             with open(ki_last,'w') as f: f.write(os.path.realpath(default_config))
         os.unlink(default_config)
         os.symlink(os.environ['KUBECONFIG'],default_config)
-        print("\033[1;33m{}\033[0m".format("[ "+str(switch_num+1)+" SWITCH  "+k8s+" / "+ns+" ] "))
+        print("\033[1;33m{}\033[0m".format("[ "+time+"  "+str(switch_num+1)+"-SWITCH  "+k8s+" / "+ns+" ] "))
         find_history(os.environ['KUBECONFIG'])
         switch = True
     return switch
@@ -342,6 +342,7 @@ def ki():
                 obj = d[sys.argv[3][0]][0] if sys.argv[3][0] in d else "Pod"
                 ext = d[sys.argv[3][0]][1] if sys.argv[3][0] in d else ""
                 if sys.argv[1] in ('-i','-l','-e','-es','-ei','-o','-os','-oi'):
+                    begin = time.perf_counter()
                     while True:
                         p = subprocess.Popen("kubectl get pods --no-headers -n "+ns,shell=True,stdout=subprocess.PIPE,stderr=subprocess.PIPE,universal_newlines=True)
                         pods = list({ e.split()[0] for e in p.stdout.readlines() })
@@ -363,8 +364,9 @@ def ki():
                                 print("NotFound")
                                 break
                         else:
+                            end = time.perf_counter()
                             k8s = os.environ['KUBECONFIG'].split('/')[-1]
-                            switch_config(switch_num,k8s,ns)
+                            switch_config(switch_num,k8s,ns,str(end-begin))
                             name = pod
                             if sys.argv[1] in ('-i'):
                                 cmd = "kubectl -n "+ns+" exec -it "+pod+" -- sh"
@@ -387,6 +389,8 @@ def ki():
                             print('\r')
                             break
                     sys.exit()
+            flag = True
+            begin = time.perf_counter()
             while True:
                 if not pod:
                     if sys.argv[1] in ('-n','-r'):
@@ -394,8 +398,7 @@ def ki():
                     else:
                         key = sys.argv[1].split('t')[-1] if sys.argv[1].split('t')[-1].isdigit() else "3"
                         cmd = "kubectl top "+obj.lower()+" -n "+ ns +"  --no-headers|sort --key "+key+" --numeric"
-                    p = subprocess.Popen(cmd,shell=True,stdout=subprocess.PIPE,stderr=subprocess.PIPE,universal_newlines=True)
-                    result_lines = p.stdout.readlines()
+                    result_lines = subprocess.Popen(cmd,shell=True,stdout=subprocess.PIPE,stderr=subprocess.PIPE,universal_newlines=True).stdout.readlines()
                     if not result_lines:
                         kn = sys.argv[2].split('.')
                         ns_pattern = kn[-1] if len(kn) > 1 else kn[0]
@@ -413,8 +416,11 @@ def ki():
                             print("No namespace found in the kubernetes.")
                             break
                     else:
-                        k8s = os.environ['KUBECONFIG'].split('/')[-1]
-                        switch = switch_config(switch_num,k8s,ns)
+                        if flag:
+                            end = time.perf_counter()
+                            k8s = os.environ['KUBECONFIG'].split('/')[-1]
+                            switch = switch_config(switch_num,k8s,ns,str(end-begin))
+                            flag = False
                         print("\033[1;32m{}\033[0m".format(cmd.split(' --')[0]))
                 if not (pod.isdigit() and int(pod) < len(result_lines)):
                     result_lines = list(filter(lambda x: x.find(pod) >= 0, result_lines))
@@ -463,7 +469,7 @@ def ki():
         print(style % "Kubectl Pro controls the Kubernetes cluster manager")
         print("\nFind more information at: https://ki.xabc.io\n")
         print(style % "1. ki","List all namespaces")
-        print(style % "2. ki xx","List all pods in the namespace ( if there are multiple ~/.kube/kubeconfig*,the best matching kubeconfig will be found ),the namespace parameter supports fuzzy matching,after outputting the pod list, select: xxx filters the query\n         select: index l ( [ l ] Print the logs for a container in a pod or specified resource )\n         select: index l 100 ( Print the logs of the latest 100 lines )\n         select: index l xxx ( Print the logs and filters the specified characters )\n         select: index r ( [ r ] Rollout restart the pod )\n         select: index o ( [ o ] Output the [Deployment,StatefulSet,Service,Ingress,Configmap,Secret].yml file )\n         select: index del ( [ del ] Delete the pod )\n         select: index cle ( [ cle ] Delete the Deployment/StatefulSet )\n         select: index e[si] ( [ e[si] ] Edit the Deploy/Service/Ingress )\n         select: index c5 ( [ c5 ] Set the Deploy/StatefulSet replicas=5 )")
+        print(style % "2. ki xx","List all pods in the namespace ( if there are multiple ~/.kube/kubeconfig*,the best matching kubeconfig will be found ),the namespace parameter supports fuzzy matching,after outputting the pod list, select: xxx filters the query\n         select: index l ( [ l ] Print the logs for a container in a pod or specified resource )\n         select: index l 100 ( Print the logs of the latest 100 lines )\n         select: index l xxx ( Print the logs and filters the specified characters )\n         select: index r ( [ r ] Rollout restart the pod )\n         select: index o ( [ o ] Output the [Deployment,StatefulSet,Service,Ingress,Configmap,Secret].yml file )\n         select: index del ( [ del ] Delete the pod )\n         select: index cle ( [ cle ] Delete the Deployment/StatefulSet )\n         select: index e[si] ( [ e[si] ] Edit the Deploy/Service/Ingress )\n         select: index c5 ( [ c5 ] Set the Deploy/StatefulSet replicas=5 )\n         select: index dp ( Describe a pod )")
         print(style % "3. ki xx d","List the Deployment of a namespace")
         print(style % "4. ki xx f","List the StatefulSet of a namespace")
         print(style % "5. ki xx s","List the Service of a namespace")

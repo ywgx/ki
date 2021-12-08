@@ -344,50 +344,54 @@ def ki():
                 if sys.argv[1] in ('-i','-l','-e','-es','-ei','-o','-os','-oi'):
                     begin = time.perf_counter()
                     while True:
-                        p = subprocess.Popen("kubectl get pods --no-headers -n "+ns,shell=True,stdout=subprocess.PIPE,stderr=subprocess.PIPE,universal_newlines=True)
-                        pods = list({ e.split()[0] for e in p.stdout.readlines() })
-                        pod = find_optimal(pods,sys.argv[3]) if pods else None
-                        if not (pods and pod):
-                            kn = sys.argv[2].split('.')
-                            ns_pattern = kn[-1] if len(kn) > 1 else kn[0]
-                            os.environ['KUBECONFIG'] in config_struct[1] and config_struct[1].remove(os.environ['KUBECONFIG'])
-                            if config_struct[1]:
-                                for n,config in enumerate(config_struct[1]):
-                                    p = subprocess.Popen("kubectl get ns --no-headers --kubeconfig "+config,shell=True,stdout=subprocess.PIPE,stderr=subprocess.PIPE,universal_newlines=True)
-                                    ns_list = list({ e.split()[0] for e in p.stdout.readlines() })
-                                    ns = find_optimal(ns_list,ns_pattern)
-                                    if ns:
-                                        os.environ['KUBECONFIG'] = config
-                                        switch_num += 1
-                                        break
+                        if ns:
+                            p = subprocess.Popen("kubectl get pods --no-headers -n "+ns,shell=True,stdout=subprocess.PIPE,stderr=subprocess.PIPE,universal_newlines=True)
+                            pods = list({ e.split()[0] for e in p.stdout.readlines() })
+                            pod = find_optimal(pods,sys.argv[3]) if pods else None
+                            if not (pods and pod):
+                                kn = sys.argv[2].split('.')
+                                ns_pattern = kn[-1] if len(kn) > 1 else kn[0]
+                                os.environ['KUBECONFIG'] in config_struct[1] and config_struct[1].remove(os.environ['KUBECONFIG'])
+                                if config_struct[1]:
+                                    for n,config in enumerate(config_struct[1]):
+                                        p = subprocess.Popen("kubectl get ns --no-headers --kubeconfig "+config,shell=True,stdout=subprocess.PIPE,stderr=subprocess.PIPE,universal_newlines=True)
+                                        ns_list = list({ e.split()[0] for e in p.stdout.readlines() })
+                                        ns = find_optimal(ns_list,ns_pattern)
+                                        if ns:
+                                            os.environ['KUBECONFIG'] = config
+                                            switch_num += 1
+                                            break
+                                else:
+                                    print("NotFound")
+                                    break
                             else:
-                                print("NotFound")
+                                end = time.perf_counter()
+                                k8s = os.environ['KUBECONFIG'].split('/')[-1]
+                                switch_config(switch_num,k8s,ns,str(end-begin))
+                                name = pod
+                                if sys.argv[1] in ('-i'):
+                                    cmd = "kubectl -n "+ns+" exec -it "+pod+" -- sh"
+                                elif sys.argv[1] in ('-l'):
+                                    cmd = "kubectl -n "+ns+" logs -f "+pod+" --all-containers --tail 10"
+                                else:
+                                    l = get_obj(ns,pod,sys.argv[1])
+                                    obj = l[0]
+                                    name = l[1]
+                                    if sys.argv[1] in ('-e','-es','-ei'):
+                                        action = "edit"
+                                        action2 = ""
+                                    else:
+                                        action = "get"
+                                        action2 = " -o yaml > "+name+"."+obj+".yml"
+                                    cmd = "kubectl -n "+ns+" "+action+" "+obj.lower()+" "+name+action2
+                                print("\033[1;32m{}\033[0m".format(cmd))
+                                record(pod,name,obj,cmd,k8s)
+                                os.system(cmd)
+                                print('\r')
                                 break
                         else:
-                            end = time.perf_counter()
-                            k8s = os.environ['KUBECONFIG'].split('/')[-1]
-                            switch_config(switch_num,k8s,ns,str(end-begin))
-                            name = pod
-                            if sys.argv[1] in ('-i'):
-                                cmd = "kubectl -n "+ns+" exec -it "+pod+" -- sh"
-                            elif sys.argv[1] in ('-l'):
-                                cmd = "kubectl -n "+ns+" logs -f "+pod+" --all-containers --tail 10"
-                            else:
-                                l = get_obj(ns,pod,sys.argv[1])
-                                obj = l[0]
-                                name = l[1]
-                                if sys.argv[1] in ('-e','-es','-ei'):
-                                    action = "edit"
-                                    action2 = ""
-                                else:
-                                    action = "get"
-                                    action2 = " -o yaml > "+name+"."+obj+".yml"
-                                cmd = "kubectl -n "+ns+" "+action+" "+obj.lower()+" "+name+action2
-                            print("\033[1;32m{}\033[0m".format(cmd))
-                            record(pod,name,obj,cmd,k8s)
-                            os.system(cmd)
-                            print('\r')
-                            break
+                            print("NotFound")
+                            sys.exit()
                     sys.exit()
             flag = True
             begin = time.perf_counter()

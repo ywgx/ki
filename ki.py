@@ -195,7 +195,7 @@ def find_ns(config_struct: list):
     result_num = config_struct[-1]
     if result_num > 0:
         kn = sys.argv[2].split('.')
-        ns_pattern = kn[-1] if len(kn) > 1 else kn[0]
+        ns_pattern = kn[-1] if len(kn) > 1 and len(kn[-1].strip()) > 0 else kn[0]
         config = find_optimal(config_struct[1],kn[0]) or default_config if len(kn) > 1 else default_config
         current_config = os.path.realpath(config)
         current_config in config_struct[1] and config_struct[1].remove(current_config)
@@ -350,7 +350,7 @@ def ki():
                             pod = find_optimal(pods,sys.argv[3]) if pods else None
                             if not (pods and pod):
                                 kn = sys.argv[2].split('.')
-                                ns_pattern = kn[-1] if len(kn) > 1 else kn[0]
+                                ns_pattern = kn[-1] if len(kn) > 1 and len(kn[-1].strip()) > 0 else kn[0]
                                 os.environ['KUBECONFIG'] in config_struct[1] and config_struct[1].remove(os.environ['KUBECONFIG'])
                                 if config_struct[1]:
                                     for n,config in enumerate(config_struct[1]):
@@ -405,7 +405,7 @@ def ki():
                     result_lines = subprocess.Popen(cmd,shell=True,stdout=subprocess.PIPE,stderr=subprocess.PIPE,universal_newlines=True).stdout.readlines()
                     if not result_lines:
                         kn = sys.argv[2].split('.')
-                        ns_pattern = kn[-1] if len(kn) > 1 else kn[0]
+                        ns_pattern = kn[-1] if len(kn) > 1 and len(kn[-1].strip()) > 0 else kn[0]
                         os.environ['KUBECONFIG'] in config_struct[1] and config_struct[1].remove(os.environ['KUBECONFIG'])
                         if config_struct[1]:
                             for n,config in enumerate(config_struct[1]):

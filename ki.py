@@ -1,9 +1,9 @@
 #!/usr/bin/python3
 #*************************************************
 # Description : Kubectl Pro
-# Version     : 0.7
+# Version     : 0.8
 #*************************************************
-import os,re,sys,time,json,subprocess
+import os,re,sys,time,subprocess
 #-----------------VAR-----------------------------
 home = os.environ["HOME"]
 history = home + "/.history"
@@ -11,6 +11,7 @@ ki_lock = history + "/.lock"
 ki_dict = history + "/.dict"
 ki_last = history + "/.last"
 ki_name = history + "/.name"
+ki_ns_dict = history + "/.ns_dict"
 default_config = home + "/.kube/config"
 #-----------------FUN-----------------------------
 def cmp_file(f1, f2):
@@ -141,7 +142,7 @@ def find_config():
         if os.path.exists(ki_dict) and os.path.getsize(ki_dict) > 5:
             with open(ki_dict,'r') as f:
                 try:
-                    dc = json.loads(f.read())
+                    dc = eval(f.read())
                     for config in list(dc.keys()):
                         if not os.path.exists(config):
                             del dc[config]
@@ -180,34 +181,53 @@ def find_history(config):
     dc = {}
     if os.path.exists(ki_dict) and os.path.getsize(ki_dict) > 5:
         with open(ki_dict,'r') as f:
-            dc = json.loads(f.read())
+            dc = eval(f.read())
             dc[config] = dc[config] + 1 if config in dc else 1
             dc.pop(default_config,404)
             for config in list(dc.keys()):
                 if not os.path.exists(config): del dc[config]
     else:
         dc[config] = 1
-    with open(ki_dict,'w') as f: f.write(json.dumps(dc))
+    with open(ki_dict,'w') as f: f.write(str(dc))
 def find_ns(config_struct: list):
     ns = None
     kubeconfig = None
     switch = False
     result_num = config_struct[-1]
-    if result_num > 0:
-        kn = sys.argv[2].split('.')
-        ns_pattern = kn[-1] if len(kn) > 1 and len(kn[-1].strip()) > 0 else kn[0]
-        config = find_optimal(config_struct[1],kn[0]) or default_config if len(kn) > 1 else default_config
-        current_config = os.path.realpath(config)
-        current_config in config_struct[1] and config_struct[1].remove(current_config)
-        config_struct[1].insert(0,current_config)
-        for n,config in enumerate(config_struct[1]):
+    kn = sys.argv[2].split('.')
+    ns_pattern = kn[-1] if len(kn) > 1 and len(kn[-1].strip()) > 0 else kn[0]
+    config = find_optimal(config_struct[1],kn[0]) or default_config if len(kn) > 1 else default_config
+    current_config = os.path.realpath(config)
+    current_config in config_struct[1] and config_struct[1].remove(current_config)
+    config_struct[1].insert(0,current_config)
+    for n,config in enumerate(config_struct[1]):
+        if os.path.exists(ki_ns_dict):
+            with open(ki_ns_dict,'r') as f:
+                try:
+                    d = eval(f.read())
+                    ns_list = d[config]
+                except:
+                    cache_ns(config_struct)
+        else:
             p = subprocess.Popen("kubectl get ns --no-headers --kubeconfig "+config,shell=True,stdout=subprocess.PIPE,stderr=subprocess.PIPE,universal_newlines=True)
             ns_list = list({ e.split()[0] for e in p.stdout.readlines() })
-            ns = find_optimal(ns_list,ns_pattern)
-            if ns:
-                kubeconfig = config
-                break
+        ns = find_optimal(ns_list,ns_pattern)
+        if ns:
+            kubeconfig = config
+            break
     return ns,kubeconfig,switch,result_num
+def cache_ns(config_struct: list):
+    d = {}
+    for config in config_struct[1]:
+        s = []
+        p = subprocess.Popen("kubectl get ns --no-headers --kubeconfig "+config,shell=True,stdout=subprocess.PIPE,stderr=subprocess.PIPE,universal_newlines=True)
+        ns_list = list({ e.split()[0] for e in p.stdout.readlines() })
+        for ns in ns_list:
+            p = subprocess.Popen("kubectl get pods --no-headers --kubeconfig "+config+" -n "+ns,shell=True,stdout=subprocess.PIPE,stderr=subprocess.PIPE,universal_newlines=True)
+            if { e.split()[0] for e in p.stdout.readlines() }:
+                s.append(ns)
+        d[config] = s
+    with open(ki_ns_dict,'w') as f: f.write(str(d))
 def switch_config(switch_num: int,k8s: str,ns: str,time: str):
     switch = False
     if os.path.exists(default_config) and os.environ['KUBECONFIG'] not in {default_config,os.path.realpath(default_config)}:
@@ -261,7 +281,7 @@ def record(res: str,name: str,obj: str,cmd: str,kubeconfig: str):
     with open(ki_name,'w') as f: f.write(name)
     with open(history+"/"+ki_file,'a+') as f: f.write( time.strftime("%F %T ",time.localtime())+"[ "+USER+"@"+HOST+" from "+FROM+" ---> "+kubeconfig+" ]  " + cmd + "\n" )
 def ki():
-    ( len(sys.argv) == 1 or sys.argv[1] not in ('-n','-t','-t1','-t2','-r','-i','-e','-es','-ei','-o','-os','-oi','-restart','-s','-select','-l','-lock','-u','-unlock','-w','-watch','-h','-help') ) and sys.argv.insert(1,'-n')
+    ( len(sys.argv) == 1 or sys.argv[1] not in ('-n','-t','-t1','-t2','-r','-i','-e','-es','-ei','-o','-os','-oi','-restart','-s','-select','-l','-lock','-u','-unlock','-w','-watch','-h','-help','-c','-cache') ) and sys.argv.insert(1,'-n')
     len(sys.argv) == 2 and sys.argv[1] in ('-i','-e','-es','-ei','-o','-os','-oi') and sys.argv.insert(1,'-n')
     config_struct = find_config()
     if len(sys.argv) == 2 and sys.argv[1] in ('-w','-watch'):
@@ -276,6 +296,8 @@ def ki():
         print("\033[1;32m{}\033[0m".format(cmd))
         os.environ['KUBECONFIG'] = os.path.realpath(default_config)
         os.system(cmd)
+    elif len(sys.argv) == 2 and sys.argv[1] in ('-c','-cache'):
+        cache_ns(config_struct)
     elif 1 < len(sys.argv) < 4 and sys.argv[1] in ('-s','-select'):
         result_lines = config_struct[1]
         if result_lines and len(result_lines) > 1:
@@ -487,6 +509,7 @@ def ki():
         print(style % "13. ki -l $ns $pod","Print the logs for a container,this way can be one-stop")
         print(style % "14. ki -e[si] $ns $pod","Edit the Deploy/Service/Ingress for a container,this way can be one-stop")
         print(style % "15. ki $k8s.$ns","Select the kubernetes which namespace in the kubernetes ( if there are multiple ~/.kube/kubeconfig*,this way can be one-stop. )")
+        print(style % "16. ki -c","Enable write caching of namespace ( ~/.history/.ns_dict )")
 def main():
     ki()
 #-----------------PROG----------------------------

@@ -57,6 +57,20 @@ def cmd_obj(ns, obj, res, args, iip="x"):
         else:
             action = "get"
         cmd = "kubectl -n "+ns+" "+action+" "+obj.lower()+" "+res+action2
+    elif obj in ("ResourceQuota"):
+        action2 = ""
+        if args[0] == "e":
+            action = "edit"
+        elif args[0] == "d":
+            action = "describe"
+        elif args[0] == 'o':
+            action = "get"
+            action2 = " -o yaml > "+ns+"."+obj.lower()+".yml"
+        elif args == "cle":
+            action = "delete"
+        else:
+            action = "get"
+        cmd = "kubectl -n "+ns+" "+action+" "+obj.lower()+" "+res+action2
     else:
         l = get_obj(ns,res)
         obj = l[0]
@@ -360,7 +374,7 @@ def ki():
             ext = " -o wide"
             os.environ['KUBECONFIG'] = l[1]
             if len(sys.argv) == 4:
-                d = {'d':['Deployment'," -o wide"],'s':['Service'," -o wide"],'i':['Ingress'," -o wide"],'c':['ConfigMap'," -o wide"],'t':['Secret'," -o wide"],'n':['Node'," -o wide"],'p':['PersistentVolumeClaim'," -o wide"],'v':['PersistentVolume'," -o wide"],'f':['StatefulSet'," -o wide"],'e':['Event',''],'r':['ReplicaSet',''],'a':['DaemonSet','']}
+                d = {'d':['Deployment'," -o wide"],'s':['Service'," -o wide"],'i':['Ingress'," -o wide"],'c':['ConfigMap'," -o wide"],'t':['Secret'," -o wide"],'n':['Node'," -o wide"],'p':['PersistentVolumeClaim'," -o wide"],'v':['PersistentVolume'," -o wide"],'f':['StatefulSet'," -o wide"],'e':['Event',''],'r':['ReplicaSet',''],'a':['DaemonSet',''],'q':['ResourceQuota','']}
                 obj = d[sys.argv[3][0]][0] if sys.argv[3][0] in d else "Pod"
                 ext = d[sys.argv[3][0]][1] if sys.argv[3][0] in d else ""
                 if sys.argv[1] in ('-i','-l','-e','-es','-ei','-o','-os','-oi'):
@@ -418,76 +432,80 @@ def ki():
             flag = True
             begin = time.perf_counter()
             while True:
-                if not pod:
-                    if sys.argv[1] in ('-n','-r'):
-                        cmd = "kubectl"+" get "+obj.lower()+ext+" -n "+ ns+("  --sort-by=.status.containerStatuses[0].restartCount" if sys.argv[1].split('n')[-1] else "  --sort-by=.metadata.creationTimestamp") + " --no-headers"
-                    else:
-                        key = sys.argv[1].split('t')[-1] if sys.argv[1].split('t')[-1].isdigit() else "3"
-                        cmd = "kubectl top "+obj.lower()+" -n "+ ns +"  --no-headers|sort --key "+key+" --numeric"
-                    result_lines = subprocess.Popen(cmd,shell=True,stdout=subprocess.PIPE,stderr=subprocess.PIPE,universal_newlines=True).stdout.readlines()
-                    if not result_lines:
-                        kn = sys.argv[2].split('.')
-                        ns_pattern = kn[-1] if len(kn) > 1 and len(kn[-1].strip()) > 0 else kn[0]
-                        os.environ['KUBECONFIG'] in config_struct[1] and config_struct[1].remove(os.environ['KUBECONFIG'])
-                        if config_struct[1]:
-                            for n,config in enumerate(config_struct[1]):
-                                p = subprocess.Popen("kubectl get ns --no-headers --kubeconfig "+config,shell=True,stdout=subprocess.PIPE,stderr=subprocess.PIPE,universal_newlines=True)
-                                ns_list = list({ e.split()[0] for e in p.stdout.readlines() })
-                                ns = find_optimal(ns_list,ns_pattern)
-                                if ns:
-                                    os.environ['KUBECONFIG'] = config
-                                    switch_num += 1
-                                    break
+                if ns:
+                    if not pod:
+                        if sys.argv[1] in ('-n','-r'):
+                            cmd = "kubectl"+" get "+obj.lower()+ext+" -n "+ ns+("  --sort-by=.status.containerStatuses[0].restartCount" if sys.argv[1].split('n')[-1] else "  --sort-by=.metadata.creationTimestamp") + " --no-headers"
                         else:
-                            print("No namespace found in the kubernetes.")
-                            break
-                    else:
-                        if flag:
-                            end = time.perf_counter()
-                            k8s = os.environ['KUBECONFIG'].split('/')[-1]
-                            switch = switch_config(switch_num,k8s,ns,str(end-begin))
-                            flag = False
-                        print("\033[1;32m{}\033[0m".format(cmd.split(' --')[0]))
-                if not (pod.isdigit() and int(pod) < len(result_lines)):
-                    result_lines = list(filter(lambda x: x.find(pod) >= 0, result_lines))
-                if result_lines:
-                    for n,e in enumerate(result_lines):
-                        print("\033[1;32m{}\033[0m {}".format(n,e.strip()))
-                    if n > 3:
-                        style = "\033[1;33m{}\033[0m" if switch else "\033[1;32m{}\033[0m"
-                        print(style.format("[ "+k8s+" / "+ns+" --- "+obj+" ]"))
-                        switch = False
-                    try:
-                        pod = input("\033[1;35m%s\033[0m\033[5;35m%s\033[0m" % ("select",":")).strip()
-                        num = 10 + len(pod)
-                    except:
-                        sys.exit()
-                    result_len = len(result_lines)
-                    podList = pod.split()
-                    pod = podList[0] if podList else ""
-                    if pod in ('$','#','@','!'):
-                        if pod == '$':
-                            pod = str(result_len-1)
-                        elif os.path.exists(ki_name):
-                            with open(ki_name,'r') as f:
-                                last_res = f.read()
-                                for n,e in enumerate(result_lines[::-1]):
-                                    if last_res in e:
-                                        pod = str(result_len-n-1)
+                            key = sys.argv[1].split('t')[-1] if sys.argv[1].split('t')[-1].isdigit() else "3"
+                            cmd = "kubectl top "+obj.lower()+" -n "+ ns +"  --no-headers|sort --key "+key+" --numeric"
+                        result_lines = subprocess.Popen(cmd,shell=True,stdout=subprocess.PIPE,stderr=subprocess.PIPE,universal_newlines=True).stdout.readlines()
+                        if not result_lines:
+                            kn = sys.argv[2].split('.')
+                            ns_pattern = kn[-1] if len(kn) > 1 and len(kn[-1].strip()) > 0 else kn[0]
+                            os.environ['KUBECONFIG'] in config_struct[1] and config_struct[1].remove(os.environ['KUBECONFIG'])
+                            if config_struct[1]:
+                                for n,config in enumerate(config_struct[1]):
+                                    p = subprocess.Popen("kubectl get ns --no-headers --kubeconfig "+config,shell=True,stdout=subprocess.PIPE,stderr=subprocess.PIPE,universal_newlines=True)
+                                    ns_list = list({ e.split()[0] for e in p.stdout.readlines() })
+                                    ns = find_optimal(ns_list,ns_pattern)
+                                    if ns:
+                                        os.environ['KUBECONFIG'] = config
+                                        switch_num += 1
                                         break
-                    args = ''.join(podList[1:]) if len(podList) > 1 else "p"
-                    if pod.isdigit() and int(pod) < result_len or result_len == 1:
-                        index = int(pod) if pod.isdigit() and int(pod) < result_len else 0
-                        res = result_lines[index].split()[0]
-                        iip = result_lines[index].split()[5] if len(result_lines[index].split()) > 5 else find_ip(res)
-                        l = cmd_obj(ns,obj,res,args,iip)
-                        print('\033[{}C\033[1A'.format(num),end = '')
-                        print("\033[1;32m{}\033[0m".format(l[0].split('  --')[0]))
-                        record(res,l[2],l[1],l[0],k8s)
-                        os.system(l[0])
-                        print('\r')
+                            else:
+                                print("No namespace found in the kubernetes.")
+                                break
+                        else:
+                            if flag:
+                                end = time.perf_counter()
+                                k8s = os.environ['KUBECONFIG'].split('/')[-1]
+                                switch = switch_config(switch_num,k8s,ns,str(end-begin))
+                                flag = False
+                            print("\033[1;32m{}\033[0m".format(cmd.split(' --')[0]))
+                    if not (pod.isdigit() and int(pod) < len(result_lines)):
+                        result_lines = list(filter(lambda x: x.find(pod) >= 0, result_lines))
+                    if result_lines:
+                        for n,e in enumerate(result_lines):
+                            print("\033[1;32m{}\033[0m {}".format(n,e.strip()))
+                        if n > 3:
+                            style = "\033[1;33m{}\033[0m" if switch else "\033[1;32m{}\033[0m"
+                            print(style.format("[ "+k8s+" / "+ns+" --- "+obj+" ]"))
+                            switch = False
+                        try:
+                            pod = input("\033[1;35m%s\033[0m\033[5;35m%s\033[0m" % ("select",":")).strip()
+                            num = 10 + len(pod)
+                        except:
+                            sys.exit()
+                        result_len = len(result_lines)
+                        podList = pod.split()
+                        pod = podList[0] if podList else ""
+                        if pod in ('$','#','@','!'):
+                            if pod == '$':
+                                pod = str(result_len-1)
+                            elif os.path.exists(ki_name):
+                                with open(ki_name,'r') as f:
+                                    last_res = f.read()
+                                    for n,e in enumerate(result_lines[::-1]):
+                                        if last_res in e:
+                                            pod = str(result_len-n-1)
+                                            break
+                        args = ''.join(podList[1:]) if len(podList) > 1 else "p"
+                        if pod.isdigit() and int(pod) < result_len or result_len == 1:
+                            index = int(pod) if pod.isdigit() and int(pod) < result_len else 0
+                            res = result_lines[index].split()[0]
+                            iip = result_lines[index].split()[5] if len(result_lines[index].split()) > 5 else find_ip(res)
+                            l = cmd_obj(ns,obj,res,args,iip)
+                            print('\033[{}C\033[1A'.format(num),end = '')
+                            print("\033[1;32m{}\033[0m".format(l[0].split('  --')[0]))
+                            record(res,l[2],l[1],l[0],k8s)
+                            os.system(l[0])
+                            print('\r')
+                    else:
+                        pod = ""
                 else:
-                    pod = ""
+                    print("NotFound")
+                    sys.exit()
         else:
             print("No namespace found in the kubernetes.")
     elif len(sys.argv) == 2 and sys.argv[1] in ('-h','-help'):
@@ -504,12 +522,13 @@ def ki():
         print(style % "8. ki xx a","List the DaemonSet of a namespace")
         print(style % "9. ki xx v","List the PersistentVolume of a namespace")
         print(style % "10. ki xx p","List the PersistentVolumeClaim of a namespace")
-        print(style % "11. ki -s","Select the kubernetes to be connected ( if there are multiple ~/.kube/kubeconfig*,the kubeconfig storage can be kubeconfig-hz,kubeconfig-sh,etc. )")
-        print(style % "12. ki -i $ns $pod","Login in the container,this way can be one-stop")
-        print(style % "13. ki -l $ns $pod","Print the logs for a container,this way can be one-stop")
-        print(style % "14. ki -e[si] $ns $pod","Edit the Deploy/Service/Ingress for a container,this way can be one-stop")
-        print(style % "15. ki $k8s.$ns","Select the kubernetes which namespace in the kubernetes ( if there are multiple ~/.kube/kubeconfig*,this way can be one-stop. )")
-        print(style % "16. ki -c","Enable write caching of namespace ( ~/.history/.ns_dict )")
+        print(style % "11. ki xx q","List the ResourceQuota of a namespace")
+        print(style % "12. ki -s","Select the kubernetes to be connected ( if there are multiple ~/.kube/kubeconfig*,the kubeconfig storage can be kubeconfig-hz,kubeconfig-sh,etc. )")
+        print(style % "13. ki -i $ns $pod","Login in the container,this way can be one-stop")
+        print(style % "14. ki -l $ns $pod","Print the logs for a container,this way can be one-stop")
+        print(style % "15. ki -e[si] $ns $pod","Edit the Deploy/Service/Ingress for a container,this way can be one-stop")
+        print(style % "16. ki $k8s.$ns","Select the kubernetes which namespace in the kubernetes ( if there are multiple ~/.kube/kubeconfig*,this way can be one-stop. )")
+        print(style % "17. ki -c","Enable write caching of namespace ( ~/.history/.ns_dict )")
 def main():
     ki()
 #-----------------PROG----------------------------

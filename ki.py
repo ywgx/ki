@@ -1,7 +1,7 @@
 #!/usr/bin/python3
 #*************************************************
 # Description : Kubectl Pro
-# Version     : 0.8
+# Version     : 0.9
 #*************************************************
 import os,re,sys,time,subprocess
 #-----------------VAR-----------------------------
@@ -224,7 +224,7 @@ def find_ns(config_struct: list):
                     cache_ns(config_struct)
         else:
             p = subprocess.Popen("kubectl get ns --no-headers --kubeconfig "+config,shell=True,stdout=subprocess.PIPE,stderr=subprocess.PIPE,universal_newlines=True)
-            ns_list = list({ e.split()[0] for e in p.stdout.readlines() })
+            ns_list = [ e.split()[0] for e in p.stdout.readlines() ]
         ns = find_optimal(ns_list,ns_pattern)
         if ns:
             kubeconfig = config
@@ -235,10 +235,10 @@ def cache_ns(config_struct: list):
     for config in config_struct[1]:
         s = []
         p = subprocess.Popen("kubectl get ns --no-headers --kubeconfig "+config,shell=True,stdout=subprocess.PIPE,stderr=subprocess.PIPE,universal_newlines=True)
-        ns_list = list({ e.split()[0] for e in p.stdout.readlines() })
+        ns_list = [ e.split()[0] for e in p.stdout.readlines() ]
         for ns in ns_list:
             p = subprocess.Popen("kubectl get pods --no-headers --kubeconfig "+config+" -n "+ns,shell=True,stdout=subprocess.PIPE,stderr=subprocess.PIPE,universal_newlines=True)
-            if { e.split()[0] for e in p.stdout.readlines() }:
+            if [ e.split()[0] for e in p.stdout.readlines() ]:
                 s.append(ns)
         d[config] = s
     with open(ki_ns_dict,'w') as f: f.write(str(d))
@@ -268,6 +268,49 @@ def get_obj(ns: str,res: str,args='x'):
     if args[-1] in d.keys():
         obj = d[args[-1]]
     return obj,name
+def get_ns_feature(ns_list: list):
+    P = 177
+    MOD = 192073433
+
+    string_hashes = []
+    max_string_length = 0
+    for string in ns_list:
+        hashes = [0]
+        for i in range(len(string)):
+             hashes.append((hashes[-1] * P + ord(string[i])) % MOD)
+        string_hashes.append(hashes)
+        max_string_length = max(max_string_length, len(string))
+
+    pows = [1]
+    for i in range(max_string_length + 1):
+        pows.append(pows[-1] * P % MOD)
+
+    sorted_indices = list(range(len(ns_list)))
+    sorted_indices = sorted(sorted_indices, key=lambda i: len(ns_list[i]))
+
+    disabled_hashes = set()
+    answers = [None for _ in ns_list]
+    for i in sorted_indices:
+        string = ns_list[i]
+        hashes = string_hashes[i]
+
+        hash_to_be_disabled = []
+        min_length = len(string) + 1
+        for x in range(len(string)):
+            for y in range(x, len(string)):
+                substr_hash = (hashes[y + 1] - hashes[x] * pows[y + 1 - x]) % MOD
+                substr_hash = (substr_hash + MOD) % MOD
+                hash_to_be_disabled.append(substr_hash)
+                if substr_hash not in disabled_hashes and min_length > (y - x + 1):
+                    min_length = y - x + 1
+                    answers[i] = (x, y)
+
+        disabled_hashes.update(hash_to_be_disabled)
+
+    d = {}
+    for i, (x, y) in enumerate(answers):
+        d[ns_list[i]] = ns_list[i][x: y + 1]
+    return d
 def info(k8s_path: str,result_lines: list):
     l = k8s_path.split('/')
     if 'K8S' in l:
@@ -301,7 +344,6 @@ def ki():
     if len(sys.argv) == 2 and sys.argv[1] in ('-w','-watch'):
         info(os.environ["PWD"],config_struct[1])
     elif len(sys.argv) == 2 and sys.argv[1] in ('-l','-lock'):
-        os.path.exists(history) or os.mkdir(history)
         os.path.exists(ki_lock) or open(ki_lock,"a").close()
     elif len(sys.argv) == 2 and sys.argv[1] in ('-u','-unlock'):
         os.path.exists(ki_lock) and os.unlink(ki_lock)
@@ -309,7 +351,13 @@ def ki():
         cmd = "kubectl get ns"
         print("\033[1;32m{}\033[0m".format(cmd))
         os.environ['KUBECONFIG'] = os.path.realpath(default_config)
-        os.system(cmd)
+        p = subprocess.Popen(cmd,shell=True,stdout=subprocess.PIPE,stderr=subprocess.PIPE,universal_newlines=True)
+        l = p.stdout.readlines()
+        print(l[0].strip()+"\t  HASH")
+        del l[0]
+        ns_dict = get_ns_feature([ e.split()[0] for e in l ])
+        for e in l:
+            print(e.strip()+"\t  "+ns_dict[e.split()[0]])
     elif len(sys.argv) == 2 and sys.argv[1] in ('-c','-cache'):
         cache_ns(config_struct)
     elif 1 < len(sys.argv) < 4 and sys.argv[1] in ('-s','-select'):
@@ -382,7 +430,7 @@ def ki():
                     while True:
                         if ns:
                             p = subprocess.Popen("kubectl get pods --no-headers -n "+ns,shell=True,stdout=subprocess.PIPE,stderr=subprocess.PIPE,universal_newlines=True)
-                            pods = list({ e.split()[0] for e in p.stdout.readlines() })
+                            pods = [ e.split()[0] for e in p.stdout.readlines() ]
                             pod = find_optimal(pods,sys.argv[3]) if pods else None
                             if not (pods and pod):
                                 kn = sys.argv[2].split('.')
@@ -391,7 +439,7 @@ def ki():
                                 if config_struct[1]:
                                     for n,config in enumerate(config_struct[1]):
                                         p = subprocess.Popen("kubectl get ns --no-headers --kubeconfig "+config,shell=True,stdout=subprocess.PIPE,stderr=subprocess.PIPE,universal_newlines=True)
-                                        ns_list = list({ e.split()[0] for e in p.stdout.readlines() })
+                                        ns_list = [ e.split()[0] for e in p.stdout.readlines() ]
                                         ns = find_optimal(ns_list,ns_pattern)
                                         if ns:
                                             os.environ['KUBECONFIG'] = config
@@ -447,7 +495,7 @@ def ki():
                             if config_struct[1]:
                                 for n,config in enumerate(config_struct[1]):
                                     p = subprocess.Popen("kubectl get ns --no-headers --kubeconfig "+config,shell=True,stdout=subprocess.PIPE,stderr=subprocess.PIPE,universal_newlines=True)
-                                    ns_list = list({ e.split()[0] for e in p.stdout.readlines() })
+                                    ns_list = [ e.split()[0] for e in p.stdout.readlines() ]
                                     ns = find_optimal(ns_list,ns_pattern)
                                     if ns:
                                         os.environ['KUBECONFIG'] = config

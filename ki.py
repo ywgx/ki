@@ -353,11 +353,14 @@ def ki():
         os.environ['KUBECONFIG'] = os.path.realpath(default_config)
         p = subprocess.Popen(cmd,shell=True,stdout=subprocess.PIPE,stderr=subprocess.PIPE,universal_newlines=True)
         l = p.stdout.readlines()
-        print(l[0].strip()+"\t  HASH")
+        print(l[0],end='')
         del l[0]
         ns_dict = get_ns_feature([ e.split()[0] for e in l ])
         for e in l:
-            print(e.strip()+"\t  "+ns_dict[e.split()[0]])
+            s = ns_dict[e.split()[0]]
+            num = e.find(s)
+            num_s = num+len(s)
+            print("{}\033[1;35m{}\033[0m{}".format(e[:num],e[num:num_s],e[num_s:]),end='')
     elif len(sys.argv) == 2 and sys.argv[1] in ('-c','-cache'):
         cache_ns(config_struct)
     elif 1 < len(sys.argv) < 4 and sys.argv[1] in ('-s','-select'):

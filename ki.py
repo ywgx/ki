@@ -338,10 +338,10 @@ def record(res: str,name: str,obj: str,cmd: str,kubeconfig: str):
     with open(ki_name,'w') as f: f.write(name)
     with open(history+"/"+ki_file,'a+') as f: f.write( time.strftime("%F %T ",time.localtime())+"[ "+USER+"@"+HOST+" from "+FROM+" ---> "+kubeconfig+" ]  " + cmd + "\n" )
 def ki():
-    ( len(sys.argv) == 1 or sys.argv[1] not in ('-n','-t','-t1','-t2','-r','-i','-e','-es','-ei','-o','-os','-oi','-restart','-s','-select','--l','--lock','--u','--unlock','-w','-watch','-h','-help','-c','-cache') ) and sys.argv.insert(1,'-n')
+    ( len(sys.argv) == 1 or sys.argv[1] not in ('-n','-t','-t1','-t2','-r','-i','-e','-es','-ei','-o','-os','-oi','-restart','-s','-select','--l','--lock','--u','--unlock','--w','--watch','-h','-help','-c','-cache') ) and sys.argv.insert(1,'-n')
     len(sys.argv) == 2 and sys.argv[1] in ('-i','-e','-es','-ei','-o','-os','-oi') and sys.argv.insert(1,'-n')
     config_struct = find_config()
-    if len(sys.argv) == 2 and sys.argv[1] in ('-w','-watch'):
+    if len(sys.argv) == 2 and sys.argv[1] in ('--w','--watch'):
         info(os.environ["PWD"],config_struct[1])
     elif len(sys.argv) == 2 and sys.argv[1] in ('--l','--lock'):
         os.path.exists(ki_lock) or open(ki_lock,"a").close()

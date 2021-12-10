@@ -301,7 +301,7 @@ def get_ns_feature(ns_list: list):
                 substr_hash = (hashes[y + 1] - hashes[x] * pows[y + 1 - x]) % MOD
                 substr_hash = (substr_hash + MOD) % MOD
                 hash_to_be_disabled.append(substr_hash)
-                if substr_hash not in disabled_hashes and min_length > (y - x + 1):
+                if substr_hash not in disabled_hashes and min_length > (y - x + 1) and '-' not in ns_list[i][x: y + 1]:
                     min_length = y - x + 1
                     answers[i] = (x, y)
 
@@ -338,14 +338,14 @@ def record(res: str,name: str,obj: str,cmd: str,kubeconfig: str):
     with open(ki_name,'w') as f: f.write(name)
     with open(history+"/"+ki_file,'a+') as f: f.write( time.strftime("%F %T ",time.localtime())+"[ "+USER+"@"+HOST+" from "+FROM+" ---> "+kubeconfig+" ]  " + cmd + "\n" )
 def ki():
-    ( len(sys.argv) == 1 or sys.argv[1] not in ('-n','-t','-t1','-t2','-r','-i','-e','-es','-ei','-o','-os','-oi','-restart','-s','-select','-l','-lock','-u','-unlock','-w','-watch','-h','-help','-c','-cache') ) and sys.argv.insert(1,'-n')
+    ( len(sys.argv) == 1 or sys.argv[1] not in ('-n','-t','-t1','-t2','-r','-i','-e','-es','-ei','-o','-os','-oi','-restart','-s','-select','--l','--lock','--u','--unlock','-w','-watch','-h','-help','-c','-cache') ) and sys.argv.insert(1,'-n')
     len(sys.argv) == 2 and sys.argv[1] in ('-i','-e','-es','-ei','-o','-os','-oi') and sys.argv.insert(1,'-n')
     config_struct = find_config()
     if len(sys.argv) == 2 and sys.argv[1] in ('-w','-watch'):
         info(os.environ["PWD"],config_struct[1])
-    elif len(sys.argv) == 2 and sys.argv[1] in ('-l','-lock'):
+    elif len(sys.argv) == 2 and sys.argv[1] in ('--l','--lock'):
         os.path.exists(ki_lock) or open(ki_lock,"a").close()
-    elif len(sys.argv) == 2 and sys.argv[1] in ('-u','-unlock'):
+    elif len(sys.argv) == 2 and sys.argv[1] in ('--u','--unlock'):
         os.path.exists(ki_lock) and os.unlink(ki_lock)
     elif len(sys.argv) == 2 and sys.argv[1] == '-n':
         cmd = "kubectl get ns"

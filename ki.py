@@ -334,7 +334,7 @@ def record(res: str,name: str,obj: str,cmd: str,kubeconfig: str,ns: str):
     USER = os.environ['USER'] if 'USER' in os.environ else "NULL"
     HOST = l[2]
     FROM = l[0]
-    key = kubeconfig+"/"+ns
+    key = kubeconfig+"/"+ns+"/"+("Pod" if obj in ('Deployment','StatefulSet','DaemonSet','ReplicaSet') else obj)
     ki_file = time.strftime("%F",time.localtime())
     with open(history+"/"+ki_file,'a+') as f: f.write( time.strftime("%F %T ",time.localtime())+"[ "+USER+"@"+HOST+" from "+FROM+" ---> "+kubeconfig+" ]  " + cmd + "\n" )
     dc = {}
@@ -549,7 +549,8 @@ def ki():
                             elif os.path.exists(ki_name_dict):
                                 with open(ki_name_dict,'r') as f:
                                     dc = eval(f.read())
-                                    last_res = ( dc[k8s+'/'+ns][0] if pod in ('!','~') else dc[k8s+'/'+ns][1][0][0] ) if k8s+'/'+ns in dc else ""
+                                    key = k8s+'/'+ns+'/'+obj
+                                    last_res = ( dc[key][0] if pod in ('!','~') else dc[key][1][0][0] ) if key in dc else ""
                                     for n,e in enumerate(result_lines[::-1]):
                                         if last_res in e:
                                             pod = str(result_len-n-1)

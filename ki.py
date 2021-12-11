@@ -338,7 +338,7 @@ def record(res: str,name: str,obj: str,cmd: str,kubeconfig: str,ns: str):
     ki_file = time.strftime("%F",time.localtime())
     with open(history+"/"+ki_file,'a+') as f: f.write( time.strftime("%F %T ",time.localtime())+"[ "+USER+"@"+HOST+" from "+FROM+" ---> "+kubeconfig+" ]  " + cmd + "\n" )
     dc = {}
-    if os.path.exists(ki_name_dict) and os.path.getsize(ki_dict) > 5:
+    if os.path.exists(ki_name_dict) and os.path.getsize(ki_name_dict) > 5:
         with open(ki_name_dict,'r') as f:
             try:
                 dc = eval(f.read())

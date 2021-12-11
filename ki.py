@@ -86,16 +86,16 @@ def cmd_obj(ns, obj, res, args, iip="x"):
         elif args == "destory":
             action = "delete"
             cmd = "kubectl -n "+ns+" "+action+" "+obj.lower()+",service,ingress "+name
-        elif args[0] == 'l':
-            regular = args.split('l')[-1]
+        elif args[0] in ('l','a','b'):
+            regular = args.split(args[0])[-1]
             p = subprocess.Popen("kubectl -n "+ns+" get pod "+res+" -o jsonpath='{.spec.containers[:].name}'",shell=True,stdout=subprocess.PIPE,universal_newlines=True)
             result_list = p.stdout.readlines()[0].split()
             container = name if name in result_list else "--all-containers"
-            if regular.isdigit():
-                cmd = "kubectl -n "+ns+" logs -f "+res+" "+container+" --tail "+regular
+            if regular:
+                cmd = ( "kubectl -n "+ns+" logs -f "+res+" "+container+" --tail "+regular ) if regular.isdigit() else ( "kubectl -n "+ns+" logs -f "+res+" "+container+"|grep --color=auto "+( regular if args[0] == 'l' else ("-A 10 "+regular if args[0] == 'a' else "-B 10 "+regular) ) )
             else:
-                cmd = "kubectl -n "+ns+" logs -f "+res+" "+container+"|grep --color=auto "+regular if regular else "kubectl -n "+ns+" logs -f "+res+" "+container+" --tail 200"
-        elif args[0] == "r":
+                cmd = "kubectl -n "+ns+" logs -f "+res+" "+container+" --tail 200"
+        elif args[0] in ('r'):
             cmd = "kubectl -n "+ns+" rollout restart "+obj.lower()+" "+name
         elif args[0] in ('o'):
             action = "get"
@@ -109,7 +109,7 @@ def cmd_obj(ns, obj, res, args, iip="x"):
                 obj = d.get(args[1],'Pod')
                 if obj == 'Pod': name = res
             cmd = "kubectl -n "+ns+" "+action+" "+obj.lower()+" "+name
-        elif args[0] == 'c':
+        elif args[0] in ('c'):
             regular = args.split('c')[-1]
             action = "scale"
             replicas = regular if regular.isdigit() and -1 < int(regular) < 30 else str(1)
@@ -268,7 +268,7 @@ def get_obj(ns: str,res: str,args='x'):
     if args[-1] in d.keys():
         obj = d[args[-1]]
     return obj,name
-def get_ns_feature(ns_list: list):
+def get_feature(ns_list: list):
     P = 177
     MOD = 192073433
 
@@ -338,24 +338,22 @@ def record(res: str,name: str,obj: str,cmd: str,kubeconfig: str):
     with open(ki_name,'w') as f: f.write(name)
     with open(history+"/"+ki_file,'a+') as f: f.write( time.strftime("%F %T ",time.localtime())+"[ "+USER+"@"+HOST+" from "+FROM+" ---> "+kubeconfig+" ]  " + cmd + "\n" )
 def ki():
-    ( len(sys.argv) == 1 or sys.argv[1] not in ('-n','-t','-t1','-t2','-r','-i','-e','-es','-ei','-o','-os','-oi','-restart','-s','-select','--l','--lock','--u','--unlock','--w','--watch','-h','-help','-c','-cache') ) and sys.argv.insert(1,'-n')
+    ( len(sys.argv) == 1 or sys.argv[1] not in ('-n','-t','-t1','-t2','-r','-i','-e','-es','-ei','-o','-os','-oi','-restart','-s','-select','-l','-lock','-u','-unlock','--w','--watch','-h','-help','-c','-cache') ) and sys.argv.insert(1,'-n')
     len(sys.argv) == 2 and sys.argv[1] in ('-i','-e','-es','-ei','-o','-os','-oi') and sys.argv.insert(1,'-n')
     config_struct = find_config()
     if len(sys.argv) == 2 and sys.argv[1] in ('--w','--watch'):
         info(os.environ["PWD"],config_struct[1])
-    elif len(sys.argv) == 2 and sys.argv[1] in ('--l','--lock'):
+    elif len(sys.argv) == 2 and sys.argv[1] in ('-l','-lock'):
         os.path.exists(ki_lock) or open(ki_lock,"a").close()
-    elif len(sys.argv) == 2 and sys.argv[1] in ('--u','--unlock'):
+    elif len(sys.argv) == 2 and sys.argv[1] in ('-u','-unlock'):
         os.path.exists(ki_lock) and os.unlink(ki_lock)
     elif len(sys.argv) == 2 and sys.argv[1] == '-n':
-        cmd = "kubectl get ns"
-        print("\033[1;32m{}\033[0m".format(cmd))
+        cmd = "kubectl get ns  --no-headers"
+        print("\033[1;32m{}\033[0m".format(cmd.split('  --')[0]))
         os.environ['KUBECONFIG'] = os.path.realpath(default_config)
         p = subprocess.Popen(cmd,shell=True,stdout=subprocess.PIPE,stderr=subprocess.PIPE,universal_newlines=True)
         l = p.stdout.readlines()
-        print(l[0],end='')
-        del l[0]
-        ns_dict = get_ns_feature([ e.split()[0] for e in l ])
+        ns_dict = get_feature([ e.split()[0] for e in l ])
         for e in l:
             s = ns_dict[e.split()[0]]
             num = e.find(s)

@@ -1,7 +1,7 @@
 #!/usr/bin/python3
 #*************************************************
 # Description : Kubectl Pro
-# Version     : 0.9
+# Version     : 1.0
 #*************************************************
 import os,re,sys,time,subprocess
 #-----------------VAR-----------------------------
@@ -10,8 +10,8 @@ history = home + "/.history"
 ki_lock = history + "/.lock"
 ki_dict = history + "/.dict"
 ki_last = history + "/.last"
-ki_name = history + "/.name"
 ki_ns_dict = history + "/.ns_dict"
+ki_name_dict = history + "/.name_dict"
 default_config = home + "/.kube/config"
 #-----------------FUN-----------------------------
 def cmp_file(f1, f2):
@@ -321,7 +321,7 @@ def info(k8s_path: str,result_lines: list):
                 if config and os.path.exists(default_config) and config not in {default_config,os.path.realpath(default_config)}:
                     os.unlink(default_config)
                     os.symlink(config,default_config)
-                    print("\033[1;35m{}\033[0m".format("[ "+config.split("/")[-1]+" (switch) ] "))
+                    print("\033[1;35m{}\033[0m".format("[ "+config.split("/")[-1]+" ]"))
                 else:
                     print("\033[1;36m{}\033[0m".format("[ "+os.path.realpath(default_config).split("/")[-1]+" ]"))
         else:
@@ -329,14 +329,28 @@ def info(k8s_path: str,result_lines: list):
     else:
         print("\033[1;32m{}\033[0m".format("[ "+os.path.realpath(default_config).split("/")[-1]+" ]"))
         os.path.exists(ki_lock) and int(time.time()-os.stat(ki_lock).st_mtime) > 3600 and os.unlink(ki_lock)
-def record(res: str,name: str,obj: str,cmd: str,kubeconfig: str):
+def record(res: str,name: str,obj: str,cmd: str,kubeconfig: str,ns: str):
     l = os.environ['SSH_CONNECTION'].split() if 'SSH_CONNECTION' in os.environ else ['NULL','NULL','NULL']
     USER = os.environ['USER'] if 'USER' in os.environ else "NULL"
     HOST = l[2]
     FROM = l[0]
+    key = kubeconfig+"/"+ns
     ki_file = time.strftime("%F",time.localtime())
-    with open(ki_name,'w') as f: f.write(name)
     with open(history+"/"+ki_file,'a+') as f: f.write( time.strftime("%F %T ",time.localtime())+"[ "+USER+"@"+HOST+" from "+FROM+" ---> "+kubeconfig+" ]  " + cmd + "\n" )
+    dc = {}
+    if os.path.exists(ki_name_dict) and os.path.getsize(ki_dict) > 5:
+        with open(ki_name_dict,'r') as f:
+            try:
+                dc = eval(f.read())
+                name_dc = dict(dc[key][1]) if key in dc else {}
+                name_dc[name] = name_dc[name] + 1 if name in name_dc else 1
+                name_dc = sorted(name_dc.items(),key = lambda name_dc:(name_dc[1], name_dc[0]),reverse=True)
+                dc[key] = [name,name_dc]
+            except:
+                os.remove(ki_name_dict)
+    else:
+        dc[key] = [name,[(name,1)]]
+    with open(ki_name_dict,'w') as f: f.write(str(dc))
 def ki():
     ( len(sys.argv) == 1 or sys.argv[1] not in ('-n','-t','-t1','-t2','-r','-i','-e','-es','-ei','-o','-os','-oi','-restart','-s','-select','-l','-lock','-u','-unlock','--w','--watch','-h','-help','-c','-cache') ) and sys.argv.insert(1,'-n')
     len(sys.argv) == 2 and sys.argv[1] in ('-i','-e','-es','-ei','-o','-os','-oi') and sys.argv.insert(1,'-n')
@@ -470,7 +484,7 @@ def ki():
                                         action2 = " -o yaml > "+name+"."+obj+".yml"
                                     cmd = "kubectl -n "+ns+" "+action+" "+obj.lower()+" "+name+action2
                                 print("\033[1;32m{}\033[0m".format(cmd))
-                                record(pod,name,obj,cmd,k8s)
+                                record(pod,name,obj,cmd,k8s,ns)
                                 os.system(cmd)
                                 print('\r')
                                 break
@@ -529,12 +543,13 @@ def ki():
                         result_len = len(result_lines)
                         podList = pod.split()
                         pod = podList[0] if podList else ""
-                        if pod in ('$','#','@','!'):
+                        if pod in ('$','#','@','!','~'):
                             if pod == '$':
                                 pod = str(result_len-1)
-                            elif os.path.exists(ki_name):
-                                with open(ki_name,'r') as f:
-                                    last_res = f.read()
+                            elif os.path.exists(ki_name_dict):
+                                with open(ki_name_dict,'r') as f:
+                                    dc = eval(f.read())
+                                    last_res = ( dc[k8s+'/'+ns][0] if pod in ('!','~') else dc[k8s+'/'+ns][1][0][0] ) if k8s+'/'+ns in dc else ""
                                     for n,e in enumerate(result_lines[::-1]):
                                         if last_res in e:
                                             pod = str(result_len-n-1)
@@ -547,7 +562,7 @@ def ki():
                             l = cmd_obj(ns,obj,res,args,iip)
                             print('\033[{}C\033[1A'.format(num),end = '')
                             print("\033[1;32m{}\033[0m".format(l[0].split('  --')[0]))
-                            record(res,l[2],l[1],l[0],k8s)
+                            record(res,l[2],l[1],l[0],k8s,ns)
                             os.system(l[0])
                             print('\r')
                     else:

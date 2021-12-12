@@ -15,11 +15,9 @@ ki_name_dict = history + "/.name_dict"
 default_config = home + "/.kube/config"
 #-----------------FUN-----------------------------
 def cmp_file(f1, f2):
-    st1 = os.stat(f1)
-    st2 = os.stat(f2)
-    if st1.st_size != st2.st_size:
+    if os.stat(f2).st_size != os.stat(f1).st_size:
         return False
-    bufsize = 8*1024
+    bufsize = 1024
     with open(f1, 'rb') as fp1, open(f2, 'rb') as fp2:
         while True:
             b1 = fp1.read(bufsize)
@@ -87,7 +85,7 @@ def cmd_obj(ns, obj, res, args, iip="x"):
             action = "delete"
             cmd = "kubectl -n "+ns+" "+action+" "+obj.lower()+",service,ingress "+name
         elif args[0] in ('l','c'):
-            regular = args.split(args[0])[-1]
+            regular = args[1:]
             p = subprocess.Popen("kubectl -n "+ns+" get pod "+res+" -o jsonpath='{.spec.containers[:].name}'",shell=True,stdout=subprocess.PIPE,universal_newlines=True)
             result_list = p.stdout.readlines()[0].split()
             container = name if name in result_list else "--all-containers"
@@ -311,7 +309,7 @@ def get_feature(ns_list: list):
     for i, (x, y) in enumerate(answers):
         d[ns_list[i]] = ns_list[i][x: y + 1]
     return d
-def info(k8s_path: str,result_lines: list):
+def info_w(k8s_path: str,result_lines: list):
     l = k8s_path.split('/')
     if 'K8S' in l:
         if not os.path.exists(ki_lock) and len(l) > l.index('K8S')+1:
@@ -329,6 +327,15 @@ def info(k8s_path: str,result_lines: list):
     else:
         print("\033[1;32m{}\033[0m".format("[ "+os.path.realpath(default_config).split("/")[-1]+" ]"))
         os.path.exists(ki_lock) and int(time.time()-os.stat(ki_lock).st_mtime) > 3600 and os.unlink(ki_lock)
+def info_k():
+    if os.path.exists(ki_name_dict) and os.path.exists(ki_dict):
+        with open(ki_name_dict,'r') as f1, open(ki_dict,'r') as f2:
+            dc1 = eval(f1.read())
+            dc2 = eval(f2.read())
+            for k in sorted(dc1):
+                print("{:<56}{:<28}{}".format(k,dc1[k][0],dc1[k][1]))
+            for k in dc2:
+                print("{:<56}{}".format(k.split('/')[-1],dc2[k]))
 def record(res: str,name: str,obj: str,cmd: str,kubeconfig: str,ns: str):
     l = os.environ['SSH_CONNECTION'].split() if 'SSH_CONNECTION' in os.environ else ['NULL','NULL','NULL']
     USER = os.environ['USER'] if 'USER' in os.environ else "NULL"
@@ -352,11 +359,11 @@ def record(res: str,name: str,obj: str,cmd: str,kubeconfig: str,ns: str):
         dc[key] = [name,[(name,1)]]
     with open(ki_name_dict,'w') as f: f.write(str(dc))
 def ki():
-    ( len(sys.argv) == 1 or sys.argv[1] not in ('-n','-t','-t1','-t2','-r','-i','-e','-es','-ei','-o','-os','-oi','-restart','-s','-select','-l','-lock','-u','-unlock','--w','--watch','-h','-help','-c','-cache') ) and sys.argv.insert(1,'-n')
+    ( len(sys.argv) == 1 or sys.argv[1] not in ('-n','-t','-t1','-t2','-r','-i','-e','-es','-ei','-o','-os','-oi','-restart','-s','-select','-l','-lock','-u','-unlock','--w','--watch','-h','-help','-c','-cache','-k') ) and sys.argv.insert(1,'-n')
     len(sys.argv) == 2 and sys.argv[1] in ('-i','-e','-es','-ei','-o','-os','-oi') and sys.argv.insert(1,'-n')
     config_struct = find_config()
     if len(sys.argv) == 2 and sys.argv[1] in ('--w','--watch'):
-        info(os.environ["PWD"],config_struct[1])
+        info_w(os.environ["PWD"],config_struct[1])
     elif len(sys.argv) == 2 and sys.argv[1] in ('-l','-lock'):
         os.path.exists(ki_lock) or open(ki_lock,"a").close()
     elif len(sys.argv) == 2 and sys.argv[1] in ('-u','-unlock'):
@@ -373,6 +380,8 @@ def ki():
             num = e.find(s)
             num_s = num+len(s)
             print("{}\033[1;35m{}\033[0m{}".format(e[:num],e[num:num_s],e[num_s:]),end='')
+    elif len(sys.argv) == 2 and sys.argv[1] in ('-k'):
+        info_k()
     elif len(sys.argv) == 2 and sys.argv[1] in ('-c','-cache'):
         cache_ns(config_struct)
     elif 1 < len(sys.argv) < 4 and sys.argv[1] in ('-s','-select'):
@@ -573,6 +582,7 @@ def ki():
                     sys.exit()
         else:
             print("No namespace found in the kubernetes.")
+            subprocess.Popen("ki -c",shell=True,stdout=subprocess.PIPE,stderr=subprocess.PIPE,universal_newlines=True)
     elif len(sys.argv) == 2 and sys.argv[1] in ('-h','-help'):
         style = "\033[1;32m%s\033[0m"
         print(style % "Kubectl Pro controls the Kubernetes cluster manager")

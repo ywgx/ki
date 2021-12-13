@@ -1,7 +1,7 @@
 #!/usr/bin/python3
 #*************************************************
 # Description : Kubectl Pro
-# Version     : 1.0
+# Version     : 1.1
 #*************************************************
 import os,re,sys,time,subprocess
 #-----------------VAR-----------------------------
@@ -54,7 +54,7 @@ def cmd_obj(ns, obj, res, args, iip="x"):
             action2 = " -o yaml > "+res+"."+obj.lower()+".yml"
         else:
             action = "get"
-        cmd = "kubectl -n "+ns+" "+action+" "+obj.lower()+" "+res+action2
+        cmd = "kubectl -n "+ns+" "+action+" "+obj.lower()+" "+res+action2 if obj not in ("PersistentVolume") else "kubectl "+action+" "+obj.lower()+" "+res
     elif obj in ("ResourceQuota"):
         action2 = ""
         if args[0] == "e":
@@ -352,6 +352,7 @@ def record(res: str,name: str,obj: str,cmd: str,kubeconfig: str,ns: str):
                 name_dc = dict(dc[key][1]) if key in dc else {}
                 name_dc[name] = name_dc[name] + 1 if name in name_dc else 1
                 name_dc = sorted(name_dc.items(),key = lambda name_dc:(name_dc[1], name_dc[0]),reverse=True)
+                if len(name_dc) > 5: del name_dc[5:]
                 dc[key] = [name,name_dc]
             except:
                 os.remove(ki_name_dict)
@@ -359,8 +360,10 @@ def record(res: str,name: str,obj: str,cmd: str,kubeconfig: str,ns: str):
         dc[key] = [name,[(name,1)]]
     with open(ki_name_dict,'w') as f: f.write(str(dc))
 def ki():
-    ( len(sys.argv) == 1 or sys.argv[1] not in ('-n','-t','-t1','-t2','-r','-i','-e','-es','-ei','-o','-os','-oi','-restart','-s','-select','-l','-lock','-u','-unlock','--w','--watch','-h','-help','-c','-cache','-k') ) and sys.argv.insert(1,'-n')
+    ( len(sys.argv) == 1 or sys.argv[1] not in ('-n','-t','-t1','-t2','-r','-i','-e','-es','-ei','-o','-os','-oi','-restart','-s','-select','-l','-lock','-u','-unlock','--w','--watch','-h','-help','-c','-cache','-k','-a') ) and sys.argv.insert(1,'-n')
     len(sys.argv) == 2 and sys.argv[1] in ('-i','-e','-es','-ei','-o','-os','-oi') and sys.argv.insert(1,'-n')
+    len(sys.argv) == 2 and sys.argv[1] in ('-a') and sys.argv.extend(['kube','kube'])
+    len(sys.argv) == 3 and sys.argv[1] in ('-a') and sys.argv.insert(2,'kube')
     config_struct = find_config()
     if len(sys.argv) == 2 and sys.argv[1] in ('--w','--watch'):
         info_w(os.environ["PWD"],config_struct[1])
@@ -435,7 +438,7 @@ def ki():
                             pattern = ""
                 else:
                     print("\033[1;32m{}\033[0m\033[5;32m{}\033[0m".format("File not found ",default_config))
-    elif 2 < len(sys.argv) < 5 and sys.argv[1] in ('-n','-r','-t','-t1','-t2','-i','-l','-e','-es','-ei','-o','-os','-oi'):
+    elif 2 < len(sys.argv) < 5 and sys.argv[1] in ('-n','-r','-t','-t1','-t2','-i','-l','-e','-es','-ei','-o','-os','-oi','-a'):
         l = find_ns(config_struct)
         ns = l[0]
         switch = l[2]
@@ -508,6 +511,8 @@ def ki():
                     if not pod:
                         if sys.argv[1] in ('-n','-r'):
                             cmd = "kubectl"+" get "+obj.lower()+ext+" -n "+ ns+("  --sort-by=.status.containerStatuses[0].restartCount" if sys.argv[1].split('n')[-1] else "  --sort-by=.metadata.creationTimestamp") + " --no-headers"
+                        elif sys.argv[1] in ('-a'):
+                            cmd = "kubectl"+" get "+obj.lower()+ext+" -A  --sort-by=.metadata.creationTimestamp --no-headers"
                         else:
                             key = sys.argv[1].split('t')[-1] if sys.argv[1].split('t')[-1].isdigit() else "3"
                             cmd = "kubectl top "+obj.lower()+" -n "+ ns +"  --no-headers|sort --key "+key+" --numeric"
@@ -542,7 +547,7 @@ def ki():
                             print("\033[1;32m{}\033[0m {}".format(n,e.strip()))
                         if n > 3:
                             style = "\033[1;33m{}\033[0m" if switch else "\033[1;32m{}\033[0m"
-                            print(style.format("[ "+k8s+" / "+ns+" --- "+obj+" ]"))
+                            print(style.format("[ "+k8s+" / "+ns+" --- "+obj+" ]" if sys.argv[1] not in ('-a') else "[ "+k8s+" --- "+obj+" ]"))
                             switch = False
                         try:
                             pod = input("\033[1;35m%s\033[0m\033[5;35m%s\033[0m" % ("select",":")).strip()
@@ -567,8 +572,9 @@ def ki():
                         args = ''.join(podList[1:]) if len(podList) > 1 else "p"
                         if pod.isdigit() and int(pod) < result_len or result_len == 1:
                             index = int(pod) if pod.isdigit() and int(pod) < result_len else 0
-                            res = result_lines[index].split()[0]
+                            res = result_lines[index].split()[0 if sys.argv[1] not in ('-a') else (1 if obj not in ("PersistentVolume") else 0)]
                             iip = result_lines[index].split()[5] if len(result_lines[index].split()) > 5 else find_ip(res)
+                            ns = result_lines[index].split()[0] if sys.argv[1] in ('-a') else ns
                             l = cmd_obj(ns,obj,res,args,iip)
                             print('\033[{}C\033[1A'.format(num),end = '')
                             print("\033[1;32m{}\033[0m".format(l[0].split('  --')[0]))
@@ -604,6 +610,7 @@ def ki():
         print(style % "15. ki -e[si] $ns $pod","Edit the Deploy/Service/Ingress for a container,this way can be one-stop")
         print(style % "16. ki $k8s.$ns","Select the kubernetes which namespace in the kubernetes ( if there are multiple ~/.kube/kubeconfig*,this way can be one-stop. )")
         print(style % "17. ki -c","Enable write caching of namespace ( ~/.history/.ns_dict )")
+        print(style % "18. ki -a","List all pods in the kubernetes")
 def main():
     ki()
 #-----------------PROG----------------------------

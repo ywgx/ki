@@ -41,7 +41,7 @@ def cmd_obj(ns, obj, res, args, iip="x"):
     elif obj in ("Event"):
         action = "get"
         cmd = "kubectl -n "+ns+" "+action+" "+obj+"  --sort-by=.metadata.creationTimestamp"
-    elif obj in ("Deployment","DaemonSet","Service","StatefulSet","Ingress","ConfigMap","Secret","PersistentVolume","PersistentVolumeClaim"):
+    elif obj in ("Deployment","DaemonSet","Service","StatefulSet","Ingress","ConfigMap","Secret","PersistentVolume","PersistentVolumeClaim","CronJob"):
         action2 = ""
         if args == "cle":
             action = "delete"
@@ -235,9 +235,13 @@ def cache_ns(config_struct: list):
         p = subprocess.Popen("kubectl get ns --no-headers --kubeconfig "+config,shell=True,stdout=subprocess.PIPE,stderr=subprocess.PIPE,universal_newlines=True)
         ns_list = [ e.split()[0] for e in p.stdout.readlines() ]
         for ns in ns_list:
-            p = subprocess.Popen("kubectl get pods --no-headers --kubeconfig "+config+" -n "+ns,shell=True,stdout=subprocess.PIPE,stderr=subprocess.PIPE,universal_newlines=True)
-            if [ e.split()[0] for e in p.stdout.readlines() ]:
+            p = subprocess.Popen("kubectl get pod --no-headers --kubeconfig "+config+" -n "+ns,shell=True,stdout=subprocess.PIPE,stderr=subprocess.PIPE,universal_newlines=True)
+            if p.stdout.readlines():
                 s.append(ns)
+            else:
+                p = subprocess.Popen("kubectl get cronjob --no-headers --kubeconfig "+config+" -n "+ns,shell=True,stdout=subprocess.PIPE,stderr=subprocess.PIPE,universal_newlines=True)
+                if p.stdout.readlines():
+                    s.append(ns)
         d[config] = s
     with open(ki_ns_dict,'w') as f: f.write(str(d))
 def switch_config(switch_num: int,k8s: str,ns: str,time: str):
@@ -333,7 +337,7 @@ def info_k():
             dc1 = eval(f1.read())
             dc2 = eval(f2.read())
             for k in sorted(dc1):
-                print("{:<56}{:<28}{}".format(k,dc1[k][0],dc1[k][1]))
+                print("{:<56}{:<32}{}".format(k,dc1[k][0],dc1[k][1]))
             for k in dc2:
                 print("{:<56}{}".format(k.split('/')[-1],dc2[k]))
 def record(res: str,name: str,obj: str,cmd: str,kubeconfig: str,ns: str):
@@ -362,7 +366,7 @@ def record(res: str,name: str,obj: str,cmd: str,kubeconfig: str,ns: str):
 def ki():
     ( len(sys.argv) == 1 or sys.argv[1] not in ('-n','-t','-t1','-t2','-r','-i','-e','-es','-ei','-o','-os','-oi','-restart','-s','-select','-l','-lock','-u','-unlock','--w','--watch','-h','-help','-c','-cache','-k','-a') ) and sys.argv.insert(1,'-n')
     len(sys.argv) == 2 and sys.argv[1] in ('-i','-e','-es','-ei','-o','-os','-oi') and sys.argv.insert(1,'-n')
-    len(sys.argv) == 2 and sys.argv[1] in ('-a') and sys.argv.extend(['kube','kube'])
+    len(sys.argv) == 2 and sys.argv[1] in ('-a') and sys.argv.extend(['kube','Pod'])
     len(sys.argv) == 3 and sys.argv[1] in ('-a') and sys.argv.insert(2,'kube')
     config_struct = find_config()
     if len(sys.argv) == 2 and sys.argv[1] in ('--w','--watch'):
@@ -449,7 +453,7 @@ def ki():
             ext = " -o wide"
             os.environ['KUBECONFIG'] = l[1]
             if len(sys.argv) == 4:
-                d = {'d':['Deployment'," -o wide"],'s':['Service'," -o wide"],'i':['Ingress'," -o wide"],'c':['ConfigMap'," -o wide"],'t':['Secret'," -o wide"],'n':['Node'," -o wide"],'p':['PersistentVolumeClaim'," -o wide"],'v':['PersistentVolume'," -o wide"],'f':['StatefulSet'," -o wide"],'e':['Event',''],'r':['ReplicaSet',''],'a':['DaemonSet',''],'q':['ResourceQuota','']}
+                d = {'d':['Deployment'," -o wide"],'s':['Service'," -o wide"],'i':['Ingress'," -o wide"],'c':['ConfigMap'," -o wide"],'t':['Secret'," -o wide"],'n':['Node'," -o wide"],'p':['PersistentVolumeClaim'," -o wide"],'v':['PersistentVolume'," -o wide"],'f':['StatefulSet'," -o wide"],'j':['CronJob'," -o wide"],'P':['Pod'," -o wide"],'e':['Event',''],'r':['ReplicaSet',''],'a':['DaemonSet',''],'q':['ResourceQuota','']}
                 obj = d[sys.argv[3][0]][0] if sys.argv[3][0] in d else "Pod"
                 ext = d[sys.argv[3][0]][1] if sys.argv[3][0] in d else ""
                 if sys.argv[1] in ('-i','-l','-e','-es','-ei','-o','-os','-oi'):
@@ -601,16 +605,17 @@ def ki():
         print(style % "6. ki xx i","List the Ingress of a namespace")
         print(style % "7. ki xx t","List the Secret of a namespace")
         print(style % "8. ki xx a","List the DaemonSet of a namespace")
-        print(style % "9. ki xx v","List the PersistentVolume of a namespace")
-        print(style % "10. ki xx p","List the PersistentVolumeClaim of a namespace")
-        print(style % "11. ki xx q","List the ResourceQuota of a namespace")
-        print(style % "12. ki -s","Select the kubernetes to be connected ( if there are multiple ~/.kube/kubeconfig*,the kubeconfig storage can be kubeconfig-hz,kubeconfig-sh,etc. )")
+        print(style % "9. ki xx j","List the CronJob of a namespace")
+        print(style % "10. ki xx v","List the PersistentVolume of a namespace")
+        print(style % "11. ki xx p","List the PersistentVolumeClaim of a namespace")
+        print(style % "12. ki xx q","List the ResourceQuota of a namespace")
         print(style % "13. ki -i $ns $pod","Login in the container,this way can be one-stop")
         print(style % "14. ki -l $ns $pod","Print the logs for a container,this way can be one-stop")
         print(style % "15. ki -e[si] $ns $pod","Edit the Deploy/Service/Ingress for a container,this way can be one-stop")
         print(style % "16. ki $k8s.$ns","Select the kubernetes which namespace in the kubernetes ( if there are multiple ~/.kube/kubeconfig*,this way can be one-stop. )")
-        print(style % "17. ki -c","Enable write caching of namespace ( ~/.history/.ns_dict )")
-        print(style % "18. ki -a","List all pods in the kubernetes")
+        print(style % "17. ki -s","Select the kubernetes to be connected ( if there are multiple ~/.kube/kubeconfig*,the kubeconfig storage can be kubeconfig-hz,kubeconfig-sh,etc. )")
+        print(style % "18. ki -c","Enable write caching of namespace ( ~/.history/.ns_dict )")
+        print(style % "19. ki -a","List all pods in the kubernetes")
 def main():
     ki()
 #-----------------PROG----------------------------

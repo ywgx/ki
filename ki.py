@@ -1,7 +1,7 @@
 #!/usr/bin/python3
 #*************************************************
 # Description : Kubectl Pro
-# Version     : 1.1
+# Version     : 1.2
 #*************************************************
 import os,re,sys,time,subprocess
 #-----------------VAR-----------------------------
@@ -544,18 +544,27 @@ def ki():
                                 switch = switch_config(switch_num,k8s,ns,str(end-begin))
                                 flag = False
                             print("\033[1;32m{}\033[0m".format(cmd.split(' --')[0]))
-                    if not (pod.isdigit() and int(pod) < len(result_lines)):
+                    if not (pod.isdigit() and int(pod) < len(result_lines)) and pod != '*':
                         result_lines = list(filter(lambda x: x.find(pod) >= 0, result_lines))
                     if result_lines:
+                        now = time.strftime("%T",time.localtime())
                         for n,e in enumerate(result_lines):
                             print("\033[1;32m{}\033[0m {}".format(n,e.strip()))
                         if n > 3:
                             style = "\033[1;33m{}\033[0m" if switch else "\033[1;32m{}\033[0m"
-                            print(style.format("[ "+k8s+" / "+ns+" --- "+obj+" ]" if sys.argv[1] not in ('-a') else "[ "+k8s+" --- "+obj+" ]"))
+                            string = "[ "+k8s+" / "+ns+" --- "+obj+" ] [ "+now+" ]" if sys.argv[1] not in ('-a') else "[ "+k8s+" --- "+obj+" ] [ "+now+" ]"
+                            print(style.format(string))
                             switch = False
+                            if pod == '*':
+                                print('\033[{}C\033[1A'.format(len(string)),end = '')
+                                print(style.format(" Watching..."))
                         try:
-                            pod = input("\033[1;35m%s\033[0m\033[5;35m%s\033[0m" % ("select",":")).strip()
-                            num = 10 + len(pod)
+                            if pod != '*':
+                                pod = input("\033[1;35m%s\033[0m\033[5;35m%s\033[0m" % ("select",":")).strip()
+                                num = 10 + len(pod)
+                            else:
+                                result_lines = subprocess.Popen(cmd,shell=True,stdout=subprocess.PIPE,stderr=subprocess.PIPE,universal_newlines=True).stdout.readlines()
+                                time.sleep(3)
                         except:
                             sys.exit()
                         result_len = len(result_lines)
@@ -574,7 +583,7 @@ def ki():
                                             pod = str(result_len-n-1)
                                             break
                         args = ''.join(podList[1:]) if len(podList) > 1 else "p"
-                        if pod.isdigit() and int(pod) < result_len or result_len == 1:
+                        if pod.isdigit() and int(pod) < result_len or ( result_len == 1 and pod != '*'):
                             index = int(pod) if pod.isdigit() and int(pod) < result_len else 0
                             res = result_lines[index].split()[0 if sys.argv[1] not in ('-a') else (1 if obj not in ("PersistentVolume") else 0)]
                             iip = result_lines[index].split()[5] if len(result_lines[index].split()) > 5 else find_ip(res)
@@ -598,7 +607,7 @@ def ki():
         print(style % "Kubectl Pro controls the Kubernetes cluster manager")
         print("\nFind more information at: https://ki.xabc.io\n")
         print(style % "1. ki","List all namespaces")
-        print(style % "2. ki xx","List all pods in the namespace ( if there are multiple ~/.kube/kubeconfig*,the best matching kubeconfig will be found ),the namespace parameter supports fuzzy matching,after outputting the pod list, select: xxx filters the query\n         select: index l ( [ l ] Print the logs for a container in a pod or specified resource )\n         select: index l 100 ( Print the logs of the latest 100 lines )\n         select: index l xxx ( Print the logs and filters the specified characters )\n         select: index r ( [ r ] Rollout restart the pod )\n         select: index o ( [ o ] Output the [Deployment,StatefulSet,Service,Ingress,Configmap,Secret].yml file )\n         select: index del ( [ del ] Delete the pod )\n         select: index cle ( [ cle ] Delete the Deployment/StatefulSet )\n         select: index e[si] ( [ e[si] ] Edit the Deploy/Service/Ingress )\n         select: index s5 ( [ s3 ] Set the Deploy/StatefulSet replicas=3 )\n         select: index dp ( Describe a pod )")
+        print(style % "2. ki xx","List all pods in the namespace ( if there are multiple ~/.kube/kubeconfig*,the best matching kubeconfig will be found ),the namespace parameter supports fuzzy matching,after outputting the pod list, select: xxx filters the query\n         select: index l ( [ l ] Print the logs for a container in a pod or specified resource )\n         select: index l 100 ( Print the logs of the latest 100 lines )\n         select: index l xxx ( Print the logs and filters the specified characters )\n         select: index r ( [ r ] Rollout restart the pod )\n         select: index o ( [ o ] Output the [Deployment,StatefulSet,Service,Ingress,Configmap,Secret].yml file )\n         select: index del ( [ del ] Delete the pod )\n         select: index cle ( [ cle ] Delete the Deployment/StatefulSet )\n         select: index e[si] ( [ e[si] ] Edit the Deploy/Service/Ingress )\n         select: index s5 ( [ s3 ] Set the Deploy/StatefulSet replicas=3 )\n         select: index dp ( Describe a pod )\n         select: * ( Watching... )")
         print(style % "3. ki xx d","List the Deployment of a namespace")
         print(style % "4. ki xx f","List the StatefulSet of a namespace")
         print(style % "5. ki xx s","List the Service of a namespace")

@@ -54,7 +54,7 @@ def cmd_obj(ns, obj, res, args, iip="x"):
             action2 = " -o yaml > "+res+"."+obj.lower()+".yml"
         else:
             action = "get"
-        cmd = "kubectl -n "+ns+" "+action+" "+obj.lower()+" "+res+action2 if obj not in ("PersistentVolume") else "kubectl "+action+" "+obj.lower()+" "+res
+        cmd = "kubectl -n "+ns+" "+action+" "+obj.lower()+" "+res+action2 if obj not in ("PersistentVolume") else "kubectl "+action+" "+obj.lower()+" "+res+action2
     elif obj in ("ResourceQuota"):
         action2 = ""
         if args[0] == "e":
@@ -552,7 +552,7 @@ def ki():
                             print("\033[1;32m{}\033[0m {}".format(n,e.strip()))
                         if n > 3:
                             style = "\033[1;33m{}\033[0m" if switch else "\033[1;32m{}\033[0m"
-                            string = "[ "+k8s+" / "+ns+" --- "+obj+" ] [ "+now+" ]" if sys.argv[1] not in ('-a') else "[ "+k8s+" --- "+obj+" ] [ "+now+" ]"
+                            string = "[ "+k8s+" / "+ns+" --- "+obj+" ] [ "+now+" ]" if sys.argv[1] not in ('-a') and obj not in ('PersistentVolume') else "[ "+k8s+" --- "+obj+" ] [ "+now+" ]"
                             print(style.format(string))
                             switch = False
                             if pod == '*':

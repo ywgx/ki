@@ -317,7 +317,11 @@ def info_w(k8s_path: str,result_lines: list):
     l = k8s_path.split('/')
     if 'K8S' in l:
         if not os.path.exists(ki_lock) and len(l) > l.index('K8S')+1:
-            k8s_str = '-'.join(l[l.index('K8S')+1].split('-')[0:-1])
+            k8s_dir = l[l.index('K8S')+1]
+            if ( home+"/.kube/" + k8s_dir ) in result_lines or ( home+"/.kube/kubeconfig-" + k8s_dir ) in result_lines:
+                k8s_str = k8s_dir
+            else:
+                k8s_str = '-'.join(k8s_dir.split('-')[0:-1])
             if result_lines:
                 config = find_optimal(result_lines,k8s_str)
                 if config and os.path.exists(default_config) and config not in {default_config,os.path.realpath(default_config)}:

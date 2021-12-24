@@ -391,6 +391,7 @@ def ki():
             num = e.find(s)
             num_s = num+len(s)
             print("{}\033[1;35m{}\033[0m{}".format(e[:num],e[num:num_s],e[num_s:]),end='')
+        os.path.exists(ki_ns_dict) or cache_ns(config_struct)
     elif len(sys.argv) == 2 and sys.argv[1] in ('-k'):
         info_k()
     elif len(sys.argv) == 2 and sys.argv[1] in ('-c','-cache'):
@@ -424,9 +425,9 @@ def ki():
                         if result_lines:
                             for n,e in enumerate(result_lines):
                                 if cmp_file(e,default_config):
-                                    print("\033[5;32m{}\033[0m \033[1;32m{}\033[0m".format(n,e.strip()))
+                                    print("\033[5;32m{}\033[0m \033[1;32m{}\033[0m".format(n,e.strip().split('/')[-1]))
                                 else:
-                                    print("\033[1;32m{}\033[0m {}".format(n,e.strip()))
+                                    print("\033[1;32m{}\033[0m {}".format(n,e.strip().split('/')[-1]))
                             try:
                                 pattern = input("\033[1;35m%s\033[0m\033[5;35m%s\033[0m" % ("select",":")).strip()
                             except:
@@ -438,7 +439,7 @@ def ki():
                                 os.unlink(default_config)
                                 os.symlink(res,default_config)
                                 print('\033[{}C\033[1A'.format(10),end = '')
-                                print("\033[1;33m{}\033[0m".format(res))
+                                print("\033[1;33m{}\033[0m".format(res.split('/')[-1]))
                                 find_history(res)
                                 open(ki_lock,"a").close()
                                 break

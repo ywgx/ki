@@ -219,7 +219,7 @@ def find_ns(config_struct: list):
                     d = eval(f.read())
                     ns_list = d[config]
                 except:
-                    cache_ns(config_struct)
+                    ns_list = cache_ns(config_struct)[config]
         else:
             p = subprocess.Popen("kubectl get ns --no-headers --kubeconfig "+config,shell=True,stdout=subprocess.PIPE,stderr=subprocess.PIPE,universal_newlines=True)
             ns_list = [ e.split()[0] for e in p.stdout.readlines() ]
@@ -244,6 +244,7 @@ def cache_ns(config_struct: list):
                     s.append(ns)
         d[config] = s
     with open(ki_ns_dict,'w') as f: f.write(str(d))
+    return d
 def switch_config(switch_num: int,k8s: str,ns: str,time: str):
     switch = False
     if os.path.exists(default_config) and os.environ['KUBECONFIG'] not in {default_config,os.path.realpath(default_config)}:

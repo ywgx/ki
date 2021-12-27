@@ -90,7 +90,7 @@ def cmd_obj(ns, obj, res, args, iip="x"):
             result_list = p.stdout.readlines()[0].split()
             container = name if name in result_list else "--all-containers"
             if regular:
-                cmd = ( "kubectl -n "+ns+" logs -f "+res+" "+container+" --tail "+regular ) if regular.isdigit() else ( "kubectl -n "+ns+" logs -f "+res+" "+container+"|grep --color=auto " + ( regular if args[0] == 'l' else "-C 10 "+regular ) )
+                cmd = ( "kubectl -n "+ns+" logs -f "+res+" "+container+" --tail "+regular ) if regular.isdigit() and len(regular) < 12 else ( "kubectl -n "+ns+" logs -f "+res+" "+container+"|grep --color=auto " + ( regular if args[0] == 'l' else "-C 10 "+regular ) )
             else:
                 cmd = "kubectl -n "+ns+" logs -f "+res+" "+container+" --tail 200"
         elif args[0] in ('r'):

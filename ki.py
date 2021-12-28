@@ -604,6 +604,7 @@ def ki():
                         pod = ""
                 else:
                     print("NotFound")
+                    subprocess.Popen("ki -c",shell=True,stdout=subprocess.PIPE,stderr=subprocess.PIPE,universal_newlines=True)
                     sys.exit()
         else:
             print("No namespace found in the kubernetes.")

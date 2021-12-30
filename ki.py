@@ -11,7 +11,7 @@ ki_lock = history + "/.lock"
 ki_dict = history + "/.dict"
 ki_last = history + "/.last"
 ki_ns_dict = history + "/.ns_dict"
-ki_name_dict = history + "/.name_dict"
+ki_pod_dict = history + "/.pod_dict"
 default_config = home + "/.kube/config"
 #-----------------FUN-----------------------------
 def cmp_file(f1, f2):
@@ -337,8 +337,8 @@ def info_w(k8s_path: str,result_lines: list):
         print("\033[1;32m{}\033[0m".format("[ "+os.path.realpath(default_config).split("/")[-1]+" ]"))
         os.path.exists(ki_lock) and int(time.time()-os.stat(ki_lock).st_mtime) > 3600 and os.unlink(ki_lock)
 def info_k():
-    if os.path.exists(ki_name_dict) and os.path.exists(ki_dict):
-        with open(ki_name_dict,'r') as f1, open(ki_dict,'r') as f2:
+    if os.path.exists(ki_pod_dict) and os.path.exists(ki_dict):
+        with open(ki_pod_dict,'r') as f1, open(ki_dict,'r') as f2:
             dc1 = eval(f1.read())
             dc2 = eval(f2.read())
             for k in sorted(dc1):
@@ -354,8 +354,8 @@ def record(res: str,name: str,obj: str,cmd: str,kubeconfig: str,ns: str):
     ki_file = time.strftime("%F",time.localtime())
     with open(history+"/"+ki_file,'a+') as f: f.write( time.strftime("%F %T ",time.localtime())+"[ "+USER+"@"+HOST+" from "+FROM+" ---> "+kubeconfig+" ]  " + cmd + "\n" )
     dc = {}
-    if os.path.exists(ki_name_dict) and os.path.getsize(ki_name_dict) > 5:
-        with open(ki_name_dict,'r') as f:
+    if os.path.exists(ki_pod_dict) and os.path.getsize(ki_pod_dict) > 5:
+        with open(ki_pod_dict,'r') as f:
             try:
                 dc = eval(f.read())
                 name_dc = dict(dc[key][1]) if key in dc else {}
@@ -364,10 +364,10 @@ def record(res: str,name: str,obj: str,cmd: str,kubeconfig: str,ns: str):
                 if len(name_dc) > 5: del name_dc[5:]
                 dc[key] = [name,name_dc]
             except:
-                os.remove(ki_name_dict)
+                os.remove(ki_pod_dict)
     else:
         dc[key] = [name,[(name,1)]]
-    with open(ki_name_dict,'w') as f: f.write(str(dc))
+    with open(ki_pod_dict,'w') as f: f.write(str(dc))
 def ki():
     ( len(sys.argv) == 1 or sys.argv[1] not in ('-n','-t','-t1','-t2','-r','-i','-e','-es','-ei','-o','-os','-oi','-restart','-s','-select','-l','-lock','-u','-unlock','--w','--watch','-h','-help','-c','-cache','-k','-a') ) and sys.argv.insert(1,'-n')
     len(sys.argv) == 2 and sys.argv[1] in ('-i','-e','-es','-ei','-o','-os','-oi') and sys.argv.insert(1,'-n')
@@ -392,7 +392,7 @@ def ki():
             num = e.find(s)
             num_s = num+len(s)
             print("{}\033[1;35m{}\033[0m{}".format(e[:num],e[num:num_s],e[num_s:]),end='')
-        os.path.exists(ki_ns_dict) or cache_ns(config_struct)
+        os.path.exists(ki_ns_dict) or subprocess.Popen("ki -c",shell=True,stdout=subprocess.PIPE,stderr=subprocess.PIPE,universal_newlines=True)
     elif len(sys.argv) == 2 and sys.argv[1] in ('-k'):
         info_k()
     elif len(sys.argv) == 2 and sys.argv[1] in ('-c','-cache'):
@@ -579,8 +579,8 @@ def ki():
                         if pod in ('$','#','@','!','~'):
                             if pod == '$':
                                 pod = str(result_len-1)
-                            elif os.path.exists(ki_name_dict):
-                                with open(ki_name_dict,'r') as f:
+                            elif os.path.exists(ki_pod_dict):
+                                with open(ki_pod_dict,'r') as f:
                                     dc = eval(f.read())
                                     key = k8s+'/'+ns+'/'+obj
                                     last_res = ( dc[key][0] if pod in ('!','~') else dc[key][1][0][0] ) if key in dc else ""

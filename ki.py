@@ -93,6 +93,12 @@ def cmd_obj(ns, obj, res, args, iip="x"):
                 cmd = ( "kubectl -n "+ns+" logs -f "+res+" "+container+" --tail "+regular ) if regular.isdigit() and len(regular) < 12 else ( "kubectl -n "+ns+" logs -f "+res+" "+container+"|grep --color=auto " + ( regular if args[0] == 'l' else "-C 10 "+regular ) )
             else:
                 cmd = "kubectl -n "+ns+" logs -f "+res+" "+container+" --tail 200"
+        elif args[0] in ('v'):
+            regular = args[1:]
+            p = subprocess.Popen("kubectl -n "+ns+" get pod "+res+" -o jsonpath='{.spec.containers[:].name}'",shell=True,stdout=subprocess.PIPE,universal_newlines=True)
+            result_list = p.stdout.readlines()[0].split()
+            container = name if name in result_list else "--all-containers"
+            cmd = "kubectl -n "+ns+" logs -f "+res+" "+container+" --previous --tail "+ ( regular if regular and regular.isdigit() and len(regular) < 12 else "100" )
         elif args[0] in ('r'):
             cmd = "kubectl -n "+ns+" rollout restart "+obj.lower()+" "+name
         elif args[0] in ('o'):
@@ -611,7 +617,7 @@ def ki():
             subprocess.Popen("ki -c",shell=True,stdout=subprocess.PIPE,stderr=subprocess.PIPE,universal_newlines=True)
     elif len(sys.argv) == 2 and sys.argv[1] in ('-h','-help'):
         style = "\033[1;32m%s\033[0m"
-        print(style % "Kubectl Pro controls the Kubernetes cluster manager")
+        print(style % "Kubectl pro controls the Kubernetes cluster manager")
         print("\nFind more information at: https://ki.xabc.io\n")
         print(style % "1. ki","List all namespaces")
         print(style % "2. ki xx","List all pods in the namespace ( if there are multiple ~/.kube/kubeconfig*,the best matching kubeconfig will be found ),the namespace parameter supports fuzzy matching,after outputting the pod list, select: xxx filters the query\n         select: index l ( [ l ] Print the logs for a container in a pod or specified resource )\n         select: index l 100 ( Print the logs of the latest 100 lines )\n         select: index l xxx ( Print the logs and filters the specified characters )\n         select: index r ( [ r ] Rollout restart the pod )\n         select: index o ( [ o ] Output the [Deployment,StatefulSet,Service,Ingress,Configmap,Secret].yml file )\n         select: index del ( [ del ] Delete the pod )\n         select: index cle ( [ cle ] Delete the Deployment/StatefulSet )\n         select: index e[si] ( [ e[si] ] Edit the Deploy/Service/Ingress )\n         select: index s5 ( [ s3 ] Set the Deploy/StatefulSet replicas=3 )\n         select: index dp ( Describe a pod )\n         select: * ( Watching... )")

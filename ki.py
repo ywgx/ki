@@ -41,7 +41,7 @@ def cmd_obj(ns, obj, res, args, iip="x"):
     elif obj in ("Event"):
         action = "get"
         cmd = "kubectl -n "+ns+" "+action+" "+obj+"  --sort-by=.metadata.creationTimestamp"
-    elif obj in ("Deployment","DaemonSet","Service","StatefulSet","Ingress","ConfigMap","Secret","PersistentVolume","PersistentVolumeClaim","CronJob"):
+    elif obj in ("Deployment","DaemonSet","Service","StatefulSet","Ingress","ConfigMap","Secret","PersistentVolume","PersistentVolumeClaim","CronJob","Job"):
         action2 = ""
         if args == "cle":
             action = "delete"
@@ -268,7 +268,7 @@ def get_obj(ns: str,res: str,args='x'):
     l1 = res.split('-')
     l2 = subprocess.Popen(cmd,shell=True,stdout=subprocess.PIPE,stderr=subprocess.PIPE,universal_newlines=True).stdout.readlines()
     obj = l2[0] if l2 else "Pod"
-    if obj in ("StatefulSet","DaemonSet"):
+    if obj in ("StatefulSet","DaemonSet","Job"):
         del l1[-1:]
     elif obj in ("ReplicaSet","Deployment"):
         del l1[-2:]
@@ -465,7 +465,7 @@ def ki():
             ext = " -o wide"
             os.environ['KUBECONFIG'] = l[1]
             if len(sys.argv) == 4:
-                d = {'d':['Deployment'," -o wide"],'s':['Service'," -o wide"],'i':['Ingress'," -o wide"],'c':['ConfigMap'," -o wide"],'t':['Secret'," -o wide"],'n':['Node'," -o wide"],'p':['PersistentVolumeClaim'," -o wide"],'v':['PersistentVolume'," -o wide"],'f':['StatefulSet'," -o wide"],'j':['CronJob'," -o wide"],'P':['Pod'," -o wide"],'e':['Event',''],'r':['ReplicaSet',''],'a':['DaemonSet',''],'q':['ResourceQuota','']}
+                d = {'d':['Deployment'," -o wide"],'s':['Service'," -o wide"],'i':['Ingress'," -o wide"],'c':['ConfigMap'," -o wide"],'t':['Secret'," -o wide"],'n':['Node'," -o wide"],'p':['PersistentVolumeClaim'," -o wide"],'v':['PersistentVolume'," -o wide"],'f':['StatefulSet'," -o wide"],'j':['CronJob'," -o wide"],'b':['Job'," -o wide"],'P':['Pod'," -o wide"],'e':['Event',''],'r':['ReplicaSet',''],'a':['DaemonSet',''],'q':['ResourceQuota','']}
                 obj = d[sys.argv[3][0]][0] if sys.argv[3][0] in d else "Pod"
                 ext = d[sys.argv[3][0]][1] if sys.argv[3][0] in d else ""
                 if sys.argv[1] in ('-i','-l','-e','-es','-ei','-o','-os','-oi'):

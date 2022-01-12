@@ -78,6 +78,9 @@ def cmd_obj(ns, obj, res, args, iip="x"):
             cmd = "kubectl -n "+ns+" exec -it "+res+" -- sh"
         elif args == "del":
             cmd = "kubectl -n "+ns+" delete pod "+res+"  --now &"
+        elif args == "delf":
+            action = "delete"
+            cmd = "kubectl -n "+ns+" delete pod "+res+"  --grace-period=0 --force"
         elif args == "cle":
             action = "delete"
             cmd = "kubectl -n "+ns+" "+action+" "+obj.lower()+" "+name

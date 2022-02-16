@@ -313,7 +313,7 @@ def get_feature(ns_list: list):
                 substr_hash = (hashes[y + 1] - hashes[x] * pows[y + 1 - x]) % MOD
                 substr_hash = (substr_hash + MOD) % MOD
                 hash_to_be_disabled.append(substr_hash)
-                if substr_hash not in disabled_hashes and min_length > (y - x + 1) and '-' not in ns_list[i][x: y + 1]:
+                if substr_hash not in disabled_hashes and min_length > (y - x + 1):
                     min_length = y - x + 1
                     answers[i] = (x, y)
 

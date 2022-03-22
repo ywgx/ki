@@ -198,12 +198,12 @@ def find_config():
             os.symlink(result_lines[0],default_config)
             kubeconfig = result_lines[0].split("/")[-1]
     return kubeconfig,result_lines,result_num
-def find_history(config):
+def find_history(config,num=1):
     dc = {}
     if os.path.exists(ki_dict) and os.path.getsize(ki_dict) > 5:
         with open(ki_dict,'r') as f:
             dc = eval(f.read())
-            dc[config] = dc[config] + 1 if config in dc else 1
+            dc[config] = dc[config] + num if config in dc else 1
             dc.pop(default_config,404)
             for config in list(dc.keys()):
                 if not os.path.exists(config): del dc[config]
@@ -262,7 +262,8 @@ def switch_config(switch_num: int,k8s: str,ns: str,time: str):
         os.unlink(default_config)
         os.symlink(os.environ['KUBECONFIG'],default_config)
         print("\033[1;33m{}\033[0m".format("[ "+time+"  "+str(switch_num+1)+"-SWITCH  "+k8s+" / "+ns+" ] "))
-        find_history(os.environ['KUBECONFIG'])
+        find_history(os.environ['KUBECONFIG'],1)
+        switch_num > 0 and subprocess.Popen("ki -c",shell=True,stdout=subprocess.PIPE,stderr=subprocess.PIPE,universal_newlines=True)
         switch = True
     return switch
 def get_obj(ns: str,res: str,args='x'):
@@ -450,7 +451,7 @@ def ki():
                                 os.symlink(res,default_config)
                                 print('\033[{}C\033[1A'.format(10),end = '')
                                 print("\033[1;33m{}\033[0m".format(res.split('/')[-1]))
-                                find_history(res)
+                                find_history(res,10)
                                 open(ki_lock,"a").close()
                                 break
                         else:

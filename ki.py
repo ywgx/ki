@@ -1,7 +1,7 @@
 #!/usr/bin/python3
 #*************************************************
 # Description : Kubectl Pro
-# Version     : 1.2
+# Version     : 1.3
 #*************************************************
 import os,re,sys,time,subprocess
 #-----------------VAR-----------------------------
@@ -12,6 +12,7 @@ ki_dict = history + "/.dict"
 ki_last = history + "/.last"
 ki_ns_dict = history + "/.ns_dict"
 ki_pod_dict = history + "/.pod_dict"
+ki_latest_ns_dict = history + "/.latest_ns_dict"
 default_config = home + "/.kube/config"
 #-----------------FUN-----------------------------
 def cmp_file(f1, f2):
@@ -239,10 +240,12 @@ def find_ns(config_struct: list):
     return ns,kubeconfig,switch,result_num
 def cache_ns(config_struct: list):
     d = {}
+    d_latest = {}
     for config in config_struct[1]:
         s = []
-        p = subprocess.Popen("kubectl get ns --no-headers --kubeconfig "+config,shell=True,stdout=subprocess.PIPE,stderr=subprocess.PIPE,universal_newlines=True)
-        ns_list = [ e.split()[0] for e in p.stdout.readlines() ]
+        p = subprocess.Popen("kubectl get ns --sort-by=.metadata.creationTimestamp --no-headers --kubeconfig "+config,shell=True,stdout=subprocess.PIPE,stderr=subprocess.PIPE,universal_newlines=True)
+        l = p.stdout.readlines()
+        ns_list = [ e.split()[0] for e in l ]
         for ns in ns_list:
             p = subprocess.Popen("kubectl get pod --no-headers --kubeconfig "+config+" -n "+ns,shell=True,stdout=subprocess.PIPE,stderr=subprocess.PIPE,universal_newlines=True)
             if p.stdout.readlines():
@@ -252,7 +255,9 @@ def cache_ns(config_struct: list):
                 if p.stdout.readlines():
                     s.append(ns)
         d[config] = s
+        d_latest[config] = l[-1].split()[0]
     with open(ki_ns_dict,'w') as f: f.write(str(d))
+    with open(ki_latest_ns_dict,'w') as f: f.write(str(d_latest))
     return d
 def switch_config(switch_num: int,k8s: str,ns: str,time: str):
     switch = False
@@ -391,7 +396,7 @@ def ki():
     elif len(sys.argv) == 2 and sys.argv[1] in ('-u','-unlock'):
         os.path.exists(ki_lock) and os.unlink(ki_lock)
     elif len(sys.argv) == 2 and sys.argv[1] == '-n':
-        cmd = "kubectl get ns  --no-headers"
+        cmd = "kubectl get ns  --sort-by=.metadata.creationTimestamp --no-headers"
         print("\033[1;32m{}\033[0m".format(cmd.split('  --')[0]))
         os.environ['KUBECONFIG'] = os.path.realpath(default_config)
         p = subprocess.Popen(cmd,shell=True,stdout=subprocess.PIPE,stderr=subprocess.PIPE,universal_newlines=True)
@@ -402,7 +407,17 @@ def ki():
             num = e.find(s)
             num_s = num+len(s)
             print("{}\033[1;35m{}\033[0m{}".format(e[:num],e[num:num_s],e[num_s:]),end='')
-        os.path.exists(ki_ns_dict) or subprocess.Popen("ki -c",shell=True,stdout=subprocess.PIPE,stderr=subprocess.PIPE,universal_newlines=True)
+        if os.path.exists(ki_latest_ns_dict):
+            with open(ki_latest_ns_dict,'r') as f:
+                try:
+                    d = eval(f.read())
+                    latest_ns = d[os.environ['KUBECONFIG']]
+                    flag = ( latest_ns == l[-1].split()[0] )
+                except:
+                    flag = False
+        else:
+            flag = False
+        flag or subprocess.Popen("ki -c",shell=True,stdout=subprocess.PIPE,stderr=subprocess.PIPE,universal_newlines=True)
     elif len(sys.argv) == 2 and sys.argv[1] in ('-k'):
         info_k()
     elif len(sys.argv) == 2 and sys.argv[1] in ('-c','-cache'):

@@ -216,7 +216,7 @@ def find_ns(config_struct: list):
     kubeconfig = None
     switch = False
     result_num = config_struct[-1]
-    kn = sys.argv[2].split('.')
+    kn = re.split("[./]",sys.argv[2])
     ns_pattern = kn[-1] if len(kn) > 1 and len(kn[-1].strip()) > 0 else kn[0]
     config = find_optimal(config_struct[1],kn[0]) or default_config if len(kn) > 1 else default_config
     current_config = os.path.realpath(config)
@@ -397,6 +397,7 @@ def ki():
         os.path.exists(ki_lock) and os.unlink(ki_lock)
     elif len(sys.argv) == 2 and sys.argv[1] == '-n':
         cmd = "kubectl get ns  --sort-by=.metadata.creationTimestamp --no-headers"
+        print('\033[{}C\033[1A'.format(2),end = '')
         print("\033[1;32m{}\033[0m".format(cmd.split('  --')[0]))
         os.environ['KUBECONFIG'] = os.path.realpath(default_config)
         p = subprocess.Popen(cmd,shell=True,stdout=subprocess.PIPE,stderr=subprocess.PIPE,universal_newlines=True)
@@ -495,7 +496,7 @@ def ki():
                             pods = [ e.split()[0] for e in p.stdout.readlines() ]
                             pod = find_optimal(pods,sys.argv[3]) if pods else None
                             if not (pods and pod):
-                                kn = sys.argv[2].split('.')
+                                kn = re.split("[./]",sys.argv[2])
                                 ns_pattern = kn[-1] if len(kn) > 1 and len(kn[-1].strip()) > 0 else kn[0]
                                 os.environ['KUBECONFIG'] in config_struct[1] and config_struct[1].remove(os.environ['KUBECONFIG'])
                                 if config_struct[1]:
@@ -551,9 +552,12 @@ def ki():
                         else:
                             key = sys.argv[1].split('t')[-1] if sys.argv[1].split('t')[-1].isdigit() else "3"
                             cmd = "kubectl top "+obj.lower()+" -n "+ ns +"  --no-headers|sort --key "+key+" --numeric"
-                        result_lines = subprocess.Popen(cmd,shell=True,stdout=subprocess.PIPE,stderr=subprocess.PIPE,universal_newlines=True).stdout.readlines()
+                        try:
+                            result_lines = subprocess.Popen(cmd,shell=True,stdout=subprocess.PIPE,stderr=subprocess.PIPE,universal_newlines=True).stdout.readlines()
+                        except:
+                            sys.exit()
                         if not result_lines:
-                            kn = sys.argv[2].split('.')
+                            kn = re.split("[./]",sys.argv[2])
                             ns_pattern = kn[-1] if len(kn) > 1 and len(kn[-1].strip()) > 0 else kn[0]
                             os.environ['KUBECONFIG'] in config_struct[1] and config_struct[1].remove(os.environ['KUBECONFIG'])
                             if config_struct[1]:

@@ -397,7 +397,6 @@ def ki():
         os.path.exists(ki_lock) and os.unlink(ki_lock)
     elif len(sys.argv) == 2 and sys.argv[1] == '-n':
         cmd = "kubectl get ns  --sort-by=.metadata.creationTimestamp --no-headers"
-        print('\033[{}C\033[1A'.format(2),end = '')
         print("\033[1;32m{}\033[0m".format(cmd.split('  --')[0]))
         os.environ['KUBECONFIG'] = os.path.realpath(default_config)
         p = subprocess.Popen(cmd,shell=True,stdout=subprocess.PIPE,stderr=subprocess.PIPE,universal_newlines=True)

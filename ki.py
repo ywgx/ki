@@ -7,9 +7,10 @@ import os,re,sys,time,subprocess
 #-----------------VAR-----------------------------
 home = os.environ["HOME"]
 history = home + "/.history"
-ki_lock = history + "/.lock"
 ki_dict = history + "/.dict"
 ki_last = history + "/.last"
+ki_lock = history + "/.lock"
+ki_unlock = history + "/.unlock"
 ki_ns_dict = history + "/.ns_dict"
 ki_pod_dict = history + "/.pod_dict"
 ki_latest_ns_dict = history + "/.latest_ns_dict"
@@ -392,8 +393,10 @@ def ki():
     if len(sys.argv) == 2 and sys.argv[1] in ('--w','--watch'):
         info_w(os.environ["PWD"],config_struct[1])
     elif len(sys.argv) == 2 and sys.argv[1] in ('-l','-lock'):
+        os.path.exists(ki_unlock) and os.unlink(ki_unlock)
         os.path.exists(ki_lock) or open(ki_lock,"a").close()
     elif len(sys.argv) == 2 and sys.argv[1] in ('-u','-unlock'):
+        os.path.exists(ki_unlock) or open(ki_unlock,"a").close()
         os.path.exists(ki_lock) and os.unlink(ki_lock)
     elif len(sys.argv) == 2 and sys.argv[1] == '-n':
         cmd = "kubectl get ns  --sort-by=.metadata.creationTimestamp --no-headers"
@@ -467,7 +470,7 @@ def ki():
                                 print('\033[{}C\033[1A'.format(10),end = '')
                                 print("\033[1;33m{}\033[0m".format(res.split('/')[-1]))
                                 find_history(res,10)
-                                open(ki_lock,"a").close()
+                                os.path.exists(ki_unlock) or open(ki_lock,"a").close()
                                 break
                         else:
                             pattern = ""

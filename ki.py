@@ -1,12 +1,13 @@
 #!/usr/bin/python3
 #*************************************************
 # Description : Kubectl Pro
-# Version     : 1.3
+# Version     : 1.4
 #*************************************************
 import os,re,sys,time,subprocess
 #-----------------VAR-----------------------------
 home = os.environ["HOME"]
 history = home + "/.history"
+ki_all = history + "/.all"
 ki_dict = history + "/.dict"
 ki_last = history + "/.last"
 ki_lock = history + "/.lock"
@@ -247,14 +248,17 @@ def cache_ns(config_struct: list):
         p = subprocess.Popen("kubectl get ns --sort-by=.metadata.creationTimestamp --no-headers --kubeconfig "+config,shell=True,stdout=subprocess.PIPE,stderr=subprocess.PIPE,universal_newlines=True)
         l = p.stdout.readlines()
         ns_list = [ e.split()[0] for e in l ]
-        for ns in ns_list:
-            p = subprocess.Popen("kubectl get pod --no-headers --kubeconfig "+config+" -n "+ns,shell=True,stdout=subprocess.PIPE,stderr=subprocess.PIPE,universal_newlines=True)
-            if p.stdout.readlines():
-                s.append(ns)
-            else:
-                p = subprocess.Popen("kubectl get cronjob --no-headers --kubeconfig "+config+" -n "+ns,shell=True,stdout=subprocess.PIPE,stderr=subprocess.PIPE,universal_newlines=True)
+        if os.path.exists(ki_all):
+            s = ns_list
+        else:
+            for ns in ns_list:
+                p = subprocess.Popen("kubectl get pod --no-headers --kubeconfig "+config+" -n "+ns,shell=True,stdout=subprocess.PIPE,stderr=subprocess.PIPE,universal_newlines=True)
                 if p.stdout.readlines():
                     s.append(ns)
+                else:
+                    p = subprocess.Popen("kubectl get cronjob --no-headers --kubeconfig "+config+" -n "+ns,shell=True,stdout=subprocess.PIPE,stderr=subprocess.PIPE,universal_newlines=True)
+                    if p.stdout.readlines():
+                        s.append(ns)
         d[config] = s
         d_latest[config] = l[-1].split()[0]
     with open(ki_ns_dict,'w') as f: f.write(str(d))
@@ -281,7 +285,10 @@ def get_obj(ns: str,res: str,args='x'):
     if obj in ("StatefulSet","DaemonSet","Job"):
         del l1[-1:]
     elif obj in ("ReplicaSet","Deployment"):
-        del l1[-2:]
+        if len(res) == 63:
+            del l1[-1:]
+        else:
+            del l1[-2:]
         obj = "Deployment"
     name = ('-').join(l1)
     if args[-1] in d.keys():
@@ -403,7 +410,10 @@ def ki():
         print("\033[1;32m{}\033[0m".format(cmd.split('  --')[0]))
         os.environ['KUBECONFIG'] = os.path.realpath(default_config)
         p = subprocess.Popen(cmd,shell=True,stdout=subprocess.PIPE,stderr=subprocess.PIPE,universal_newlines=True)
-        l = p.stdout.readlines()
+        try:
+            l = p.stdout.readlines()
+        except:
+            sys.exit()
         ns_dict = get_feature([ e.split()[0] for e in l ])
         for e in l:
             s = ns_dict[e.split()[0]]
@@ -469,7 +479,7 @@ def ki():
                                 os.symlink(res,default_config)
                                 print('\033[{}C\033[1A'.format(10),end = '')
                                 print("\033[1;33m{}\033[0m".format(res.split('/')[-1]))
-                                find_history(res,10)
+                                find_history(res,6)
                                 os.path.exists(ki_unlock) or open(ki_lock,"a").close()
                                 break
                         else:
@@ -521,7 +531,7 @@ def ki():
                                 if sys.argv[1] in ('-i'):
                                     cmd = "kubectl -n "+ns+" exec -it "+pod+" -- sh"
                                 elif sys.argv[1] in ('-l'):
-                                    cmd = "kubectl -n "+ns+" logs -f "+pod+" --all-containers --tail 10"
+                                    cmd = "kubectl -n "+ns+" logs -f "+pod+" --all-containers --tail 50"
                                 else:
                                     l = get_obj(ns,pod,sys.argv[1])
                                     obj = l[0]

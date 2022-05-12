@@ -1,7 +1,7 @@
 #!/usr/bin/python3
 #*************************************************
 # Description : Kubectl Pro
-# Version     : 1.4
+# Version     : 1.5
 #*************************************************
 import os,re,sys,time,subprocess
 #-----------------VAR-----------------------------
@@ -347,7 +347,7 @@ def info_w(k8s_path: str,result_lines: list):
             else:
                 k8s_str = '-'.join(k8s_dir.split('-')[0:-1])
             if result_lines:
-                config = find_optimal(result_lines,k8s_str)
+                config = find_optimal(result_lines,k8s_str) if k8s_str else None
                 if config and os.path.exists(default_config) and config not in {default_config,os.path.realpath(default_config)}:
                     os.unlink(default_config)
                     os.symlink(config,default_config)
@@ -366,8 +366,8 @@ def info_k():
             dc2 = eval(f2.read())
             for k in sorted(dc1):
                 print("{:<56}{:<32}{}".format(k,dc1[k][0],dc1[k][1]))
-            for k in dc2:
-                print("{:<56}{}".format(k.split('/')[-1],dc2[k]))
+            for k in sorted(dc2.items(),key=lambda d:d[1]):
+                print("{:<56}{}".format(k[0].split('/')[-1],k[1]))
 def record(res: str,name: str,obj: str,cmd: str,kubeconfig: str,ns: str):
     l = os.environ['SSH_CONNECTION'].split() if 'SSH_CONNECTION' in os.environ else ['NULL','NULL','NULL']
     USER = os.environ['USER'] if 'USER' in os.environ else "NULL"

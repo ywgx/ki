@@ -7,6 +7,7 @@ import os,re,sys,time,subprocess
 #-----------------VAR-----------------------------
 home = os.environ["HOME"]
 history = home + "/.history"
+default_config = home + "/.kube/config"
 ki_all = history + "/.all"
 ki_dict = history + "/.dict"
 ki_last = history + "/.last"
@@ -15,8 +16,6 @@ ki_unlock = history + "/.unlock"
 ki_ns_dict = history + "/.ns_dict"
 ki_pod_dict = history + "/.pod_dict"
 ki_latest_ns_dict = history + "/.latest_ns_dict"
-default_config = home + "/.kube/config"
-top_config = default_config
 #-----------------FUN-----------------------------
 def cmp_file(f1, f2):
     if os.stat(f2).st_size != os.stat(f1).st_size:
@@ -186,7 +185,7 @@ def find_config():
             last_config = result_lines[0]
         result_dict = sorted(dc.items(),key = lambda dc:(dc[1], dc[0]),reverse=True)
         sort_list = [ i[0] for i in result_dict ]
-        top_config = sort_list[0]
+        top_config = sort_list[0] if sort_list else os.path.realpath(default_config)
         last_config in sort_list and sort_list.remove(last_config)
         sort_list.insert(0,last_config)
         result_lines = sort_list + list(result_set - set(sort_list))

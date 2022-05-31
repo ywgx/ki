@@ -1,7 +1,7 @@
 #!/usr/bin/python3
 #*************************************************
 # Description : Kubectl Pro
-# Version     : 1.5
+# Version     : 1.6
 #*************************************************
 import os,re,sys,time,subprocess
 #-----------------VAR-----------------------------
@@ -16,6 +16,7 @@ ki_ns_dict = history + "/.ns_dict"
 ki_pod_dict = history + "/.pod_dict"
 ki_latest_ns_dict = history + "/.latest_ns_dict"
 default_config = home + "/.kube/config"
+top_config = default_config
 #-----------------FUN-----------------------------
 def cmp_file(f1, f2):
     if os.stat(f2).st_size != os.stat(f1).st_size:
@@ -93,7 +94,10 @@ def cmd_obj(ns, obj, res, args, iip="x"):
         elif args[0] in ('l','c'):
             regular = args[1:]
             p = subprocess.Popen("kubectl -n "+ns+" get pod "+res+" -o jsonpath='{.spec.containers[:].name}'",shell=True,stdout=subprocess.PIPE,universal_newlines=True)
-            result_list = p.stdout.readlines()[0].split()
+            try:
+                result_list = p.stdout.readlines()[0].split()
+            except:
+                sys.exit()
             container = name if name in result_list else "--all-containers"
             if regular:
                 cmd = ( "kubectl -n "+ns+" logs -f "+res+" "+container+" --tail "+regular ) if regular.isdigit() and len(regular) < 12 else ( "kubectl -n "+ns+" logs -f "+res+" "+container+"|grep --color=auto " + ( regular if args[0] == 'l' else "-C 10 "+regular ) )
@@ -162,6 +166,7 @@ def find_config():
             os.symlink(result_lines[0],default_config)
             kubeconfig = result_lines[0].split("/")[-1]
     elif result_num > 1:
+        global top_config
         dc = {}
         if os.path.exists(ki_dict) and os.path.getsize(ki_dict) > 5:
             with open(ki_dict,'r') as f:
@@ -181,6 +186,7 @@ def find_config():
             last_config = result_lines[0]
         result_dict = sorted(dc.items(),key = lambda dc:(dc[1], dc[0]),reverse=True)
         sort_list = [ i[0] for i in result_dict ]
+        top_config = sort_list[0]
         last_config in sort_list and sort_list.remove(last_config)
         sort_list.insert(0,last_config)
         result_lines = sort_list + list(result_set - set(sort_list))
@@ -202,17 +208,18 @@ def find_config():
             kubeconfig = result_lines[0].split("/")[-1]
     return kubeconfig,result_lines,result_num
 def find_history(config,num=1):
-    dc = {}
-    if os.path.exists(ki_dict) and os.path.getsize(ki_dict) > 5:
-        with open(ki_dict,'r') as f:
-            dc = eval(f.read())
-            dc[config] = dc[config] + num if config in dc else 1
-            dc.pop(default_config,404)
-            for config in list(dc.keys()):
-                if not os.path.exists(config): del dc[config]
-    else:
-        dc[config] = 1
-    with open(ki_dict,'w') as f: f.write(str(dc))
+    if config != top_config:
+        dc = {}
+        if os.path.exists(ki_dict) and os.path.getsize(ki_dict) > 5:
+            with open(ki_dict,'r') as f:
+                dc = eval(f.read())
+                dc[config] = dc[config] + num if config in dc else 1
+                dc.pop(default_config,404)
+                for config in list(dc.keys()):
+                    if not os.path.exists(config): del dc[config]
+        else:
+            dc[config] = 1
+        with open(ki_dict,'w') as f: f.write(str(dc))
 def find_ns(config_struct: list):
     ns = None
     kubeconfig = None

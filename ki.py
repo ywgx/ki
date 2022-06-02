@@ -1,7 +1,7 @@
 #!/usr/bin/python3
 #*************************************************
 # Description : Kubectl Pro
-# Version     : 1.6
+# Version     : 1.7
 #*************************************************
 import os,re,sys,time,subprocess
 #-----------------VAR-----------------------------
@@ -165,7 +165,8 @@ def find_config():
             os.symlink(result_lines[0],default_config)
             kubeconfig = result_lines[0].split("/")[-1]
     elif result_num > 1:
-        global top_config
+        global first_config
+        global last_config
         dc = {}
         if os.path.exists(ki_dict) and os.path.getsize(ki_dict) > 5:
             with open(ki_dict,'r') as f:
@@ -185,7 +186,8 @@ def find_config():
             last_config = result_lines[0]
         result_dict = sorted(dc.items(),key = lambda dc:(dc[1], dc[0]),reverse=True)
         sort_list = [ i[0] for i in result_dict ]
-        top_config = sort_list[0] if sort_list else os.path.realpath(default_config)
+        first_config = sort_list[0] if sort_list else os.path.realpath(default_config)
+        last_config = sort_list[-1] if sort_list else os.path.realpath(default_config)
         last_config in sort_list and sort_list.remove(last_config)
         sort_list.insert(0,last_config)
         result_lines = sort_list + list(result_set - set(sort_list))
@@ -207,7 +209,7 @@ def find_config():
             kubeconfig = result_lines[0].split("/")[-1]
     return kubeconfig,result_lines,result_num
 def find_history(config,num=1):
-    if config != top_config:
+    if (num > 0 and config != first_config) or (num < 0 and config != last_config):
         dc = {}
         if os.path.exists(ki_dict) and os.path.getsize(ki_dict) > 5:
             with open(ki_dict,'r') as f:
@@ -560,6 +562,7 @@ def ki():
                     sys.exit()
             flag = True
             begin = time.perf_counter()
+            counter = 0
             while True:
                 if ns:
                     if not pod:
@@ -619,6 +622,7 @@ def ki():
                                 result_lines = subprocess.Popen(cmd,shell=True,stdout=subprocess.PIPE,stderr=subprocess.PIPE,universal_newlines=True).stdout.readlines()
                                 time.sleep(3)
                         except:
+                            counter == 0 and find_history(os.environ['KUBECONFIG'],-2)
                             sys.exit()
                         result_len = len(result_lines)
                         podList = pod.split()
@@ -647,6 +651,7 @@ def ki():
                             record(res,l[2],l[1],l[0],k8s,ns)
                             os.system(l[0])
                             print('\r')
+                        counter += 1
                     else:
                         pod = ""
                 else:

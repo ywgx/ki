@@ -165,8 +165,8 @@ def find_config():
             os.symlink(result_lines[0],default_config)
             kubeconfig = result_lines[0].split("/")[-1]
     elif result_num > 1:
-        global first_config
-        global last_config
+        global header_config
+        global footer_config
         dc = {}
         if os.path.exists(ki_dict) and os.path.getsize(ki_dict) > 5:
             with open(ki_dict,'r') as f:
@@ -186,8 +186,8 @@ def find_config():
             last_config = result_lines[0]
         result_dict = sorted(dc.items(),key = lambda dc:(dc[1], dc[0]),reverse=True)
         sort_list = [ i[0] for i in result_dict ]
-        first_config = sort_list[0] if sort_list else os.path.realpath(default_config)
-        last_config = sort_list[-1] if sort_list else os.path.realpath(default_config)
+        header_config = sort_list[0] if sort_list else os.path.realpath(default_config)
+        footer_config = sort_list[-1] if sort_list else os.path.realpath(default_config)
         last_config in sort_list and sort_list.remove(last_config)
         sort_list.insert(0,last_config)
         result_lines = sort_list + list(result_set - set(sort_list))
@@ -209,7 +209,7 @@ def find_config():
             kubeconfig = result_lines[0].split("/")[-1]
     return kubeconfig,result_lines,result_num
 def find_history(config,num=1):
-    if (num > 0 and config != first_config) or (num < 0 and config != last_config):
+    if (num > 0 and config != header_config) or (num < 0 and config != footer_config):
         dc = {}
         if os.path.exists(ki_dict) and os.path.getsize(ki_dict) > 5:
             with open(ki_dict,'r') as f:

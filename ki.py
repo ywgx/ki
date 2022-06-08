@@ -1,7 +1,7 @@
 #!/usr/bin/python3
 #*************************************************
 # Description : Kubectl Pro
-# Version     : 1.7
+# Version     : 1.8
 #*************************************************
 import os,re,sys,time,subprocess
 #-----------------VAR-----------------------------
@@ -92,11 +92,7 @@ def cmd_obj(ns, obj, res, args, iip="x"):
             cmd = "kubectl -n "+ns+" "+action+" "+obj.lower()+",service,ingress "+name
         elif args[0] in ('l','c'):
             regular = args[1:]
-            p = subprocess.Popen("kubectl -n "+ns+" get pod "+res+" -o jsonpath='{.spec.containers[:].name}'",shell=True,stdout=subprocess.PIPE,universal_newlines=True)
-            try:
-                result_list = p.stdout.readlines()[0].split()
-            except:
-                sys.exit()
+            result_list = get_data("kubectl -n "+ns+" get pod "+res+" -o jsonpath='{.spec.containers[:].name}'")[0].split()
             container = name if name in result_list else "--all-containers"
             if regular:
                 cmd = ( "kubectl -n "+ns+" logs -f "+res+" "+container+" --tail "+regular ) if regular.isdigit() and len(regular) < 12 else ( "kubectl -n "+ns+" logs -f "+res+" "+container+"|grep --color=auto " + ( regular if args[0] == 'l' else "-C 10 "+regular ) )
@@ -104,8 +100,7 @@ def cmd_obj(ns, obj, res, args, iip="x"):
                 cmd = "kubectl -n "+ns+" logs -f "+res+" "+container+" --tail 200"
         elif args[0] in ('v'):
             regular = args[1:]
-            p = subprocess.Popen("kubectl -n "+ns+" get pod "+res+" -o jsonpath='{.spec.containers[:].name}'",shell=True,stdout=subprocess.PIPE,universal_newlines=True)
-            result_list = p.stdout.readlines()[0].split()
+            result_list = get_data("kubectl -n "+ns+" get pod "+res+" -o jsonpath='{.spec.containers[:].name}'")[0].split()
             container = name if name in result_list else "--all-containers"
             cmd = "kubectl -n "+ns+" logs -f "+res+" "+container+" --previous --tail "+ ( regular if regular and regular.isdigit() and len(regular) < 12 else "100" )
         elif args[0] in ('r'):
@@ -143,8 +138,7 @@ def find_optimal(namespace_list: list, namespace: str):
 def find_config():
     os.path.exists(history) or os.mkdir(history)
     cmd = '''find $HOME/.kube -maxdepth 2 -type f -name 'kubeconfig*' 2>/dev/null|egrep '.*' || ( find $HOME/.kube -maxdepth 1 -type f 2>/dev/null|egrep '.*' &>/dev/null && grep -l "current-context" `find $HOME/.kube -maxdepth 1 -type f` )'''
-    k8s_list = subprocess.Popen(cmd,shell=True,stdout=subprocess.PIPE,stderr=subprocess.PIPE,universal_newlines=True)
-    result_set = { e.split('\n')[0] for e in k8s_list.stdout.readlines() }
+    result_set = { e.split('\n')[0] for e in get_data(cmd) }
     result_num = len(result_set)
     result_lines = list(result_set)
     kubeconfig = None
@@ -206,6 +200,16 @@ def find_config():
             os.symlink(result_lines[0],default_config)
             kubeconfig = result_lines[0].split("/")[-1]
     return kubeconfig,result_lines,result_num
+def compress_list(l: list):
+    num = 15
+    l.insert(0,0)
+    for i in range(len(l)-1):
+        if l[i+1] - l[i] > num:
+            l[i+1] -= num-5
+    if l[i+1] == l[-1] and l[i+1] - l[i] < num:
+        return l[1:]
+    else:
+        return compress_list(l[1:])
 def find_history(config,num=1):
     if config != header_config:
         dc = {}
@@ -218,6 +222,9 @@ def find_history(config,num=1):
                     if not os.path.exists(config): del dc[config]
         else:
             dc[config] = 1
+        result_dict = sorted(dc.items(),key = lambda dc:dc[1])
+        for i,j in zip(result_dict,compress_list([ i[1] for i in result_dict ])):
+            dc[i[0]] = j
         with open(ki_dict,'w') as f: f.write(str(dc))
 def find_ns(config_struct: list):
     ns = None
@@ -239,8 +246,8 @@ def find_ns(config_struct: list):
                 except:
                     ns_list = cache_ns(config_struct)[config]
         else:
-            p = subprocess.Popen("kubectl get ns --no-headers --kubeconfig "+config,shell=True,stdout=subprocess.PIPE,stderr=subprocess.PIPE,universal_newlines=True)
-            ns_list = [ e.split()[0] for e in p.stdout.readlines() ]
+            cmd = "kubectl get ns --no-headers --kubeconfig "+config
+            ns_list = [ e.split()[0] for e in get_data(cmd) ]
         ns = find_optimal(ns_list,ns_pattern)
         if ns:
             kubeconfig = config
@@ -251,20 +258,17 @@ def cache_ns(config_struct: list):
     d_latest = {}
     for config in config_struct[1]:
         s = []
-        p = subprocess.Popen("kubectl get ns --sort-by=.metadata.creationTimestamp --no-headers --kubeconfig "+config,shell=True,stdout=subprocess.PIPE,stderr=subprocess.PIPE,universal_newlines=True)
-        l = p.stdout.readlines()
+        cmd = "kubectl get ns --sort-by=.metadata.creationTimestamp --no-headers --kubeconfig "+config
+        l = get_data(cmd)
         ns_list = [ e.split()[0] for e in l ]
         if os.path.exists(ki_all):
             s = ns_list
         else:
             for ns in ns_list:
-                p = subprocess.Popen("kubectl get pod --no-headers --kubeconfig "+config+" -n "+ns,shell=True,stdout=subprocess.PIPE,stderr=subprocess.PIPE,universal_newlines=True)
-                if p.stdout.readlines():
+                cmd1 = "kubectl get pod --no-headers --kubeconfig "+config+" -n "+ns
+                cmd2 = "kubectl get cronjob --no-headers --kubeconfig "+config+" -n "+ns
+                if get_data(cmd1) or get_data(cmd2):
                     s.append(ns)
-                else:
-                    p = subprocess.Popen("kubectl get cronjob --no-headers --kubeconfig "+config+" -n "+ns,shell=True,stdout=subprocess.PIPE,stderr=subprocess.PIPE,universal_newlines=True)
-                    if p.stdout.readlines():
-                        s.append(ns)
         d[config] = s
         d_latest[config] = l[-1].split()[0]
     with open(ki_ns_dict,'w') as f: f.write(str(d))
@@ -282,11 +286,17 @@ def switch_config(switch_num: int,k8s: str,ns: str,time: str):
         switch_num > 0 and subprocess.Popen("ki -c",shell=True,stdout=subprocess.PIPE,stderr=subprocess.PIPE,universal_newlines=True)
         switch = True
     return switch
+def get_data(cmd: str):
+    try:
+        p = subprocess.Popen(cmd,shell=True,stdout=subprocess.PIPE,stderr=subprocess.PIPE,universal_newlines=True)
+        return p.stdout.readlines()
+    except:
+        sys.exit()
 def get_obj(ns: str,res: str,args='x'):
     d = {'s':"Service",'i':"Ingress"}
     cmd = "kubectl -n "+ns+" get pod "+res+" -o jsonpath='{.metadata.ownerReferences[0].kind}'"
     l1 = res.split('-')
-    l2 = subprocess.Popen(cmd,shell=True,stdout=subprocess.PIPE,stderr=subprocess.PIPE,universal_newlines=True).stdout.readlines()
+    l2 = get_data(cmd)
     obj = l2[0] if l2 else "Pod"
     if obj in ("StatefulSet","DaemonSet","Job"):
         del l1[-1:]
@@ -415,11 +425,7 @@ def ki():
         cmd = "kubectl get ns  --sort-by=.metadata.creationTimestamp --no-headers"
         print("\033[1;32m{}\033[0m".format(cmd.split('  --')[0]))
         os.environ['KUBECONFIG'] = os.path.realpath(default_config)
-        p = subprocess.Popen(cmd,shell=True,stdout=subprocess.PIPE,stderr=subprocess.PIPE,universal_newlines=True)
-        try:
-            l = p.stdout.readlines()
-        except:
-            sys.exit()
+        l = get_data(cmd)
         ns_dict = get_feature([ e.split()[0] for e in l ])
         for e in l:
             s = ns_dict[e.split()[0]]
@@ -485,7 +491,7 @@ def ki():
                                 os.symlink(res,default_config)
                                 print('\033[{}C\033[1A'.format(10),end = '')
                                 print("\033[1;33m{}\033[0m".format(res.split('/')[-1]))
-                                find_history(res,6)
+                                find_history(res,5)
                                 os.path.exists(ki_unlock) or open(ki_lock,"a").close()
                                 break
                         else:
@@ -510,8 +516,8 @@ def ki():
                     begin = time.perf_counter()
                     while True:
                         if ns:
-                            p = subprocess.Popen("kubectl get pods --no-headers -n "+ns,shell=True,stdout=subprocess.PIPE,stderr=subprocess.PIPE,universal_newlines=True)
-                            pods = [ e.split()[0] for e in p.stdout.readlines() ]
+                            cmd = "kubectl get pods --no-headers -n "+ns
+                            pods = [ e.split()[0] for e in get_data(cmd) ]
                             pod = find_optimal(pods,sys.argv[3]) if pods else None
                             if not (pods and pod):
                                 kn = re.split("[./]",sys.argv[2])
@@ -519,8 +525,8 @@ def ki():
                                 os.environ['KUBECONFIG'] in config_struct[1] and config_struct[1].remove(os.environ['KUBECONFIG'])
                                 if config_struct[1]:
                                     for n,config in enumerate(config_struct[1]):
-                                        p = subprocess.Popen("kubectl get ns --no-headers --kubeconfig "+config,shell=True,stdout=subprocess.PIPE,stderr=subprocess.PIPE,universal_newlines=True)
-                                        ns_list = [ e.split()[0] for e in p.stdout.readlines() ]
+                                        cmd = "kubectl get ns --no-headers --kubeconfig "+config
+                                        ns_list = [ e.split()[0] for e in get_data(cmd) ]
                                         ns = find_optimal(ns_list,ns_pattern)
                                         if ns:
                                             os.environ['KUBECONFIG'] = config
@@ -570,18 +576,15 @@ def ki():
                         else:
                             key = sys.argv[1].split('t')[-1] if sys.argv[1].split('t')[-1].isdigit() else "3"
                             cmd = "kubectl top "+obj.lower()+" -n "+ ns +"  --no-headers|sort --key "+key+" --numeric"
-                        try:
-                            result_lines = subprocess.Popen(cmd,shell=True,stdout=subprocess.PIPE,stderr=subprocess.PIPE,universal_newlines=True).stdout.readlines()
-                        except:
-                            sys.exit()
+                        result_lines = get_data(cmd)
                         if not result_lines:
                             kn = re.split("[./]",sys.argv[2])
                             ns_pattern = kn[-1] if len(kn) > 1 and len(kn[-1].strip()) > 0 else kn[0]
                             os.environ['KUBECONFIG'] in config_struct[1] and config_struct[1].remove(os.environ['KUBECONFIG'])
                             if config_struct[1]:
                                 for n,config in enumerate(config_struct[1]):
-                                    p = subprocess.Popen("kubectl get ns --no-headers --kubeconfig "+config,shell=True,stdout=subprocess.PIPE,stderr=subprocess.PIPE,universal_newlines=True)
-                                    ns_list = [ e.split()[0] for e in p.stdout.readlines() ]
+                                    cmd = "kubectl get ns --no-headers --kubeconfig "+config
+                                    ns_list = [ e.split()[0] for e in get_data(cmd) ]
                                     ns = find_optimal(ns_list,ns_pattern)
                                     if ns:
                                         os.environ['KUBECONFIG'] = config
@@ -616,7 +619,7 @@ def ki():
                                 pod = input("\033[1;35m%s\033[0m\033[5;35m%s\033[0m" % ("select",":")).strip()
                                 num = 10 + len(pod)
                             else:
-                                result_lines = subprocess.Popen(cmd,shell=True,stdout=subprocess.PIPE,stderr=subprocess.PIPE,universal_newlines=True).stdout.readlines()
+                                result_lines = get_data(cmd)
                                 time.sleep(3)
                         except:
                             sys.exit()
@@ -650,7 +653,7 @@ def ki():
                     else:
                         pod = ""
                 else:
-                    print("NotFound")
+                    print("No resources found.")
                     subprocess.Popen("ki -c",shell=True,stdout=subprocess.PIPE,stderr=subprocess.PIPE,universal_newlines=True)
                     sys.exit()
         else:

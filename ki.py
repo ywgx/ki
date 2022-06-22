@@ -94,16 +94,16 @@ def cmd_obj(ns, obj, res, args, iip="x"):
         elif args[0] in ('l','c'):
             regular = args[1:]
             result_list = get_data("kubectl -n "+ns+" get pod "+res+" -o jsonpath='{.spec.containers[:].name}'")[0].split()
-            container = name if name in result_list else "--all-containers"
+            container = "--all-containers"
             if regular:
-                cmd = ( "kubectl -n "+ns+" logs -f "+res+" "+container+" --tail "+regular ) if regular.isdigit() and len(regular) < 12 else ( "kubectl -n "+ns+" logs -f "+res+" "+container+"|grep --color=auto " + ( regular if args[0] == 'l' else "-C 10 "+regular ) )
+                cmd = ( "kubectl -n "+ns+" logs -f "+res+" "+container+" --tail "+regular ) if regular.isdigit() and len(regular) < 12 else ( "kubectl -n "+ns+" logs -f "+res+" "+container+"|grep --color=auto " + ( regular if args[0] in ('l') else "-C 10 "+regular ) )
             else:
                 cmd = "kubectl -n "+ns+" logs -f "+res+" "+container+" --tail 200"
         elif args[0] in ('v'):
             regular = args[1:]
             result_list = get_data("kubectl -n "+ns+" get pod "+res+" -o jsonpath='{.spec.containers[:].name}'")[0].split()
             container = name if name in result_list else "--all-containers"
-            cmd = "kubectl -n "+ns+" logs -f "+res+" "+container+" --previous --tail "+ ( regular if regular and regular.isdigit() and len(regular) < 12 else "100" )
+            cmd = "kubectl -n "+ns+" logs -f "+res+" "+container+" --previous --tail "+ ( regular if regular and regular.isdigit() and len(regular) < 12 else "500" )
         elif args[0] in ('r'):
             cmd = "kubectl -n "+ns+" rollout restart "+obj.lower()+" "+name
         elif args[0] in ('o'):

@@ -208,7 +208,7 @@ def compress_list(l: list):
         l[0] = l[0] - num if l[0] > num else l[0]
         for i in range(len(l)-1):
             if l[i+1] - l[i] > num:
-                l[i+1] -= num-5
+                l[i+1] -= 5
         if l[i+1] == l[-1] and l[i+1] - l[i] < num:
             return l
         else:
@@ -249,6 +249,7 @@ def find_ns(config_struct: list):
                     d = eval(f.read())
                     ns_list = d[config]
                 except:
+                    os.path.exists(ki_cache) and os.unlink(ki_cache)
                     ns_list = cache_ns(config_struct)[config]
         else:
             cmd = "kubectl get ns --no-headers --kubeconfig "+config
@@ -454,7 +455,10 @@ def ki():
     elif len(sys.argv) == 2 and sys.argv[1] in ('-k'):
         info_k()
     elif len(sys.argv) == 2 and sys.argv[1] in ('-c','-cache'):
+        begin = time.perf_counter()
         cache_ns(config_struct)
+        end = time.perf_counter()
+        print("\033[1;33m{}\033[0m".format("[ "+str(round(end-begin,3))+" ] "))
     elif 1 < len(sys.argv) < 4 and sys.argv[1] in ('-s','-select'):
         result_lines = config_struct[1]
         if result_lines and len(result_lines) > 1:
@@ -546,7 +550,7 @@ def ki():
                             else:
                                 end = time.perf_counter()
                                 k8s = os.environ['KUBECONFIG'].split('/')[-1]
-                                switch_config(switch_num,k8s,ns,str(end-begin))
+                                switch_config(switch_num,k8s,ns,str(round(end-begin,3)))
                                 name = pod
                                 if sys.argv[1] in ('-i'):
                                     cmd = "kubectl -n "+ns+" exec -it "+pod+" -- sh"
@@ -605,7 +609,7 @@ def ki():
                             if flag:
                                 end = time.perf_counter()
                                 k8s = os.environ['KUBECONFIG'].split('/')[-1]
-                                switch = switch_config(switch_num,k8s,ns,str(end-begin))
+                                switch = switch_config(switch_num,k8s,ns,str(round(end-begin,3)))
                                 flag = False
                             print("\033[1;32m{}\033[0m".format(cmd.split(' --')[0]))
                     if not (pod.isdigit() and int(pod) < len(result_lines)) and pod != '*':

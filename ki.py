@@ -203,13 +203,12 @@ def find_config():
     return kubeconfig,result_lines,result_num
 def compress_list(l: list):
     if len(l) > 1:
-        i = 0
-        num = 15
+        num = 10
         l[0] = l[0] - num if l[0] > num else l[0]
         for i in range(len(l)-1):
             if l[i+1] - l[i] > num:
-                l[i+1] -= 5
-        if l[i+1] == l[-1] and l[i+1] - l[i] < num:
+                l[i+1] = l[i] + num
+        if l[i+1] == l[-1] and l[i+1] - l[i] < (num+1):
             return l
         else:
             return compress_list(l)

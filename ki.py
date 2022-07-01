@@ -203,8 +203,8 @@ def find_config():
     return kubeconfig,result_lines,result_num
 def compress_list(l: list):
     if len(l) > 1:
-        num = 10
-        l[0] = l[0] - num if l[0] > num else l[0]
+        num = 15
+        l[0] = 1 if l[0] > num else l[0]
         for i in range(len(l)-1):
             if l[i+1] - l[i] > num:
                 l[i+1] = l[i] + num
@@ -502,7 +502,7 @@ def ki():
                                 os.symlink(res,default_config)
                                 print('\033[{}C\033[1A'.format(10),end = '')
                                 print("\033[1;33m{}\033[0m".format(res.split('/')[-1]))
-                                find_history(res,5)
+                                find_history(res,6)
                                 os.path.exists(ki_unlock) or open(ki_lock,"a").close()
                                 break
                         else:

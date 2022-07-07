@@ -1,9 +1,9 @@
 #!/usr/bin/python3
 #*************************************************
 # Description : Kubectl Pro
-# Version     : 2.0
+# Version     : 2.1
 #*************************************************
-import os,re,sys,time,subprocess
+import os,re,sys,time,readline,subprocess
 #-----------------VAR-----------------------------
 home = os.environ["HOME"]
 history = home + "/.history"

@@ -93,7 +93,10 @@ def cmd_obj(ns, obj, res, args, iip="x"):
             cmd = "kubectl -n "+ns+" "+action+" "+obj.lower()+",service,ingress "+name
         elif args[0] in ('l','c'):
             regular = args[1:]
-            result_list = get_data("kubectl -n "+ns+" get pod "+res+" -o jsonpath='{.spec.containers[:].name}'")[0].split()
+            try:
+                result_list = get_data("kubectl -n "+ns+" get pod "+res+" -o jsonpath='{.spec.containers[:].name}'")[0].split()
+            except:
+                sys.exit()
             container = "--all-containers"
             if regular:
                 cmd = ( "kubectl -n "+ns+" logs -f "+res+" "+container+" --tail "+regular ) if regular.isdigit() and len(regular) < 12 else ( "kubectl -n "+ns+" logs -f "+res+" "+container+"|grep --color=auto " + ( regular if args[0] in ('l') else "-C 10 "+regular ) )
@@ -101,7 +104,10 @@ def cmd_obj(ns, obj, res, args, iip="x"):
                 cmd = "kubectl -n "+ns+" logs -f "+res+" "+container+" --tail 200"
         elif args[0] in ('v'):
             regular = args[1:]
-            result_list = get_data("kubectl -n "+ns+" get pod "+res+" -o jsonpath='{.spec.containers[:].name}'")[0].split()
+            try:
+                result_list = get_data("kubectl -n "+ns+" get pod "+res+" -o jsonpath='{.spec.containers[:].name}'")[0].split()
+            except:
+                sys.exit()
             container = name if name in result_list else "--all-containers"
             cmd = "kubectl -n "+ns+" logs -f "+res+" "+container+" --previous --tail "+ ( regular if regular and regular.isdigit() and len(regular) < 12 else "500" )
         elif args[0] in ('r'):
@@ -308,14 +314,19 @@ def get_obj(ns: str,res: str,args='x'):
     l1 = res.split('-')
     l2 = get_data(cmd)
     obj = l2[0] if l2 else "Pod"
-    if obj in ("StatefulSet","DaemonSet","Job"):
-        del l1[-1:]
-    elif obj in ("ReplicaSet","Deployment"):
+    if obj in ("ReplicaSet","Deployment"):
         if len(res) == 63:
             del l1[-1:]
         else:
             del l1[-2:]
         obj = "Deployment"
+    elif obj in ("StatefulSet","DaemonSet"):
+        del l1[-1:]
+    elif obj in ("Job"):
+        if '--' in res:
+            del l1[-3:]
+        else:
+            del l1[-1:]
     name = ('-').join(l1)
     if args[-1] in d.keys():
         obj = d[args[-1]]
@@ -556,7 +567,7 @@ def ki():
                                 if sys.argv[1] in ('-i'):
                                     cmd = "kubectl -n "+ns+" exec -it "+pod+" -- sh"
                                 elif sys.argv[1] in ('-l'):
-                                    cmd = "kubectl -n "+ns+" logs -f "+pod+" --all-containers --tail 50"
+                                    cmd = "kubectl -n "+ns+" logs -f "+pod+" --all-containers --tail 1000"
                                 else:
                                     l = get_obj(ns,pod,sys.argv[1])
                                     obj = l[0]

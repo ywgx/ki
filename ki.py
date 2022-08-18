@@ -1,7 +1,7 @@
 #!/usr/bin/python3
 #*************************************************
 # Description : Kubectl Pro
-# Version     : 2.1
+# Version     : 2.2
 #*************************************************
 import os,re,sys,time,readline,subprocess
 #-----------------VAR-----------------------------
@@ -17,6 +17,7 @@ ki_cache = history + "/.cache"
 ki_ns_dict = history + "/.ns_dict"
 ki_pod_dict = history + "/.pod_dict"
 ki_latest_ns_dict = history + "/.latest_ns_dict"
+ki_current_ns_dict = history + "/.current_ns_dict"
 #-----------------FUN-----------------------------
 def cmp_file(f1, f2):
     if os.stat(f2).st_size != os.stat(f1).st_size:
@@ -206,7 +207,7 @@ def find_config():
                 pass
             os.symlink(result_lines[0],default_config)
             kubeconfig = result_lines[0].split("/")[-1]
-    return kubeconfig,result_lines,result_num
+    return [kubeconfig,result_lines,result_num]
 def compress_list(l: list):
     if len(l) > 1:
         num = 15
@@ -242,16 +243,35 @@ def find_ns(config_struct: list):
     ns = None
     kubeconfig = None
     switch = False
+    ns_dict = ki_ns_dict
     result_num = config_struct[-1]
     kn = re.split("[./]",sys.argv[2])
     ns_pattern = kn[-1] if len(kn) > 1 and len(kn[-1].strip()) > 0 else kn[0]
+
+    if os.path.exists(ki_current_ns_dict) and int(time.time()-os.stat(ki_current_ns_dict).st_mtime) < 300:
+        with open(ki_current_ns_dict) as f:
+            try:
+                d = eval(f.read())
+                current_config = os.path.realpath(default_config)
+                if current_config in d:
+                    ns_list = d[current_config]
+                    if find_optimal(ns_list,ns_pattern):
+                        ns_dict = ki_current_ns_dict
+                        config_struct[1] = [current_config]
+            except:
+                os.path.exists(ki_cache) and os.unlink(ki_cache)
+                ns_list = cache_ns(config_struct)[config]
+
     config = find_optimal(config_struct[1],kn[0]) or default_config if len(kn) > 1 else default_config
-    current_config = os.path.realpath(config)
-    current_config in config_struct[1] and config_struct[1].remove(current_config)
-    config_struct[1].insert(0,current_config)
+
+    if len(config_struct[1]) > 1:
+        current_config = os.path.realpath(config)
+        current_config in config_struct[1] and config_struct[1].remove(current_config)
+        config_struct[1].insert(0,current_config)
+
     for n,config in enumerate(config_struct[1]):
-        if os.path.exists(ki_ns_dict):
-            with open(ki_ns_dict,'r') as f:
+        if os.path.exists(ns_dict):
+            with open(ns_dict,'r') as f:
                 try:
                     d = eval(f.read())
                     ns_list = d[config]
@@ -271,6 +291,15 @@ def cache_ns(config_struct: list):
         open(ki_cache,"a").close()
         d = {}
         d_latest = {}
+
+        current_d = {}
+        current_config = os.path.realpath(default_config)
+        cmd = "kubectl get ns --sort-by=.metadata.creationTimestamp --no-headers --kubeconfig " + current_config
+        l = get_data(cmd)
+        ns_list = [ e.split()[0] for e in l ]
+        current_d[current_config] = ns_list
+        with open(ki_current_ns_dict,'w') as f: f.write(str(current_d))
+
         for config in config_struct[1]:
             s = []
             cmd = "kubectl get ns --sort-by=.metadata.creationTimestamp --no-headers --kubeconfig "+config
@@ -396,6 +425,7 @@ def info_w(k8s_path: str,result_lines: list):
     else:
         print("\033[1;32m{}\033[0m".format("[ "+os.path.realpath(default_config).split("/")[-1]+" ]"))
         os.path.exists(ki_lock) and int(time.time()-os.stat(ki_lock).st_mtime) > 3600 and os.unlink(ki_lock)
+        os.path.exists(ki_current_ns_dict) and int(time.time()-os.stat(ki_current_ns_dict).st_mtime) > 300 and os.unlink(ki_current_ns_dict)
 def info_k():
     if os.path.exists(ki_pod_dict) and os.path.exists(ki_dict):
         with open(ki_pod_dict,'r') as f1, open(ki_dict,'r') as f2:

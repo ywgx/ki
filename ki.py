@@ -12,8 +12,8 @@ ki_all = history + "/.all"
 ki_dict = history + "/.dict"
 ki_last = history + "/.last"
 ki_lock = history + "/.lock"
-ki_unlock = history + "/.unlock"
 ki_cache = history + "/.cache"
+ki_unlock = history + "/.unlock"
 ki_ns_dict = history + "/.ns_dict"
 ki_pod_dict = history + "/.pod_dict"
 ki_latest_ns_dict = history + "/.latest_ns_dict"
@@ -177,7 +177,7 @@ def find_config():
                         if not os.path.exists(config):
                             del dc[config]
                 except:
-                    os.remove(ki_dict)
+                    os.unlink(ki_dict)
         if os.path.exists(ki_last) and os.path.getsize(ki_last) > 0:
             with open(ki_last,'r') as f:
                 last_config = f.read()
@@ -209,7 +209,7 @@ def find_config():
             kubeconfig = result_lines[0].split("/")[-1]
     return [kubeconfig,result_lines,result_num]
 def compress_list(l: list):
-    if len(l) > 1:
+    if len(l) > 3:
         num = 15
         l[0] = 1 if l[0] > num else l[0]
         for i in range(len(l)-1):
@@ -220,6 +220,8 @@ def compress_list(l: list):
         if l[i+1] == l[-1] and l[i+1] - l[i] < (num+1):
             return l
         else:
+            l[0] = 1
+            l[i+1] = l[i] + 1
             return compress_list(l)
     else:
         return l
@@ -454,7 +456,7 @@ def record(res: str,name: str,obj: str,cmd: str,kubeconfig: str,ns: str):
                 if len(name_dc) > 5: del name_dc[5:]
                 dc[key] = [name,name_dc]
             except:
-                os.remove(ki_pod_dict)
+                os.unlink(ki_pod_dict)
     else:
         dc[key] = [name,[(name,1)]]
     with open(ki_pod_dict,'w') as f: f.write(str(dc))
@@ -519,7 +521,7 @@ def ki():
                             if e != default_config and e != os.path.realpath(default_config):
                                 lr.add(e)
                 for e in lr:
-                    os.remove(e)
+                    os.unlink(e)
                     result_lines.remove(e)
                 if os.path.exists(default_config):
                     pattern = ""

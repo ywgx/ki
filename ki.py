@@ -1,7 +1,7 @@
 #!/usr/bin/python3
 #*************************************************
 # Description : Kubectl Pro
-# Version     : 2.2
+# Version     : 2.3
 #*************************************************
 import os,re,sys,time,readline,subprocess
 #-----------------VAR-----------------------------
@@ -113,6 +113,8 @@ def cmd_obj(ns, obj, res, args, iip="x"):
             cmd = "kubectl -n "+ns+" logs -f "+res+" "+container+" --previous --tail "+ ( regular if regular and regular.isdigit() and len(regular) < 12 else "500" )
         elif args[0] in ('r'):
             cmd = "kubectl -n "+ns+" rollout restart "+obj.lower()+" "+name
+        elif args[0] in ('u'):
+            cmd = "kubectl -n "+ns+" rollout undo "+obj.lower()+"/"+name
         elif args[0] in ('o'):
             action = "get"
             if len(args) > 1:
@@ -126,6 +128,11 @@ def cmd_obj(ns, obj, res, args, iip="x"):
                 if obj == 'Pod': name = res
             cmd = "kubectl -n "+ns+" "+action+" "+obj.lower()+" "+name
         elif args[0] in ('s'):
+            regular = args.split('s')[-1]
+            action = "scale"
+            replicas = regular if regular.isdigit() and -1 < int(regular) < 30 else str(1)
+            cmd = "kubectl -n "+ns+" "+action+" --replicas="+replicas+" "+obj.lower()+"/"+name
+        elif args[0] in ('u'):
             regular = args.split('s')[-1]
             action = "scale"
             replicas = regular if regular.isdigit() and -1 < int(regular) < 30 else str(1)
@@ -232,7 +239,7 @@ def find_history(config,num=1):
             with open(ki_dict,'r') as f:
                 dc = eval(f.read())
                 dc[config] = dc[config] + num if config in dc else 1
-                dc.pop(default_config,404)
+                dc.pop(default_config,None)
                 for config in list(dc.keys()):
                     if not os.path.exists(config): del dc[config]
         else:
@@ -437,7 +444,7 @@ def info_k():
                 print("{:<56}{:<32}{}".format(k,dc1[k][0],dc1[k][1]))
             for k in sorted(dc2.items(),key=lambda d:d[1]):
                 print("{:<56}{}".format(k[0].split('/')[-1],k[1]))
-def record(res: str,name: str,obj: str,cmd: str,kubeconfig: str,ns: str):
+def record(res: str,name: str,obj: str,cmd: str,kubeconfig: str,ns: str,config_struct: list):
     l = os.environ['SSH_CONNECTION'].split() if 'SSH_CONNECTION' in os.environ else ['NULL','NULL','NULL']
     USER = os.environ['USER'] if 'USER' in os.environ else "NULL"
     HOST = l[2]
@@ -450,6 +457,12 @@ def record(res: str,name: str,obj: str,cmd: str,kubeconfig: str,ns: str):
         with open(ki_pod_dict,'r') as f:
             try:
                 dc = eval(f.read())
+                dc_key_set = set(i.split('/')[0] for i in list(dc.keys()))
+                kubeconfig_set = set(i.split('/')[-1] for i in config_struct[1])
+                for i in dc_key_set - kubeconfig_set:
+                    for j in dc.keys():
+                        if i == j.split('/')[0]:
+                            dc.pop(j,None)
                 name_dc = dict(dc[key][1]) if key in dc else {}
                 name_dc[name] = name_dc[name] + 1 if name in name_dc else 1
                 name_dc = sorted(name_dc.items(),key = lambda name_dc:(name_dc[1], name_dc[0]),reverse=True)
@@ -612,7 +625,7 @@ def ki():
                                         action2 = " -o yaml > "+name+"."+obj+".yml"
                                     cmd = "kubectl -n "+ns+" "+action+" "+obj.lower()+" "+name+action2
                                 print("\033[1;32m{}\033[0m".format(cmd))
-                                record(pod,name,obj,cmd,k8s,ns)
+                                record(pod,name,obj,cmd,k8s,ns,config_struct)
                                 os.system(cmd)
                                 print('\r')
                                 break
@@ -703,7 +716,7 @@ def ki():
                             l = cmd_obj(ns,obj,res,args,iip)
                             print('\033[{}C\033[1A'.format(num),end = '')
                             print("\033[1;32m{}\033[0m".format(l[0].split('  --')[0]))
-                            record(res,l[2],l[1],l[0],k8s,ns)
+                            record(res,l[2],l[1],l[0],k8s,ns,config_struct)
                             os.system(l[0])
                             print('\r')
                     else:

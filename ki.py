@@ -1,7 +1,7 @@
 #!/usr/bin/python3
 #*************************************************
 # Description : Kubectl Pro
-# Version     : 2.3
+# Version     : 2.4
 #*************************************************
 import os,re,sys,time,readline,subprocess
 #-----------------VAR-----------------------------
@@ -48,7 +48,7 @@ def cmd_obj(ns, obj, res, args, iip="x"):
         cmd = "kubectl -n "+ns+" "+action+" "+obj+"  --sort-by=.metadata.creationTimestamp"
     elif obj in ("Deployment","DaemonSet","Service","StatefulSet","Ingress","ConfigMap","Secret","PersistentVolume","PersistentVolumeClaim","CronJob","Job"):
         action2 = ""
-        if args == "cle":
+        if args in ("cle","delete"):
             action = "delete"
         elif args[0] == "e":
             action = "edit"
@@ -69,7 +69,7 @@ def cmd_obj(ns, obj, res, args, iip="x"):
         elif args[0] == 'o':
             action = "get"
             action2 = " -o yaml > "+ns+"."+obj.lower()+".yml"
-        elif args == "cle":
+        elif args in ("cle","delete"):
             action = "delete"
         else:
             action = "get"
@@ -86,7 +86,7 @@ def cmd_obj(ns, obj, res, args, iip="x"):
         elif args == "delf":
             action = "delete"
             cmd = "kubectl -n "+ns+" delete pod "+res+"  --grace-period=0 --force"
-        elif args == "cle":
+        elif args in ("cle","delete"):
             action = "delete"
             cmd = "kubectl -n "+ns+" "+action+" "+obj.lower()+" "+name
         elif args == "destory":

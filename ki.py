@@ -140,7 +140,7 @@ def cmd_obj(ns, obj, res, args, iip="x"):
         elif args[0] in ('n'):
             action = "ssh"
             try:
-                nodeName = get_data("kubectl -n "+ns+" get pod "+res+" -o jsonpath='{.spec.nodeName}'")[0]
+                nodeName = get_data("kubectl -n "+ns+" get pod "+res+" -o jsonpath='{.status.hostIP}'")[0]
             except:
                 sys.exit()
             cmd = action +" root@"+find_ip(nodeName)

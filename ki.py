@@ -1,7 +1,7 @@
 #!/usr/bin/python3
 #*************************************************
 # Description : Kubectl Pro
-# Version     : 2.4
+# Version     : 2.5
 #*************************************************
 import os,re,sys,time,readline,subprocess
 #-----------------VAR-----------------------------
@@ -137,6 +137,13 @@ def cmd_obj(ns, obj, res, args, iip="x"):
             action = "scale"
             replicas = regular if regular.isdigit() and -1 < int(regular) < 30 else str(1)
             cmd = "kubectl -n "+ns+" "+action+" --replicas="+replicas+" "+obj.lower()+"/"+name
+        elif args[0] in ('n'):
+            action = "ssh"
+            try:
+                nodeName = get_data("kubectl -n "+ns+" get pod "+res+" -o jsonpath='{.spec.nodeName}'")[0]
+            except:
+                sys.exit()
+            cmd = action +" root@"+find_ip(nodeName)
         else:
             cmd = "kubectl -n "+ns+" exec -it "+res+" -- sh"
     return cmd,obj,name
@@ -474,17 +481,17 @@ def record(res: str,name: str,obj: str,cmd: str,kubeconfig: str,ns: str,config_s
         dc[key] = [name,[(name,1)]]
     with open(ki_pod_dict,'w') as f: f.write(str(dc))
 def ki():
-    ( len(sys.argv) == 1 or sys.argv[1] not in ('-n','-t','-t1','-t2','-r','-i','-e','-es','-ei','-o','-os','-oi','-restart','-s','-select','-l','-lock','-u','-unlock','--w','--watch','-h','-help','-c','-cache','-k','-a') ) and sys.argv.insert(1,'-n')
+    ( len(sys.argv) == 1 or sys.argv[1] not in ('-n','-t','-t1','-t2','-r','-i','-e','-es','-ei','-o','-os','-oi','-restart','-s','-select','-l','--l','--lock','--u','--unlock','--w','--watch','-h','-help','-c','-cache','-k','-a') ) and sys.argv.insert(1,'-n')
     len(sys.argv) == 2 and sys.argv[1] in ('-i','-e','-es','-ei','-o','-os','-oi') and sys.argv.insert(1,'-n')
     len(sys.argv) == 2 and sys.argv[1] in ('-a') and sys.argv.extend(['kube','Pod'])
     len(sys.argv) == 3 and sys.argv[1] in ('-a') and sys.argv.insert(2,'kube')
     config_struct = find_config()
     if len(sys.argv) == 2 and sys.argv[1] in ('--w','--watch'):
         info_w(os.environ["PWD"],config_struct[1])
-    elif len(sys.argv) == 2 and sys.argv[1] in ('-l','-lock'):
+    elif len(sys.argv) == 2 and sys.argv[1] in ('--l','--lock'):
         os.path.exists(ki_unlock) and os.unlink(ki_unlock)
         os.path.exists(ki_lock) or open(ki_lock,"a").close()
-    elif len(sys.argv) == 2 and sys.argv[1] in ('-u','-unlock'):
+    elif len(sys.argv) == 2 and sys.argv[1] in ('--u','--unlock'):
         os.path.exists(ki_unlock) or open(ki_unlock,"a").close()
         os.path.exists(ki_lock) and os.unlink(ki_lock)
     elif len(sys.argv) == 2 and sys.argv[1] == '-n':

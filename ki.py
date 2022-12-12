@@ -1,7 +1,7 @@
 #!/usr/bin/python3
 #*************************************************
 # Description : Kubectl Pro
-# Version     : 3.0
+# Version     : 3.1
 #*************************************************
 import os,re,sys,time,readline,subprocess
 #-----------------VAR-----------------------------
@@ -12,6 +12,7 @@ ki_all = history + "/.all"
 ki_dict = history + "/.dict"
 ki_last = history + "/.last"
 ki_lock = history + "/.lock"
+ki_line = history + "/.line"
 ki_cache = history + "/.cache"
 ki_unlock = history + "/.unlock"
 ki_ns_dict = history + "/.ns_dict"
@@ -100,9 +101,21 @@ def cmd_obj(ns, obj, res, args, iip="x"):
                 sys.exit()
             container = "--all-containers"
             if regular:
+                if regular.isdigit():
+                    with open(ki_line,'w') as f:
+                        f.write(regular)
                 cmd = ( "kubectl -n "+ns+" logs -f "+res+" "+container+" --tail "+regular ) if regular.isdigit() and len(regular) < 12 else ( "kubectl -n "+ns+" logs -f "+res+" "+container+"|grep --color=auto " + ( regular if args[0] in ('l') else "-C 10 "+regular ) )
             else:
-                cmd = "kubectl -n "+ns+" logs -f "+res+" "+container+" --tail 200"
+                if 'KI_LINE' in os.environ:
+                    line = os.environ['KI_LINE']
+                elif os.path.exists(ki_line):
+                    with open(ki_line,'r') as f:
+                        line_file = str(f.read())
+                        os.environ['KI_LINE'] = line_file if line_file.isdigit() else str(200)
+                        line = os.environ['KI_LINE']
+                else:
+                    line = str(200)
+                cmd = "kubectl -n "+ns+" logs -f "+res+" "+container+" --tail "+line
         elif args[0] in ('v'):
             regular = args[1:]
             try:
@@ -339,7 +352,7 @@ def switch_config(switch_num: int,k8s: str,ns: str,time: str):
         os.symlink(os.environ['KUBECONFIG'],default_config)
         print("\033[1;33m{}\033[0m".format("[ "+time+"  "+str(switch_num+1)+"-SWITCH  "+k8s+" / "+ns+" ] "))
         find_history(os.environ['KUBECONFIG'],1)
-        switch_num > 0 and subprocess.Popen("ki -c",shell=True,stdout=subprocess.PIPE,stderr=subprocess.PIPE,universal_newlines=True)
+        switch_num > 0 and subprocess.Popen("ki --c",shell=True,stdout=subprocess.PIPE,stderr=subprocess.PIPE,universal_newlines=True)
         switch = True
     return switch
 def get_data(cmd: str):
@@ -476,7 +489,7 @@ def record(res: str,name: str,obj: str,cmd: str,kubeconfig: str,ns: str,config_s
         dc[key] = [name,[(name,1)]]
     with open(ki_pod_dict,'w') as f: f.write(str(dc))
 def ki():
-    ( len(sys.argv) == 1 or sys.argv[1] not in ('-n','-t','-t1','-t2','-r','-i','-e','-es','-ei','-o','-os','-oi','-restart','-s','-select','-l','--l','--lock','--u','--unlock','--w','--watch','--h','--help','-c','-cache','-k','-a') ) and sys.argv.insert(1,'-n')
+    ( len(sys.argv) == 1 or sys.argv[1] not in ('-n','-t','-t1','-t2','-r','-i','-e','-es','-ei','-o','-os','-oi','-restart','-s','-select','-l','--l','--lock','--u','--unlock','--w','--watch','--h','--help','--c','--cache','--k','-a') ) and sys.argv.insert(1,'-n')
     len(sys.argv) == 2 and sys.argv[1] in ('-i','-e','-es','-ei','-o','-os','-oi') and sys.argv.insert(1,'-n')
     len(sys.argv) == 2 and sys.argv[1] in ('-a') and sys.argv.extend(['kube','Pod'])
     len(sys.argv) == 3 and sys.argv[1] in ('-a') and sys.argv.insert(2,'kube')
@@ -510,10 +523,10 @@ def ki():
                     flag = False
         else:
             flag = False
-        flag or subprocess.Popen("ki -c",shell=True,stdout=subprocess.PIPE,stderr=subprocess.PIPE,universal_newlines=True)
-    elif len(sys.argv) == 2 and sys.argv[1] in ('-k'):
+        flag or subprocess.Popen("ki --c",shell=True,stdout=subprocess.PIPE,stderr=subprocess.PIPE,universal_newlines=True)
+    elif len(sys.argv) == 2 and sys.argv[1] in ('--k'):
         info_k()
-    elif len(sys.argv) == 2 and sys.argv[1] in ('-c','-cache'):
+    elif len(sys.argv) == 2 and sys.argv[1] in ('--c','--cache'):
         begin = time.perf_counter()
         cache_ns(config_struct)
         end = time.perf_counter()
@@ -662,7 +675,7 @@ def ki():
                                         switch_num += 1
                                         break
                             else:
-                                print("No namespace found in the kubernetes.")
+                                print("No resources found.")
                                 break
                         else:
                             if flag:
@@ -725,11 +738,11 @@ def ki():
                         pod = ""
                 else:
                     print("No resources found.")
-                    subprocess.Popen("ki -c",shell=True,stdout=subprocess.PIPE,stderr=subprocess.PIPE,universal_newlines=True)
+                    subprocess.Popen("ki --c",shell=True,stdout=subprocess.PIPE,stderr=subprocess.PIPE,universal_newlines=True)
                     sys.exit()
         else:
             print("No namespace found in the kubernetes.")
-            subprocess.Popen("ki -c",shell=True,stdout=subprocess.PIPE,stderr=subprocess.PIPE,universal_newlines=True)
+            subprocess.Popen("ki --c",shell=True,stdout=subprocess.PIPE,stderr=subprocess.PIPE,universal_newlines=True)
     elif len(sys.argv) == 2 and sys.argv[1] in ('--h','--help'):
         style = "\033[1;32m%s\033[0m"
         print(style % "Kubectl pro controls the Kubernetes cluster manager")
@@ -754,7 +767,7 @@ def ki():
         print(style % "18. ki -e[si] $ns $pod","Edit the Deploy/Service/Ingress for a container,this way can be one-stop")
         print(style % "19. ki $k8s.$ns","Select the kubernetes which namespace in the kubernetes ( if there are multiple ~/.kube/kubeconfig*,this way can be one-stop. )")
         print(style % "20. ki -s","Select the kubernetes to be connected ( if there are multiple ~/.kube/kubeconfig*,the kubeconfig storage can be kubeconfig-hz,kubeconfig-sh,etc. )")
-        print(style % "21. ki -c","Enable write caching of namespace ( ~/.history/.ns_dict )")
+        print(style % "21. ki --c","Enable write caching of namespace ( ~/.history/.ns_dict )")
         print(style % "22. ki -a","List all pods in the kubernetes")
 def main():
     ki()

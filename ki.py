@@ -1,7 +1,7 @@
 #!/usr/bin/python3
 #*************************************************
 # Description : Kubectl Pro
-# Version     : 3.1
+# Version     : 3.2
 #*************************************************
 import os,re,sys,time,readline,subprocess
 #-----------------VAR-----------------------------
@@ -627,7 +627,8 @@ def ki():
                                 if sys.argv[1] in ('-i'):
                                     cmd = "kubectl -n "+ns+" exec -it "+pod+" -- sh"
                                 elif sys.argv[1] in ('-l'):
-                                    cmd = "kubectl -n "+ns+" logs -f "+pod+" --all-containers --tail 1000"
+                                    line = os.environ['KI_LINE'] if 'KI_LINE' in os.environ else str(1000)
+                                    cmd = "kubectl -n "+ns+" logs -f "+pod+" --all-containers --tail "+line
                                 else:
                                     l = get_obj(ns,pod,sys.argv[1])
                                     obj = l[0]

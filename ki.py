@@ -111,7 +111,7 @@ def cmd_obj(ns, obj, res, args, iip="x"):
                 elif os.path.exists(ki_line):
                     with open(ki_line,'r') as f:
                         line_file = str(f.read())
-                        os.environ['KI_LINE'] = line_file if line_file.isdigit() else str(200)
+                        os.environ['KI_LINE'] = line_file if line_file.isdigit() and int(line_file) < 10000 else str(200)
                         line = os.environ['KI_LINE']
                 else:
                     line = str(200)

@@ -102,8 +102,10 @@ def cmd_obj(ns, obj, res, args, iip="x"):
             container = "--all-containers"
             if regular:
                 if regular.isdigit():
-                    with open(ki_line,'w') as f:
-                        f.write(regular)
+                    if 0 < int(regular) < 10000:
+                        os.environ['KI_LINE'] = regular
+                        with open(ki_line,'w') as f:
+                            f.write(regular)
                 cmd = ( "kubectl -n "+ns+" logs -f "+res+" "+container+" --tail "+regular ) if regular.isdigit() and len(regular) < 12 else ( "kubectl -n "+ns+" logs -f "+res+" "+container+"|grep --color=auto " + ( regular if args[0] in ('l') else "-C 10 "+regular ) )
             else:
                 if 'KI_LINE' in os.environ:
@@ -111,7 +113,7 @@ def cmd_obj(ns, obj, res, args, iip="x"):
                 elif os.path.exists(ki_line):
                     with open(ki_line,'r') as f:
                         line_file = str(f.read())
-                        os.environ['KI_LINE'] = line_file if line_file.isdigit() and int(line_file) < 10000 else str(200)
+                        os.environ['KI_LINE'] = line_file if line_file.isdigit() else str(200)
                         line = os.environ['KI_LINE']
                 else:
                     line = str(200)

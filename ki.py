@@ -1,7 +1,7 @@
 #!/usr/bin/python3
 #*************************************************
 # Description : Kubectl Pro
-# Version     : 3.2
+# Version     : 3.3
 #*************************************************
 import os,re,sys,time,readline,subprocess
 #-----------------VAR-----------------------------
@@ -602,7 +602,7 @@ def ki():
                     begin = time.perf_counter()
                     while True:
                         if ns:
-                            cmd = "kubectl get pods --no-headers -n "+ns
+                            cmd = "kubectl get pod --no-headers --field-selector=status.phase=Running -n "+ns
                             pods = [ e.split()[0] for e in get_data(cmd) ]
                             pod = find_optimal(pods,sys.argv[3]) if pods else None
                             if not (pods and pod):

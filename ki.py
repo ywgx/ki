@@ -1,7 +1,7 @@
 #!/usr/bin/python3
 #*************************************************
 # Description : Kubectl Pro
-# Version     : 3.4
+# Version     : 3.5
 #*************************************************
 import os,re,sys,time,readline,subprocess
 #-----------------VAR-----------------------------
@@ -90,7 +90,7 @@ def cmd_obj(ns, obj, res, args, iip="x"):
         elif args in ("cle","delete"):
             action = "delete"
             cmd = "kubectl -n "+ns+" "+action+" "+obj.lower()+" "+name
-        elif args == "destory":
+        elif args in ("destroy","destory"):
             action = "delete"
             cmd = "kubectl -n "+ns+" "+action+" "+obj.lower()+",service,ingress "+name
         elif args[0] in ('l','c'):
@@ -692,7 +692,10 @@ def ki():
                     if result_lines:
                         now = time.strftime("%T",time.localtime())
                         for n,e in enumerate(result_lines):
-                            print("\033[1;32m{}\033[0m {}".format(n,e.strip()))
+                            try:
+                                print("\033[1;32m{}\033[0m {}".format(n,e.strip()))
+                            except:
+                                pass
                         if n > 3:
                             style = "\033[1;33m{}\033[0m" if switch else "\033[1;32m{}\033[0m"
                             string = "[ "+k8s+" / "+ns+" --- "+obj+" ] [ "+now+" ]" if sys.argv[1] not in ('-a','--a') and obj not in ('PersistentVolume') else "[ "+k8s+" --- "+obj+" ] [ "+now+" ]"

@@ -1,7 +1,7 @@
 #!/usr/bin/python3
 #*************************************************
 # Description : Kubectl Pro
-# Version     : 3.5
+# Version     : 3.6
 #*************************************************
 import os,re,sys,time,readline,subprocess
 #-----------------VAR-----------------------------
@@ -158,8 +158,9 @@ def cmd_obj(ns, obj, res, args, iip="x"):
             cmd = "kubectl -n "+ns+" exec -it "+res+" -- sh"
     return cmd,obj,name
 def find_ip(res: str):
-    ip = re.findall(r'[0-9]+(?:\.[0-9]+){3}',res)
-    return ip[0] if ip else ""
+    ip_regex = r'\b\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}\b'
+    ips = re.findall(ip_regex, res)
+    return ips[0] if ips else ""
 def find_optimal(namespace_list: list, namespace: str):
     namespace_list.sort()
     indexes = [row.index(namespace) * 0.8 if namespace in row else 10000 for row in namespace_list]
@@ -232,23 +233,27 @@ def find_config():
             os.symlink(result_lines[0],default_config)
             kubeconfig = result_lines[0].split("/")[-1]
     return [kubeconfig,result_lines,result_num]
+
 def compress_list(l: list):
     if len(l) > 3:
         num = 15
-        l[0] = 1 if l[0] > num else l[0]
-        for i in range(len(l)-1):
-            if l[i+1] - l[i] > num and l[i] > 0 and i+2 <= len(l) - 1:
+        i = 0
+        while i + 2 < len(l):
+            if l[i+1] - l[i] > num and l[i] > 0 and l[i+2] > 1:
                 l[i] -= 1
-                l[i+1] = l[i] + num
+                l[i+1] = min(l[i] + num, l[i+1])
                 l[i+2] -= 2
-        if l[i+1] == l[-1] and l[i+1] - l[i] < (num+1):
+            else:
+                i += 1
+        if l[-1] - l[-2] < num + 1:
             return l
         else:
             l[0] = 1
-            l[i+1] = l[i] + 1
+            l[-1] = l[-2] + 1
             return compress_list(l)
     else:
         return l
+
 def find_history(config,num=1):
     if config != header_config:
         dc = {}
@@ -386,6 +391,7 @@ def get_obj(ns: str,res: str,args='x'):
     if args[-1] in d.keys():
         obj = d[args[-1]]
     return obj,name
+
 def get_feature(ns_list: list):
     P = 177
     MOD = 192073433
@@ -751,31 +757,33 @@ def ki():
             subprocess.Popen("ki --c",shell=True,stdout=subprocess.PIPE,stderr=subprocess.PIPE,universal_newlines=True)
     elif len(sys.argv) == 2 and sys.argv[1] in ('--h','--help'):
         style = "\033[1;32m%s\033[0m"
-        print(style % "Kubectl pro controls the Kubernetes cluster manager")
-        print("\nFind more information at: https://ki.xabc.io\n")
-        print(style % "1. ki","List all namespaces")
-        print(style % "2. ki xx","List all pods in the namespace ( if there are multiple ~/.kube/kubeconfig*,the best matching kubeconfig will be found ),the namespace parameter supports fuzzy matching,after outputting the pod list, select: xxx filters the query\n         select: index l ( [ l ] Print the logs for a container in a pod or specified resource )\n         select: index l 100 ( Print the logs of the latest 100 lines )\n         select: index l xxx ( Print the logs and filters the specified characters )\n         select: index r ( [ r ] Rollout restart the pod )\n         select: index o ( [ o ] Output the [Deployment,StatefulSet,Service,Ingress,Configmap,Secret].yml file )\n         select: index del ( [ del ] Delete the pod )\n         select: index cle ( [ cle ] Delete the Deployment/StatefulSet )\n         select: index e[siVGDE] ( [ e[siVGDE] ] Edit the Deploy/Service/Ingress/VirtualService/Gateway/DestinationRule/EnvoyFilter )\n         select: index s5 ( [ s3 ] Set the Deploy/StatefulSet replicas=3 )\n         select: index dp ( Describe a pod )\n         select: * ( Watching... )")
-        print(style % "3. ki xx d","List the Deployment of a namespace")
-        print(style % "4. ki xx f","List the StatefulSet of a namespace")
-        print(style % "5. ki xx s","List the Service of a namespace")
-        print(style % "6. ki xx i","List the Ingress of a namespace")
-        print(style % "7. ki xx t","List the Secret of a namespace")
-        print(style % "8. ki xx a","List the DaemonSet of a namespace")
-        print(style % "9. ki xx j","List the CronJob of a namespace")
-        print(style % "10. ki xx v","List the PersistentVolume of a namespace")
-        print(style % "11. ki xx p","List the PersistentVolumeClaim of a namespace")
-        print(style % "12. ki xx q","List the ResourceQuota of a namespace")
-        print(style % "13. ki xx V","List the VirtualService of a namespace")
-        print(style % "14. ki xx G","List the Gateway of a namespace")
-        print(style % "15. ki xx D","List the DestinationRule of a namespace")
-        print(style % "16. ki xx E","List the EnvoyFilter of a namespace")
-        print(style % "17. ki -i $ns $pod","Login in the container,this way can be one-stop")
-        print(style % "18. ki -l $ns $pod","Print the logs for a container,this way can be one-stop")
-        print(style % "19. ki -e[si] $ns $pod","Edit the Deploy/Service/Ingress for a container,this way can be one-stop")
-        print(style % "20. ki $k8s.$ns","Select the kubernetes which namespace in the kubernetes ( if there are multiple ~/.kube/kubeconfig*,this way can be one-stop. )")
-        print(style % "21. ki --s","Select the kubernetes to be connected ( if there are multiple ~/.kube/kubeconfig*,the kubeconfig storage can be kubeconfig-hz,kubeconfig-sh,etc. )")
-        print(style % "22. ki --c","Enable write caching of namespace ( ~/.history/.ns_dict )")
-        print(style % "23. ki --a","List all pods in the kubernetes")
+        print(style % "Kubectl pro controls the Kubernetes cluster manager,find more information at: https://ki.xabc.io\n")
+        doc_dict = {
+         "1. ki":"List all namespaces",
+         "2. ki xx":"List all pods in the namespace ( if there are multiple ~/.kube/kubeconfig*,the best matching kubeconfig will be found ,the namespace parameter supports fuzzy matching,after outputting the pod list, select: xxx filters the query\n         select: index l ( [ l ] Print the logs for a container in a pod or specified resource \n         select: index l 100 ( Print the logs of the latest 100 lines \n         select: index l xxx ( Print the logs and filters the specified characters \n         select: index r ( [ r ] Rollout restart the pod \n         select: index o ( [ o ] Output the [Deployment,StatefulSet,Service,Ingress,Configmap,Secret].yml file \n         select: index del ( [ del ] Delete the pod \n         select: index cle ( [ cle ] Delete the Deployment/StatefulSet \n         select: index e[siVGDE] ( [ e[siVGDE] ] Edit the Deploy/Service/Ingress/VirtualService/Gateway/DestinationRule/EnvoyFilter \n         select: index s5 ( [ s3 ] Set the Deploy/StatefulSet replicas=3 \n         select: index dp ( Describe a pod \n         select: * ( Watching... ",
+         "3. ki xx d":"List the Deployment of a namespace",
+         "4. ki xx f":"List the StatefulSet of a namespace",
+         "5. ki xx s":"List the Service of a namespace",
+         "6. ki xx i":"List the Ingress of a namespace",
+         "7. ki xx t":"List the Secret of a namespace",
+         "8. ki xx a":"List the DaemonSet of a namespace",
+         "9. ki xx j":"List the CronJob of a namespace",
+         "10. ki xx v":"List the PersistentVolume of a namespace",
+         "11. ki xx p":"List the PersistentVolumeClaim of a namespace",
+         "12. ki xx q":"List the ResourceQuota of a namespace",
+         "13. ki xx V":"List the VirtualService of a namespace",
+         "14. ki xx G":"List the Gateway of a namespace",
+         "15. ki xx D":"List the DestinationRule of a namespace",
+         "16. ki xx E":"List the EnvoyFilter of a namespace",
+         "17. ki -i $ns $pod":"Login in the container,this way can be one-stop",
+         "18. ki -l $ns $pod":"Print the logs for a container,this way can be one-stop",
+         "19. ki -e[si] $ns $pod":"Edit the Deploy/Service/Ingress for a container,this way can be one-stop",
+         "20. ki $k8s.$ns":"Select the kubernetes which namespace in the kubernetes ( if there are multiple ~/.kube/kubeconfig*,this way can be one-stop. ",
+         "21. ki --s":"Select the kubernetes to be connected ( if there are multiple ~/.kube/kubeconfig*,the kubeconfig storage can be kubeconfig-hz,kubeconfig-sh,etc. ",
+         "22. ki --c":"Enable write caching of namespace ( ~/.history/.ns_dict ",
+         "23. ki --a":"List all pods in the kubernetes"}
+        for k,v in doc_dict.items():
+            print(style % k,v)
 def main():
     ki()
 #-----------------PROG----------------------------

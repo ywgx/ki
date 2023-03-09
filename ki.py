@@ -1,7 +1,7 @@
 #!/usr/bin/python3
 #*************************************************
 # Description : Kubectl Pro
-# Version     : 3.6
+# Version     : 3.7
 #*************************************************
 import os,re,sys,time,readline,subprocess
 #-----------------VAR-----------------------------
@@ -157,17 +157,21 @@ def cmd_obj(ns, obj, res, args, iip="x"):
         else:
             cmd = "kubectl -n "+ns+" exec -it "+res+" -- sh"
     return cmd,obj,name
+
 def find_ip(res: str):
     ip_regex = r'\b\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}\b'
     ips = re.findall(ip_regex, res)
     return ips[0] if ips else ""
+
 def find_optimal(namespace_list: list, namespace: str):
+
     namespace_list.sort()
-    indexes = [row.index(namespace) * 0.8 if namespace in row else 10000 for row in namespace_list]
-    contains = [len(row.replace(namespace, '')) * 0.42 for row in namespace_list]
-    words = [namespace in row for row in namespace_list]
-    result_list = [(indexes[i] + container) * (1 if words[i] else 1.62) for i, container in enumerate(contains)]
-    return namespace_list[result_list.index(min(result_list))] if len(set(indexes)) != 1 else ( namespace_list[words.index(True)] if True in words else None )
+    has_namespace = [namespace in row for row in namespace_list]
+    index_scores = [row.index(namespace) * 0.8 if has_namespace[i] else 10000 for i, row in enumerate(namespace_list)]
+    contain_scores = [len(row.replace(namespace, '')) * 0.42 for row in namespace_list]
+    result_scores = [(index_scores[i] + container) * (1 if has_namespace[i] else 1.62) for i, container in enumerate(contain_scores)]
+    return namespace_list[result_scores.index(min(result_scores))] if len(set(index_scores)) != 1 else ( namespace_list[has_namespace.index(True)] if True in has_namespace else None )
+
 def find_config():
     os.path.exists(history) or os.mkdir(history)
     cmd = '''find $HOME/.kube -maxdepth 2 -type f -name 'kubeconfig*' 2>/dev/null|egrep '.*' || ( find $HOME/.kube -maxdepth 1 -type f 2>/dev/null|egrep '.*' &>/dev/null && grep -l "current-context" `find $HOME/.kube -maxdepth 1 -type f` )'''
@@ -578,13 +582,14 @@ def ki():
                             if pattern.isdigit() and 0 <= int(pattern) < len(result_lines) or len(result_lines) == 1:
                                 index = int(pattern) if pattern.isdigit() else 0
                                 res = (result_lines[index]).split()[0]
-                            if res and res not in {default_config,os.path.realpath(default_config)}:
-                                os.unlink(default_config)
-                                os.symlink(res,default_config)
-                                print('\033[{}C\033[1A'.format(10),end = '')
-                                print("\033[1;33m{}\033[0m".format(res.split('/')[-1]))
-                                find_history(res,6)
-                                os.path.exists(ki_unlock) or open(ki_lock,"a").close()
+                            if res:
+                                if res not in {default_config,os.path.realpath(default_config)}:
+                                    os.unlink(default_config)
+                                    os.symlink(res,default_config)
+                                    print('\033[{}C\033[1A'.format(10),end = '')
+                                    print("\033[1;33m{}\033[0m".format(res.split('/')[-1]))
+                                    find_history(res,6)
+                                    os.path.exists(ki_unlock) or open(ki_lock,"a").close()
                                 break
                         else:
                             pattern = ""

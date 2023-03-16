@@ -1,7 +1,7 @@
 #!/usr/bin/python3
 #*************************************************
 # Description : Kubectl Pro
-# Version     : 3.7
+# Version     : 3.8
 #*************************************************
 import os,re,sys,time,readline,subprocess
 #-----------------VAR-----------------------------
@@ -99,7 +99,7 @@ def cmd_obj(ns, obj, res, args, iip="x"):
                 result_list = get_data("kubectl -n "+ns+" get pod "+res+" -o jsonpath='{.spec.containers[:].name}'")[0].split()
             except:
                 sys.exit()
-            container = "--all-containers"
+            container = "--all-containers --max-log-requests=28 "
             if regular:
                 if regular.isdigit():
                     if 0 < int(regular) < 10000:

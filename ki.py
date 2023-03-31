@@ -1,7 +1,7 @@
 #!/usr/bin/python3
 #*************************************************
 # Description : Kubectl Pro
-# Version     : 3.8
+# Version     : 3.9
 #*************************************************
 import os,re,sys,time,readline,subprocess
 #-----------------VAR-----------------------------
@@ -21,16 +21,16 @@ ki_latest_ns_dict = history + "/.latest_ns_dict"
 ki_current_ns_dict = history + "/.current_ns_dict"
 #-----------------FUN-----------------------------
 def cmp_file(f1, f2):
-    if os.stat(f2).st_size != os.stat(f1).st_size:
+    if os.path.getsize(f1) != os.path.getsize(f2):
         return False
-    bufsize = 1024
+    bufsize = 8192
     with open(f1, 'rb') as fp1, open(f2, 'rb') as fp2:
         while True:
             b1 = fp1.read(bufsize)
             b2 = fp2.read(bufsize)
             if b1 != b2:
                 return False
-            if not b1:
+            if not b1 and not b2:
                 return True
 def cmd_obj(ns, obj, res, args, iip="x"):
     name = res
@@ -354,6 +354,7 @@ def cache_ns(config_struct: list):
         with open(ki_latest_ns_dict,'w') as f: f.write(str(d_latest))
         os.path.exists(ki_cache) and os.unlink(ki_cache)
         return d
+
 def switch_config(switch_num: int,k8s: str,ns: str,time: str):
     switch = False
     if os.path.exists(default_config) and os.environ['KUBECONFIG'] not in {default_config,os.path.realpath(default_config)}:
@@ -366,12 +367,18 @@ def switch_config(switch_num: int,k8s: str,ns: str,time: str):
         switch_num > 0 and subprocess.Popen("ki --c",shell=True,stdout=subprocess.PIPE,stderr=subprocess.PIPE,universal_newlines=True)
         switch = True
     return switch
+
 def get_data(cmd: str):
     try:
-        p = subprocess.Popen(cmd,shell=True,stdout=subprocess.PIPE,stderr=subprocess.PIPE,universal_newlines=True)
-        return p.stdout.readlines()
-    except:
+        with subprocess.Popen(cmd, shell=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE, universal_newlines=True) as p:
+            return p.stdout.readlines()
+    except subprocess.CalledProcessError as e:
+        print(f"Command '{cmd}' returned non-zero exit status {e.returncode}.")
         sys.exit()
+    except OSError as e:
+        print(f"Execution of command '{cmd}' failed: {e.strerror}.")
+        sys.exit()
+
 def get_obj(ns: str,res: str,args='x'):
     d = {'s':"Service",'i':"Ingress"}
     cmd = "kubectl -n "+ns+" get pod "+res+" -o jsonpath='{.metadata.ownerReferences[0].kind}'"

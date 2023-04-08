@@ -1,7 +1,7 @@
 #!/usr/bin/python3
 #*************************************************
 # Description : Kubectl Pro
-# Version     : 3.9
+# Version     : 4.0
 #*************************************************
 import os,re,sys,time,readline,subprocess
 #-----------------VAR-----------------------------
@@ -32,6 +32,7 @@ def cmp_file(f1, f2):
                 return False
             if not b1 and not b2:
                 return True
+
 def cmd_obj(ns, obj, res, args, iip="x"):
     name = res
     if obj in ("Node"):
@@ -274,6 +275,7 @@ def find_history(config,num=1):
         for i,j in zip(result_dict,compress_list([ i[1] for i in result_dict ])):
             dc[i[0]] = j
         with open(ki_dict,'w') as f: f.write(str(dc))
+
 def find_ns(config_struct: list):
     ns = None
     kubeconfig = None
@@ -321,6 +323,7 @@ def find_ns(config_struct: list):
             kubeconfig = config
             break
     return ns,kubeconfig,switch,result_num
+
 def cache_ns(config_struct: list):
     if not os.path.exists(ki_cache) or ( os.path.exists(ki_cache) and int(time.time()-os.stat(ki_cache).st_mtime) > 1800 ):
         open(ki_cache,"a").close()
@@ -370,13 +373,9 @@ def switch_config(switch_num: int,k8s: str,ns: str,time: str):
 
 def get_data(cmd: str):
     try:
-        with subprocess.Popen(cmd, shell=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE, universal_newlines=True) as p:
-            return p.stdout.readlines()
-    except subprocess.CalledProcessError as e:
-        print(f"Command '{cmd}' returned non-zero exit status {e.returncode}.")
-        sys.exit()
-    except OSError as e:
-        print(f"Execution of command '{cmd}' failed: {e.strerror}.")
+        p = subprocess.Popen(cmd, shell=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE, universal_newlines=True)
+        return p.stdout.readlines()
+    except:
         sys.exit()
 
 def get_obj(ns: str,res: str,args='x'):
@@ -446,6 +445,7 @@ def get_feature(ns_list: list):
     for i, (x, y) in enumerate(answers):
         d[ns_list[i]] = ns_list[i][x: y + 1]
     return d
+
 def info_w(k8s_path: str,result_lines: list):
     l = k8s_path.split('/')
     if 'K8S' in l:
@@ -507,6 +507,7 @@ def record(res: str,name: str,obj: str,cmd: str,kubeconfig: str,ns: str,config_s
     else:
         dc[key] = [name,[(name,1)]]
     with open(ki_pod_dict,'w') as f: f.write(str(dc))
+
 def ki():
     ( len(sys.argv) == 1 or sys.argv[1] not in ('-n','-t','-t1','-t2','-r','-i','-e','-es','-ei','-o','-os','-oi','-restart','-s','--s','-l','--l','--lock','--u','--unlock','--w','--watch','--h','--help','--c','--cache','--k','-a','--a') ) and sys.argv.insert(1,'-n')
     len(sys.argv) == 2 and sys.argv[1] in ('-i','-e','-es','-ei','-o','-os','-oi') and sys.argv.insert(1,'-n')

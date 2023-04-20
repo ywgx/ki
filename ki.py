@@ -1,7 +1,7 @@
 #!/usr/bin/python3
 #*************************************************
 # Description : Kubectl Pro
-# Version     : 4.0
+# Version     : 4.1
 #*************************************************
 import os,re,sys,time,readline,subprocess
 #-----------------VAR-----------------------------
@@ -735,9 +735,11 @@ def ki():
                         result_len = len(result_lines)
                         podList = pod.split()
                         pod = podList[0] if podList else ""
-                        if pod in ('$','#','@','!','~'):
+                        if pod in ('$','#','@','%','+','=','!','~','&','^','(',')','[',']',';',"'",'"','/',',','.','{','}',':','<','>','?','-','_','\\','|'):
                             if pod == '$':
                                 pod = str(result_len-1)
+                            elif pod == '^':
+                                pod = str(0)
                             elif os.path.exists(ki_pod_dict):
                                 with open(ki_pod_dict,'r') as f:
                                     dc = eval(f.read())
@@ -794,7 +796,8 @@ def ki():
          "20. ki $k8s.$ns":"Select the kubernetes which namespace in the kubernetes ( if there are multiple ~/.kube/kubeconfig*,this way can be one-stop. ",
          "21. ki --s":"Select the kubernetes to be connected ( if there are multiple ~/.kube/kubeconfig*,the kubeconfig storage can be kubeconfig-hz,kubeconfig-sh,etc. ",
          "22. ki --c":"Enable write caching of namespace ( ~/.history/.ns_dict ",
-         "23. ki --a":"List all pods in the kubernetes"}
+         "23. ki --a":"List all pods in the kubernetes",
+         "Tips:": "Within the selection process of Pod filtering, there are 5 shorthand symbols ('!','~','$','#','@','%') ; where '$' represents the most recent Pod, while '~' and '!' denote the Pod from the previous operation, and the remaining symbols indicate the Pod that has been operated on the most."}
         for k,v in doc_dict.items():
             print(style % k,v)
 def main():

@@ -1,8 +1,9 @@
 #!/usr/bin/python3
 #*************************************************
 # Description : Kubectl Pro
-# Version     : 4.1
+# Version     : 4.2
 #*************************************************
+from collections import deque
 import os,re,sys,time,readline,subprocess
 #-----------------VAR-----------------------------
 home = os.environ["HOME"]
@@ -216,11 +217,11 @@ def find_config():
         else:
             last_config = result_lines[0]
         result_dict = sorted(dc.items(),key = lambda dc:(dc[1], dc[0]),reverse=True)
-        sort_list = [ i[0] for i in result_dict ]
+        sort_list = deque([ i[0] for i in result_dict ])
         header_config = sort_list[0] if sort_list else os.path.realpath(default_config)
         last_config in sort_list and sort_list.remove(last_config)
-        sort_list.insert(0,last_config)
-        result_lines = sort_list + list(result_set - set(sort_list))
+        sort_list.appendleft(last_config)
+        result_lines = list(sort_list) + list(result_set - set(sort_list))
         if os.path.exists(default_config):
             if not os.path.islink(default_config):
                 with open(default_config,'r') as fr, open(home+"/.kube/config-0",'w') as fw: fw.write(fr.read())
@@ -303,8 +304,9 @@ def find_ns(config_struct: list):
 
     if len(config_struct[1]) > 1:
         current_config = os.path.realpath(config)
+        config_struct[1] = deque(config_struct[1])
         current_config in config_struct[1] and config_struct[1].remove(current_config)
-        config_struct[1].insert(0,current_config)
+        config_struct[1].appendleft(current_config)
 
     for n,config in enumerate(config_struct[1]):
         if os.path.exists(ns_dict):

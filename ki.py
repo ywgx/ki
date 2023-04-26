@@ -1,7 +1,7 @@
 #!/usr/bin/python3
 #*************************************************
 # Description : Kubectl Pro
-# Version     : 4.2
+# Version     : 4.3
 #*************************************************
 from collections import deque
 import os,re,sys,time,readline,subprocess
@@ -737,11 +737,14 @@ def ki():
                         result_len = len(result_lines)
                         podList = pod.split()
                         pod = podList[0] if podList else ""
-                        if pod in ('$','#','@','%','+','=','!','~','&','^','(',')','[',']',';',"'",'"','/',',','.','{','}',':','<','>','?','-','_','\\','|'):
+
+                        # 使用 .match 方法查找特殊字符的匹配项。如果有匹配项，则执行相应操作(使用非*/$字符快速进入操作最多的pod)
+                        special_chars_pattern = re.compile(r'[^\w]')
+                        if special_chars_pattern.match(pod):
                             if pod == '$':
                                 pod = str(result_len-1)
-                            elif pod == '^':
-                                pod = str(0)
+                            elif pod == '*':
+                                pass
                             elif os.path.exists(ki_pod_dict):
                                 with open(ki_pod_dict,'r') as f:
                                     dc = eval(f.read())
@@ -751,6 +754,7 @@ def ki():
                                         if last_res in e:
                                             pod = str(result_len-n-1)
                                             break
+
                         args = ''.join(podList[1:]) if len(podList) > 1 else "p"
                         if pod.isdigit() and int(pod) < result_len or ( result_len == 1 and pod != '*'):
                             index = int(pod) if pod.isdigit() and int(pod) < result_len else 0
@@ -799,7 +803,7 @@ def ki():
          "21. ki --s":"Select the kubernetes to be connected ( if there are multiple ~/.kube/kubeconfig*,the kubeconfig storage can be kubeconfig-hz,kubeconfig-sh,etc. ",
          "22. ki --c":"Enable write caching of namespace ( ~/.history/.ns_dict ",
          "23. ki --a":"List all pods in the kubernetes",
-         "Tips:": "Within the selection process of Pod filtering, there are 5 shorthand symbols ('!','~','$','#','@','%') ; where '$' represents the most recent Pod, while '~' and '!' denote the Pod from the previous operation, and the remaining symbols indicate the Pod that has been operated on the most."}
+         "Tips:": "Within the selection process of Pod filtering, where '$' represents the most recent Pod, while '~' and '!' denote the Pod from the previous operation, and the remaining symbols indicate the Pod that has been operated on the most."}
         for k,v in doc_dict.items():
             print(style % k,v)
 def main():

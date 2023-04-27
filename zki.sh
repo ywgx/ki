@@ -1,5 +1,5 @@
 function parse_git_branch() {
-  [ -e ./.git/HEAD ] && echo -e "* \033[32m$(awk -F/ '{print $NF}' ./.git/HEAD)\033[0m"
+  [ -e ./.git/HEAD ] && echo -e "[ * \033[32m$(awk -F/ '{print $NF}' ./.git/HEAD)\033[0m ]"
 }
 source <(kubectl completion bash)
 export EDITOR=vim

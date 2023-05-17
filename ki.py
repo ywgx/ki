@@ -1,7 +1,7 @@
 #!/usr/bin/python3
 #*************************************************
 # Description : Kubectl Pro
-# Version     : 4.3
+# Version     : 4.4
 #*************************************************
 from collections import deque
 import os,re,sys,time,readline,subprocess
@@ -34,6 +34,10 @@ def cmp_file(f1, f2):
             if not b1 and not b2:
                 return True
 
+def confirm_action(caution):
+    confirm = input(caution+"\nAre you certain you want to execute this high-risk action? (yes/no): ")
+    return confirm.lower() in ("yes","y")
+
 def cmd_obj(ns, obj, res, args, iip="x"):
     name = res
     if obj in ("Node"):
@@ -52,7 +56,11 @@ def cmd_obj(ns, obj, res, args, iip="x"):
     elif obj in ("Deployment","DaemonSet","Service","StatefulSet","Ingress","ConfigMap","Secret","PersistentVolume","PersistentVolumeClaim","CronJob","Job","VirtualService","Gateway","DestinationRule","EnvoyFilter"):
         action2 = ""
         if args in ("cle","delete"):
-            action = "delete"
+            if confirm_action("This command will remove the "+obj):
+                action = "delete"
+            else:
+                print("Operation canceled.")
+                return
         elif args[0] == "e":
             action = "edit"
         elif args[0] == "d":
@@ -73,7 +81,11 @@ def cmd_obj(ns, obj, res, args, iip="x"):
             action = "get"
             action2 = " -o yaml > "+ns+"."+obj.lower()+".yml"
         elif args in ("cle","delete"):
-            action = "delete"
+            if confirm_action("This command will remove the "+obj):
+                action = "delete"
+            else:
+                print("Operation canceled.")
+                return
         else:
             action = "get"
         cmd = "kubectl -n "+ns+" "+action+" "+obj.lower()+" "+res+action2
@@ -90,11 +102,19 @@ def cmd_obj(ns, obj, res, args, iip="x"):
             action = "delete"
             cmd = "kubectl -n "+ns+" delete pod "+res+"  --grace-period=0 --force"
         elif args in ("cle","delete"):
-            action = "delete"
-            cmd = "kubectl -n "+ns+" "+action+" "+obj.lower()+" "+name
+            if confirm_action("This command will remove the deployment associated with the target Pod."):
+                action = "delete"
+                cmd = "kubectl -n "+ns+" "+action+" "+obj.lower()+" "+name
+            else:
+                print("Operation canceled.")
+                return
         elif args in ("destroy","destory"):
-            action = "delete"
-            cmd = "kubectl -n "+ns+" "+action+" "+obj.lower()+",service,ingress "+name
+            if confirm_action("This command will remove the deployment,service,ingress associated with the target Pod."):
+                action = "delete"
+                cmd = "kubectl -n "+ns+" "+action+" "+obj.lower()+",service,ingress "+name
+            else:
+                print("Operation canceled.")
+                return
         elif args[0] in ('l','c'):
             regular = args[1:]
             try:
@@ -763,9 +783,10 @@ def ki():
                             ns = result_lines[index].split()[0] if sys.argv[1] in ('-a','--a') else ns
                             l = cmd_obj(ns,obj,res,args,iip)
                             print('\033[{}C\033[1A'.format(num),end = '')
-                            print("\033[1;32m{}\033[0m".format(l[0].split('  --')[0]))
-                            record(res,l[2],l[1],l[0],k8s,ns,config_struct)
-                            os.system(l[0])
+                            if l:
+                                print("\033[1;32m{}\033[0m".format(l[0].split('  --')[0]))
+                                record(res,l[2],l[1],l[0],k8s,ns,config_struct)
+                                os.system(l[0])
                             print('\r')
                     else:
                         pod = ""

@@ -56,7 +56,7 @@ def cmd_obj(ns, obj, res, args, iip="x"):
     elif obj in ("Deployment","DaemonSet","Service","StatefulSet","Ingress","ConfigMap","Secret","PersistentVolume","PersistentVolumeClaim","CronJob","Job","VirtualService","Gateway","DestinationRule","EnvoyFilter"):
         action2 = ""
         if args in ("cle","delete"):
-            if confirm_action("This command will remove the "+obj):
+            if confirm_action("This command will delete the "+obj):
                 action = "delete"
             else:
                 print("Operation canceled.")
@@ -81,7 +81,7 @@ def cmd_obj(ns, obj, res, args, iip="x"):
             action = "get"
             action2 = " -o yaml > "+ns+"."+obj.lower()+".yml"
         elif args in ("cle","delete"):
-            if confirm_action("This command will remove the "+obj):
+            if confirm_action("This command will delete the "+obj):
                 action = "delete"
             else:
                 print("Operation canceled.")
@@ -102,14 +102,14 @@ def cmd_obj(ns, obj, res, args, iip="x"):
             action = "delete"
             cmd = "kubectl -n "+ns+" delete pod "+res+"  --grace-period=0 --force"
         elif args in ("cle","delete"):
-            if confirm_action("This command will remove the deployment associated with the target Pod."):
+            if confirm_action("This command will delete the deployment associated with the target Pod."):
                 action = "delete"
                 cmd = "kubectl -n "+ns+" "+action+" "+obj.lower()+" "+name
             else:
                 print("Operation canceled.")
                 return
         elif args in ("destroy","destory"):
-            if confirm_action("This command will remove the deployment,service,ingress associated with the target Pod."):
+            if confirm_action("This command will delete the deployment,service,ingress associated with the target Pod."):
                 action = "delete"
                 cmd = "kubectl -n "+ns+" "+action+" "+obj.lower()+",service,ingress "+name
             else:

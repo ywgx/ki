@@ -35,8 +35,11 @@ def cmp_file(f1, f2):
                 return True
 
 def confirm_action(caution):
-    confirm = input(caution+"\nAre you certain you want to execute this high-risk action? (yes/no): ")
-    return confirm.lower() in ("yes","y")
+    try:
+        confirm = input(caution+"\nAre you certain you want to execute this high-risk action? (yes/no): ")
+        return confirm.lower() in ("yes","y")
+    except:
+        return False
 
 def cmd_obj(ns, obj, res, args, iip="x"):
     name = res

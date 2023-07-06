@@ -168,10 +168,14 @@ def cmd_obj(ns, obj, res, args, iip="x"):
                 if obj == 'Pod': name = res
             cmd = "kubectl -n "+ns+" "+action+" "+obj.lower()+" "+name
         elif args[0] in ('s'):
-            regular = args.split('s')[-1]
-            action = "scale"
-            replicas = regular if regular.isdigit() and -1 < int(regular) < 30 else str(1)
-            cmd = "kubectl -n "+ns+" "+action+" --replicas="+replicas+" "+obj.lower()+"/"+name
+            if confirm_action("This command will scale the "+obj):
+                regular = args.split('s')[-1]
+                action = "scale"
+                replicas = regular if regular.isdigit() and -1 < int(regular) < 30 else str(1)
+                cmd = "kubectl -n "+ns+" "+action+" --replicas="+replicas+" "+obj.lower()+"/"+name
+            else:
+                print("Operation canceled.")
+                return
         elif args[0] in ('n'):
             action = "ssh"
             try:

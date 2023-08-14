@@ -1,7 +1,7 @@
 #!/usr/bin/python3
 #*************************************************
 # Description : Kubectl Pro
-# Version     : 4.4
+# Version     : 4.5
 #*************************************************
 from collections import deque
 import os,re,sys,time,readline,subprocess
@@ -203,7 +203,7 @@ def find_optimal(namespace_list: list, namespace: str):
 
 def find_config():
     os.path.exists(history) or os.mkdir(history)
-    cmd = '''find $HOME/.kube -maxdepth 2 -type f -name 'kubeconfig*' 2>/dev/null|egrep '.*' || ( find $HOME/.kube -maxdepth 1 -type f 2>/dev/null|egrep '.*' &>/dev/null && grep -l "current-context" `find $HOME/.kube -maxdepth 1 -type f` )'''
+    cmd = '''find $HOME/.kube -maxdepth 2 -type f -name 'kubeconfig*' -a ! -name 'kubeconfig-*-NULL' 2>/dev/null|egrep '.*' || ( find $HOME/.kube -maxdepth 1 -type f 2>/dev/null|egrep '.*' &>/dev/null && grep -l "current-context" `find $HOME/.kube -maxdepth 1 -type f` )'''
     result_set = { e.split('\n')[0] for e in get_data(cmd) }
     result_num = len(result_set)
     result_lines = list(result_set)
@@ -371,17 +371,21 @@ def cache_ns(config_struct: list):
             s = []
             cmd = "kubectl get ns --sort-by=.metadata.creationTimestamp --no-headers --kubeconfig "+config
             l = get_data(cmd)
-            ns_list = [ e.split()[0] for e in l ]
-            if os.path.exists(ki_all):
-                s = ns_list
+            if l:
+                ns_list = [ e.split()[0] for e in l ]
+                if os.path.exists(ki_all):
+                    s = ns_list
+                else:
+                    for ns in ns_list:
+                        cmd1 = "kubectl get pod --no-headers --kubeconfig "+config+" -n "+ns
+                        cmd2 = "kubectl get cronjob --no-headers --kubeconfig "+config+" -n "+ns
+                        if get_data(cmd1) or get_data(cmd2):
+                            s.append(ns)
+                d[config] = s
+                d_latest[config] = l[-1].split()[0]
             else:
-                for ns in ns_list:
-                    cmd1 = "kubectl get pod --no-headers --kubeconfig "+config+" -n "+ns
-                    cmd2 = "kubectl get cronjob --no-headers --kubeconfig "+config+" -n "+ns
-                    if get_data(cmd1) or get_data(cmd2):
-                        s.append(ns)
-            d[config] = s
-            d_latest[config] = l[-1].split()[0]
+                with open(config,'r') as fr, open(config + "-NULL",'w') as fw: fw.write(fr.read())
+                os.unlink(config)
         with open(ki_ns_dict,'w') as f: f.write(str(d))
         with open(ki_latest_ns_dict,'w') as f: f.write(str(d_latest))
         os.path.exists(ki_cache) and os.unlink(ki_cache)

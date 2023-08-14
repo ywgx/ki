@@ -1,6 +1,6 @@
 ![logo](//s.xabcloud.com/_media/icon.svg)
 
-# 𝑲𝒖𝒃𝒆𝒄𝒕𝒍 𝑷𝒓𝒐 <small>𝑘𝑖 2023.07.06</small>
+# 𝑲𝒖𝒃𝒆𝒄𝒕𝒍 𝑷𝒓𝒐 <small>𝑘𝑖 2023.08.15</small>
 
 > 更快捷简单管理 𝒌𝒖𝒃𝒆𝒓𝒏𝒆𝒕𝒆𝒔 的小工具
 

@@ -384,8 +384,7 @@ def cache_ns(config_struct: list):
                 d[config] = s
                 d_latest[config] = l[-1].split()[0]
             else:
-                with open(config,'r') as fr, open(config + "-NULL",'w') as fw: fw.write(fr.read())
-                os.unlink(config)
+                os.path.exists(config) and os.rename(config, config + "-NULL")
         with open(ki_ns_dict,'w') as f: f.write(str(d))
         with open(ki_latest_ns_dict,'w') as f: f.write(str(d_latest))
         os.path.exists(ki_cache) and os.unlink(ki_cache)

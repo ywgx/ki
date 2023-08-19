@@ -2,6 +2,8 @@ function parse_git_branch() {
   [ -e ./.git/HEAD ] && printf "[ * \033[1;32m%s\033[0m ]\n" "$(awk -F/ '{print $NF}' ./.git/HEAD)"
 }
 source <(kubectl completion bash)
+export HISTTIMEFORMAT="%F %T "
+export HISTSIZE=10000
 export EDITOR=vim
 export KUBE_EDITOR=vim
 export KI_LINE=$([ -e ~/.history/.line ] && cat ~/.history/.line || echo 200)

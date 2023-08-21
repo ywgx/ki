@@ -1,7 +1,7 @@
 #!/usr/bin/python3
 #*************************************************
 # Description : Kubectl Pro
-# Version     : 4.5
+# Version     : 4.6
 #*************************************************
 from collections import deque
 import os,re,sys,time,readline,subprocess
@@ -211,8 +211,7 @@ def find_config():
     if result_num == 1:
         if os.path.exists(default_config):
             if not os.path.islink(default_config):
-                with open(default_config,'r') as fr, open(home+"/.kube/config-0",'w') as fw: fw.write(fr.read())
-                os.unlink(default_config)
+                os.rename(default_config, home+"/.kube/config-0")
                 os.symlink(home+"/.kube/config-0",default_config)
                 kubeconfig = "config-0"
             else:
@@ -251,8 +250,7 @@ def find_config():
         result_lines = list(sort_list) + list(result_set - set(sort_list))
         if os.path.exists(default_config):
             if not os.path.islink(default_config):
-                with open(default_config,'r') as fr, open(home+"/.kube/config-0",'w') as fw: fw.write(fr.read())
-                os.unlink(default_config)
+                os.rename(default_config, home+"/.kube/config-0")
                 os.symlink(home+"/.kube/config-0",default_config)
                 kubeconfig = "config-0"
             else:
@@ -358,7 +356,6 @@ def cache_ns(config_struct: list):
         open(ki_cache,"a").close()
         d = {}
         d_latest = {}
-
         current_d = {}
         current_config = os.path.realpath(default_config)
         cmd = "kubectl get ns --sort-by=.metadata.creationTimestamp --no-headers --kubeconfig " + current_config
@@ -366,25 +363,30 @@ def cache_ns(config_struct: list):
         ns_list = [ e.split()[0] for e in l ]
         current_d[current_config] = ns_list
         with open(ki_current_ns_dict,'w') as f: f.write(str(current_d))
-
         for config in config_struct[1]:
             s = []
-            cmd = "kubectl get ns --sort-by=.metadata.creationTimestamp --no-headers --kubeconfig "+config
-            l = get_data(cmd)
-            if l:
-                ns_list = [ e.split()[0] for e in l ]
-                if os.path.exists(ki_all):
-                    s = ns_list
+            cmd = "kubectl get ns --sort-by=.metadata.creationTimestamp --no-headers --kubeconfig " + config
+            retry_count = 0
+            max_retries = 2
+            while retry_count < max_retries:
+                l = get_data(cmd)
+                if l:
+                    ns_list = [ e.split()[0] for e in l ]
+                    if os.path.exists(ki_all):
+                        s = ns_list
+                    else:
+                        for ns in ns_list:
+                            cmd1 = "kubectl get pod --no-headers --kubeconfig "+config+" -n "+ns
+                            cmd2 = "kubectl get cronjob --no-headers --kubeconfig "+config+" -n "+ns
+                            if get_data(cmd1) or get_data(cmd2):
+                                s.append(ns)
+                    d[config] = s
+                    d_latest[config] = l[-1].split()[0]
+                    break
                 else:
-                    for ns in ns_list:
-                        cmd1 = "kubectl get pod --no-headers --kubeconfig "+config+" -n "+ns
-                        cmd2 = "kubectl get cronjob --no-headers --kubeconfig "+config+" -n "+ns
-                        if get_data(cmd1) or get_data(cmd2):
-                            s.append(ns)
-                d[config] = s
-                d_latest[config] = l[-1].split()[0]
-            else:
-                os.path.exists(config) and os.rename(config, config + "-NULL")
+                    retry_count += 1
+                    if retry_count == max_retries:
+                        os.path.exists(config) and os.rename(config, config + "-NULL")
         with open(ki_ns_dict,'w') as f: f.write(str(d))
         with open(ki_latest_ns_dict,'w') as f: f.write(str(d_latest))
         os.path.exists(ki_cache) and os.unlink(ki_cache)

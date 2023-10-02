@@ -1,4 +1,4 @@
-![logo](//s.xabcloud.com/_media/icon.svg)
+![logo](//static.xabc.io/_media/icon.svg)
 
 # 𝑲𝒖𝒃𝒆𝒄𝒕𝒍 𝑷𝒓𝒐 <small>𝑘𝑖 2023.08.21</small>
 

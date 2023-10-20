@@ -1,7 +1,7 @@
 #!/usr/bin/python3
 #*************************************************
 # Description : Kubectl Pro
-# Version     : 4.6
+# Version     : 4.7
 #*************************************************
 from collections import deque
 import os,re,sys,time,readline,subprocess
@@ -50,6 +50,10 @@ def cmd_obj(ns, obj, res, args, iip="x"):
         elif args[0] in ('d','e'):
             action = "describe" if args[0] == 'd' else "edit"
             cmd = "kubectl "+action+" "+obj.lower()+" "+res
+        elif args[0] == 'o':
+            action = "get"
+            action2 = " -o yaml > "+res+"."+obj.lower()+".yml"
+            cmd = "kubectl "+action+" "+obj.lower()+" "+res+action2
         else:
             action = "ssh"
             cmd = action +" root@"+iip
@@ -150,7 +154,7 @@ def cmd_obj(ns, obj, res, args, iip="x"):
             except:
                 sys.exit()
             container = name if name in result_list else "--all-containers"
-            cmd = "kubectl -n "+ns+" logs -f "+res+" "+container+" --previous --tail "+ ( regular if regular and regular.isdigit() and len(regular) < 12 else "500" )
+            cmd = "kubectl -n "+ns+" logs -f "+res+" "+container+" --previous --tail "+ ( regular if regular and regular.isdigit() and len(regular) < 12 else "5000" )
         elif args[0] in ('r'):
             cmd = "kubectl -n "+ns+" rollout restart "+obj.lower()+" "+name
         elif args[0] in ('u'):

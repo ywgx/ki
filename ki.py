@@ -403,7 +403,7 @@ def switch_config(switch_num: int,k8s: str,ns: str,time: str):
             with open(ki_last,'w') as f: f.write(os.path.realpath(default_config))
         os.unlink(default_config)
         os.symlink(os.environ['KUBECONFIG'],default_config)
-        print("\033[1;33m{}\033[0m".format("[ "+time+"  "+str(switch_num+1)+"-SWITCH  "+k8s+" / "+ns+" ] "))
+        print("\033[1;93m{}\033[0m".format("[ "+time+"  "+str(switch_num+1)+"-SWITCH  "+k8s+" / "+ns+" ] "))
         find_history(os.environ['KUBECONFIG'],1)
         switch_num > 0 and subprocess.Popen("ki --c",shell=True,stdout=subprocess.PIPE,stderr=subprocess.PIPE,universal_newlines=True)
         switch = True
@@ -498,11 +498,11 @@ def info_w(k8s_path: str,result_lines: list):
                 if config and os.path.exists(default_config) and config not in {default_config,os.path.realpath(default_config)}:
                     os.unlink(default_config)
                     os.symlink(config,default_config)
-                    print("\033[1;35m{}\033[0m".format("[ "+config.split("/")[-1]+" ]"))
+                    print("\033[1;95m{}\033[0m".format("[ "+config.split("/")[-1]+" ]"))
                 else:
-                    print("\033[1;36m{}\033[0m".format("[ "+os.path.realpath(default_config).split("/")[-1]+" ]"))
+                    print("\033[1;38;5;208m{}\033[0m".format("[ "+os.path.realpath(default_config).split("/")[-1]+" ]"))
         else:
-            print("\033[1;36m{}\033[0m".format("[ "+os.path.realpath(default_config).split("/")[-1]+(" (lock)" if os.path.exists(ki_lock) else "")+" ]"))
+            print("\033[1;38;5;208m{}\033[0m".format("[ "+os.path.realpath(default_config).split("/")[-1]+(" (lock)" if os.path.exists(ki_lock) else "")+" ]"))
     else:
         print("\033[1;32m{}\033[0m".format("[ "+os.path.realpath(default_config).split("/")[-1]+" ]"))
         os.path.exists(ki_lock) and int(time.time()-os.stat(ki_lock).st_mtime) > 3600 and os.unlink(ki_lock)
@@ -562,7 +562,7 @@ def ki():
         os.path.exists(ki_lock) and os.unlink(ki_lock)
     elif len(sys.argv) == 2 and sys.argv[1] == '-n':
         cmd = "kubectl get ns  --sort-by=.metadata.creationTimestamp --no-headers"
-        print("\033[1;32m{}\033[0m".format(cmd.split('  --')[0]))
+        print("\033[1;92m{}\033[0m".format(cmd.split('  --')[0]))
         os.environ['KUBECONFIG'] = os.path.realpath(default_config)
         l = get_data(cmd)
         ns_dict = get_feature([ e.split()[0] for e in l ])
@@ -570,7 +570,7 @@ def ki():
             s = ns_dict[e.split()[0]]
             num = e.find(s)
             num_s = num+len(s)
-            print("{}\033[1;35m{}\033[0m{}".format(e[:num],e[num:num_s],e[num_s:]),end='')
+            print("{}\033[1;95m{}\033[0m{}".format(e[:num],e[num:num_s],e[num_s:]),end='')
         if os.path.exists(ki_latest_ns_dict):
             with open(ki_latest_ns_dict,'r') as f:
                 try:
@@ -588,7 +588,7 @@ def ki():
         begin = time.perf_counter()
         cache_ns(config_struct)
         end = time.perf_counter()
-        print("\033[1;33m{}\033[0m".format("[ "+str(round(end-begin,3))+" ] "))
+        print("\033[1;93m{}\033[0m".format("[ "+str(round(end-begin,3))+" ] "))
     elif 1 < len(sys.argv) < 4 and sys.argv[1] in ('-s','--s'):
         result_lines = config_struct[1]
         if result_lines and len(result_lines) > 1:
@@ -597,7 +597,7 @@ def ki():
                 if config and os.path.exists(default_config) and config not in {default_config,os.path.realpath(default_config)}:
                     os.unlink(default_config)
                     os.symlink(config,default_config)
-                    print("\033[1;33m{}\033[0m".format("[ SWITCH "+config.split("/")[-1]+" ] "))
+                    print("\033[1;93m{}\033[0m".format("[ SWITCH "+config.split("/")[-1]+" ] "))
             else:
                 lr = set()
                 for i in result_lines:
@@ -618,11 +618,11 @@ def ki():
                         if result_lines:
                             for n,e in enumerate(result_lines):
                                 if cmp_file(e,default_config):
-                                    print("\033[5;32m{}\033[0m \033[1;32m{}\033[0m".format(n,e.strip().split('/')[-1]))
+                                    print("\033[1;95m{}\033[0m \033[1;32m{}\033[0m".format(n,e.strip().split('/')[-1]))
                                 else:
                                     print("\033[1;32m{}\033[0m {}".format(n,e.strip().split('/')[-1]))
                             try:
-                                pattern = input("\033[1;35m%s\033[0m\033[5;35m%s\033[0m" % ("select",":")).strip()
+                                pattern = input("\033[1;95m%s\033[0m\033[5;95m%s\033[0m" % ("select",":")).strip()
                             except:
                                 sys.exit()
                             if pattern.isdigit() and 0 <= int(pattern) < len(result_lines) or len(result_lines) == 1:
@@ -633,7 +633,7 @@ def ki():
                                     os.unlink(default_config)
                                     os.symlink(res,default_config)
                                     print('\033[{}C\033[1A'.format(10),end = '')
-                                    print("\033[1;33m{}\033[0m".format(res.split('/')[-1]))
+                                    print("\033[1;32m{}\033[0m".format(res.split('/')[-1]))
                                     find_history(res,6)
                                     os.path.exists(ki_unlock) or open(ki_lock,"a").close()
                                 break
@@ -699,7 +699,7 @@ def ki():
                                         action = "get"
                                         action2 = " -o yaml > "+name+"."+obj+".yml"
                                     cmd = "kubectl -n "+ns+" "+action+" "+obj.lower()+" "+name+action2
-                                print("\033[1;32m{}\033[0m".format(cmd))
+                                print("\033[1;92m{}\033[0m".format(cmd))
                                 record(pod,name,obj,cmd,k8s,ns,config_struct)
                                 os.system(cmd)
                                 print('\r')
@@ -743,7 +743,7 @@ def ki():
                                 k8s = os.environ['KUBECONFIG'].split('/')[-1]
                                 switch = switch_config(switch_num,k8s,ns,str(round(end-begin,3)))
                                 flag = False
-                            print("\033[1;32m{}\033[0m".format(cmd.split(' --')[0]))
+                            print("\033[1;92m{}\033[0m".format(cmd.split(' --')[0]))
                     if not (pod.isdigit() and int(pod) < len(result_lines)) and pod != '*':
                         result_lines = list(filter(lambda x: x.find(pod) >= 0, result_lines))
                     if result_lines:
@@ -754,7 +754,7 @@ def ki():
                             except:
                                 pass
                         if n > 3:
-                            style = "\033[1;33m{}\033[0m" if switch else "\033[1;32m{}\033[0m"
+                            style = "\033[1;93m{}\033[0m" if switch else "\033[1;32m{}\033[0m"
                             string = "[ "+k8s+" / "+ns+" --- "+obj+" ] [ "+now+" ]" if sys.argv[1] not in ('-a','--a') and obj not in ('PersistentVolume') else "[ "+k8s+" --- "+obj+" ] [ "+now+" ]"
                             print(style.format(string))
                             switch = False
@@ -763,7 +763,7 @@ def ki():
                                 print(style.format(" Watching..."))
                         try:
                             if pod != '*':
-                                pod = input("\033[1;35m%s\033[0m\033[5;35m%s\033[0m" % ("select",":")).strip()
+                                pod = input("\033[1;95m%s\033[0m\033[5;95m%s\033[0m" % ("select",":")).strip()
                                 num = 10 + len(pod)
                             else:
                                 result_lines = get_data(cmd)
@@ -800,7 +800,7 @@ def ki():
                             l = cmd_obj(ns,obj,res,args,iip)
                             print('\033[{}C\033[1A'.format(num),end = '')
                             if l:
-                                print("\033[1;32m{}\033[0m".format(l[0]))
+                                print("\033[1;92m{}\033[0m".format(l[0]))
                                 record(res,l[2],l[1],l[0],k8s,ns,config_struct)
                                 os.system(l[0])
                             print('\r')

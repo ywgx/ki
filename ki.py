@@ -1,7 +1,7 @@
 #!/usr/bin/python3
 #*************************************************
 # Description : Kubectl Pro
-# Version     : 4.7
+# Version     : 4.6
 #*************************************************
 from collections import deque
 import os,re,sys,time,readline,subprocess
@@ -104,10 +104,10 @@ def cmd_obj(ns, obj, res, args, iip="x"):
         if args == "p":
             cmd = "kubectl -n "+ns+" exec -it "+res+" -- sh"
         elif args == "del":
-            cmd = "kubectl -n "+ns+" delete pod "+res+"  --now &"
+            cmd = "kubectl -n "+ns+" delete pod "+res+" &"
         elif args == "delf":
             action = "delete"
-            cmd = "kubectl -n "+ns+" delete pod "+res+"  --grace-period=0 --force"
+            cmd = "kubectl -n "+ns+" delete pod "+res+" --grace-period=0 --force"
         elif args in ("cle","delete"):
             if confirm_action("This command will delete the deployment associated with the target Pod."):
                 action = "delete"
@@ -128,7 +128,7 @@ def cmd_obj(ns, obj, res, args, iip="x"):
                 result_list = get_data("kubectl -n "+ns+" get pod "+res+" -o jsonpath='{.spec.containers[:].name}'")[0].split()
             except:
                 sys.exit()
-            container = "--all-containers --max-log-requests=28 "
+            container = "--all-containers --max-log-requests=28"
             if regular:
                 if regular.isdigit():
                     if 0 < int(regular) < 10000:
@@ -800,7 +800,7 @@ def ki():
                             l = cmd_obj(ns,obj,res,args,iip)
                             print('\033[{}C\033[1A'.format(num),end = '')
                             if l:
-                                print("\033[1;32m{}\033[0m".format(l[0].split('  --')[0]))
+                                print("\033[1;32m{}\033[0m".format(l[0]))
                                 record(res,l[2],l[1],l[0],k8s,ns,config_struct)
                                 os.system(l[0])
                             print('\r')

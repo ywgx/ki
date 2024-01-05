@@ -2,6 +2,7 @@ function parse_git_branch() {
   [ -e ./.git/HEAD ] && printf "[ * \033[1;32m%s\033[0m ]\n" "$(awk -F/ '{print $NF}' ./.git/HEAD)"
 }
 source <(kubectl completion bash)
+export GREP_COLORS='ms=1;91'
 export HISTTIMEFORMAT="%F %T "
 export HISTSIZE=10000
 export EDITOR=vim

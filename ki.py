@@ -562,7 +562,7 @@ def ki():
         os.path.exists(ki_lock) and os.unlink(ki_lock)
     elif len(sys.argv) == 2 and sys.argv[1] == '-n':
         cmd = "kubectl get ns  --sort-by=.metadata.creationTimestamp --no-headers"
-        print("\033[1;92m{}\033[0m".format(cmd.split('  --')[0]))
+        print("\033[1;38;5;208m{}\033[0m".format(cmd.split('  --')[0]))
         os.environ['KUBECONFIG'] = os.path.realpath(default_config)
         l = get_data(cmd)
         ns_dict = get_feature([ e.split()[0] for e in l ])
@@ -699,7 +699,7 @@ def ki():
                                         action = "get"
                                         action2 = " -o yaml > "+name+"."+obj+".yml"
                                     cmd = "kubectl -n "+ns+" "+action+" "+obj.lower()+" "+name+action2
-                                print("\033[1;92m{}\033[0m".format(cmd))
+                                print("\033[1;38;5;208m{}\033[0m".format(cmd))
                                 record(pod,name,obj,cmd,k8s,ns,config_struct)
                                 os.system(cmd)
                                 print('\r')
@@ -743,7 +743,7 @@ def ki():
                                 k8s = os.environ['KUBECONFIG'].split('/')[-1]
                                 switch = switch_config(switch_num,k8s,ns,str(round(end-begin,3)))
                                 flag = False
-                            print("\033[1;92m{}\033[0m".format(cmd.split(' --')[0]))
+                            print("\033[1;38;5;208m{}\033[0m".format(cmd.split(' --')[0]))
                     if not (pod.isdigit() and int(pod) < len(result_lines)) and pod != '*':
                         result_lines = list(filter(lambda x: x.find(pod) >= 0, result_lines))
                     if result_lines:
@@ -774,7 +774,6 @@ def ki():
                         podList = pod.split()
                         pod = podList[0] if podList else ""
 
-                        # 使用 .match 方法查找特殊字符的匹配项。如果有匹配项，则执行相应操作(使用非*/$字符快速进入操作最多的pod)
                         special_chars_pattern = re.compile(r'[^\w]')
                         if special_chars_pattern.match(pod):
                             if pod == '$':
@@ -800,7 +799,7 @@ def ki():
                             l = cmd_obj(ns,obj,res,args,iip)
                             print('\033[{}C\033[1A'.format(num),end = '')
                             if l:
-                                print("\033[1;92m{}\033[0m".format(l[0]))
+                                print("\033[1;38;5;208m{}\033[0m".format(l[0]))
                                 record(res,l[2],l[1],l[0],k8s,ns,config_struct)
                                 os.system(l[0])
                             print('\r')

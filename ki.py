@@ -164,7 +164,7 @@ def cmd_obj(ns, obj, res, args, iip="x"):
             if len(args) > 1:
                 obj = d.get(args[1],'Pod')
                 if obj == 'Pod': name = res
-            cmd = "kubectl -n "+ns+" "+action+" "+obj.lower()+" "+name+" -o yaml > "+name+"."+obj+".yml"
+            cmd = "kubectl -n "+ns+" "+action+" "+obj.lower()+" "+name+" -o yaml > "+name+"."+obj.lower()+".yml"
         elif args[0] in ('d','e'):
             action = "describe" if args[0] == 'd' else "edit"
             if len(args) > 1:

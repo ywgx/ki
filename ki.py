@@ -1,7 +1,7 @@
 #!/usr/bin/python3
 #*************************************************
 # Description : Kubectl Pro
-# Version     : 4.6
+# Version     : 4.7
 #*************************************************
 from collections import deque
 import os,re,sys,time,readline,subprocess
@@ -593,7 +593,12 @@ def ki():
         result_lines = config_struct[1]
         if result_lines and len(result_lines) > 1:
             if len(sys.argv) == 3:
-                config = find_optimal(result_lines,sys.argv[2])
+                if os.path.exists(ki_dict):
+                    with open(ki_dict,'r') as f:
+                        dc = eval(f.read())
+                        dc.pop(os.path.realpath(default_config), None)
+                        history_lines = [k[0] for k in sorted(dc.items(), key=lambda d: d[1])][-5:]
+                config = find_optimal(history_lines,sys.argv[2]) or find_optimal(result_lines,sys.argv[2])
                 if config and os.path.exists(default_config) and config not in {default_config,os.path.realpath(default_config)}:
                     os.unlink(default_config)
                     os.symlink(config,default_config)

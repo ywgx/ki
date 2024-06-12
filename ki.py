@@ -1,7 +1,7 @@
 #!/usr/bin/python3
 #*************************************************
 # Description : Kubectl Pro
-# Version     : 4.7
+# Version     : 4.8
 #*************************************************
 from collections import deque
 import os,re,sys,time,readline,subprocess
@@ -197,13 +197,15 @@ def find_ip(res: str):
     return ips[0] if ips else ""
 
 def find_optimal(namespace_list: list, namespace: str):
-
     namespace_list.sort()
     has_namespace = [namespace in row for row in namespace_list]
     index_scores = [row.index(namespace) * 0.8 if has_namespace[i] else 10000 for i, row in enumerate(namespace_list)]
     contain_scores = [len(row.replace(namespace, '')) * 0.42 for row in namespace_list]
     result_scores = [(index_scores[i] + container) * (1 if has_namespace[i] else 1.62) for i, container in enumerate(contain_scores)]
-    return namespace_list[result_scores.index(min(result_scores))] if len(set(index_scores)) != 1 else ( namespace_list[has_namespace.index(True)] if True in has_namespace else None )
+    if result_scores:
+        return namespace_list[result_scores.index(min(result_scores))] if len(set(index_scores)) != 1 else ( namespace_list[has_namespace.index(True)] if True in has_namespace else None )
+    else:
+        return None
 
 def find_config():
     os.path.exists(history) or os.mkdir(history)
@@ -306,6 +308,15 @@ def find_history(config,num=1):
             dc[i[0]] = j
         with open(ki_dict,'w') as f: f.write(str(dc))
 
+def get_config(config_lines: list, ns: str):
+    history_lines = []
+    if os.path.exists(ki_dict):
+        with open(ki_dict,'r') as f:
+            dc = eval(f.read())
+            dc.pop(os.path.realpath(default_config), None)
+            history_lines = [k[0] for k in sorted(dc.items(), key=lambda d: d[1])][-5:]
+    return find_optimal(history_lines,ns) or find_optimal(config_lines,ns) or default_config
+
 def find_ns(config_struct: list):
     ns = None
     kubeconfig = None
@@ -329,7 +340,7 @@ def find_ns(config_struct: list):
                 os.path.exists(ki_cache) and os.unlink(ki_cache)
                 ns_list = cache_ns(config_struct)[config]
 
-    config = find_optimal(config_struct[1],kn[0]) or default_config if len(kn) > 1 else default_config
+    config = get_config(config_struct[1], kn[0]) or default_config if len(kn) > 1 else default_config
 
     if len(config_struct[1]) > 1:
         current_config = os.path.realpath(config)
@@ -590,38 +601,31 @@ def ki():
         end = time.perf_counter()
         print("\033[1;93m{}\033[0m".format("[ "+str(round(end-begin,3))+" ] "))
     elif 1 < len(sys.argv) < 4 and sys.argv[1] in ('-s','--s'):
-        result_lines = config_struct[1]
-        if result_lines and len(result_lines) > 1:
+        if config_struct[1] and len(config_struct[1]) > 1:
             if len(sys.argv) == 3:
-                if os.path.exists(ki_dict):
-                    with open(ki_dict,'r') as f:
-                        dc = eval(f.read())
-                        dc.pop(os.path.realpath(default_config), None)
-                        history_lines = [k[0] for k in sorted(dc.items(), key=lambda d: d[1])][-5:]
-                config = find_optimal(history_lines,sys.argv[2]) or find_optimal(result_lines,sys.argv[2])
+                config = get_config(config_struct[1], sys.argv[2])
                 if config and os.path.exists(default_config) and config not in {default_config,os.path.realpath(default_config)}:
                     os.unlink(default_config)
                     os.symlink(config,default_config)
                     print("\033[1;93m{}\033[0m".format("[ SWITCH "+config.split("/")[-1]+" ] "))
             else:
                 lr = set()
-                for i in result_lines:
-                    for j in result_lines:
+                for i in config_struct[1]:
+                    for j in config_struct[1]:
                         if cmp_file(i,j) and i != j:
                             e = i if len(i) < len(j) else j
                             if e != default_config and e != os.path.realpath(default_config):
                                 lr.add(e)
                 for e in lr:
                     os.unlink(e)
-                    result_lines.remove(e)
+                    config_struct[1].remove(e)
                 if os.path.exists(default_config):
                     pattern = ""
                     res = None
-                    temp = result_lines
                     while True:
-                        result_lines = list(filter(lambda x: x.find(pattern) >= 0, result_lines)) if pattern else temp
-                        if result_lines:
-                            for n,e in enumerate(result_lines):
+                        config_struct[1] = [x for x in config_struct[1] if x.find(pattern) >= 0] if pattern else config_struct[1]
+                        if config_struct[1]:
+                            for n,e in enumerate(config_struct[1]):
                                 if cmp_file(e,default_config):
                                     print("\033[1;95m{}\033[0m \033[1;32m{}\033[0m".format(n,e.strip().split('/')[-1]))
                                 else:
@@ -630,16 +634,16 @@ def ki():
                                 pattern = input("\033[1;95m%s\033[0m\033[5;95m%s\033[0m" % ("select",":")).strip()
                             except:
                                 sys.exit()
-                            if pattern.isdigit() and 0 <= int(pattern) < len(result_lines) or len(result_lines) == 1:
+                            if pattern.isdigit() and 0 <= int(pattern) < len(config_struct[1]) or len(config_struct[1]) == 1:
                                 index = int(pattern) if pattern.isdigit() else 0
-                                res = (result_lines[index]).split()[0]
+                                res = (config_struct[1][index]).split()[0]
                             if res:
                                 if res not in {default_config,os.path.realpath(default_config)}:
                                     os.unlink(default_config)
                                     os.symlink(res,default_config)
                                     print('\033[{}C\033[1A'.format(10),end = '')
                                     print("\033[1;32m{}\033[0m".format(res.split('/')[-1]))
-                                    find_history(res,6)
+                                    find_history(res,32)
                                     os.path.exists(ki_unlock) or open(ki_lock,"a").close()
                                 break
                         else:

@@ -622,10 +622,8 @@ def ki():
                 if os.path.exists(default_config):
                     pattern = ""
                     res = None
-                    max_iterations = 7
-                    iteration_count = 0
                     while True:
-                        config_struct[1] = [x for x in config_struct[1] if x.find(pattern) >= 0] if pattern else config_struct[1] or "kube"
+                        config_struct[1] = [x for x in config_struct[1] if x.find(pattern) >= 0] if pattern else config_struct[1]
                         if config_struct[1]:
                             for n,e in enumerate(config_struct[1]):
                                 if cmp_file(e,default_config):
@@ -648,8 +646,7 @@ def ki():
                                     find_history(res,32)
                                     os.path.exists(ki_unlock) or open(ki_lock,"a").close()
                                 break
-                        iteration_count += 1
-                        if iteration_count == max_iterations:
+                        else:
                             break
                 else:
                     print("\033[1;32m{}\033[0m\033[5;32m{}\033[0m".format("File not found ",default_config))

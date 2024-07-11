@@ -1,7 +1,7 @@
 #!/usr/bin/python3
 #*************************************************
 # Description : Kubectl Pro
-# Version     : 4.9
+# Version     : 5.0
 #*************************************************
 from collections import deque
 import os,re,sys,time,readline,subprocess
@@ -122,20 +122,27 @@ def cmd_obj(ns, obj, res, args, iip="x"):
             else:
                 print("Operation canceled.")
                 return
-        elif args[0] in ('l','c'):
-            regular = args[1:]
+        elif args[0] in ('l', 'c', 'g'):
+            search_term = args[1:].strip()
             try:
                 result_list = get_data("kubectl -n "+ns+" get pod "+res+" -o jsonpath='{.spec.containers[:].name}'")[0].split()
             except:
                 sys.exit()
-            container = "--all-containers --max-log-requests=28"
-            if regular:
-                if regular.isdigit():
-                    if 0 < int(regular) < 10000:
-                        os.environ['KI_LINE'] = regular
+            container = "--all-containers --max-log-requests=16"
+            if search_term:
+                if search_term.isdigit():
+                    if 0 < int(search_term) < 10000:
+                        os.environ['KI_LINE'] = search_term
                         with open(ki_line,'w') as f:
-                            f.write(regular)
-                cmd = ( "kubectl -n "+ns+" logs -f "+res+" "+container+" --tail "+regular ) if regular.isdigit() and len(regular) < 12 else ( "kubectl -n "+ns+" logs -f "+res+" "+container+"|grep --color=auto " + ( regular if args[0] in ('l') else "-C 10 "+regular ) )
+                            f.write(search_term)
+                if search_term.isdigit() and len(search_term) < 12:
+                    cmd = f"kubectl -n {ns} logs -f {res} {container} --tail {search_term}"
+                else:
+                    if args[0] == 'l':
+                        cmd = f"kubectl -n {ns} logs -f --tail 1024 {res} {container} | grep --line-buffered --color=auto '{search_term}'"
+                    else:
+                        grep_option = "" if args[0] == 'g' else "-C 10"
+                        cmd = f"kubectl -n {ns} logs -f {res} {container} | grep --line-buffered --color=auto {grep_option} '{search_term}'"
             else:
                 if 'KI_LINE' in os.environ:
                     line = os.environ['KI_LINE']
@@ -146,7 +153,7 @@ def cmd_obj(ns, obj, res, args, iip="x"):
                         line = os.environ['KI_LINE']
                 else:
                     line = str(200)
-                cmd = "kubectl -n "+ns+" logs -f "+res+" "+container+" --tail "+line
+                cmd = f"kubectl -n {ns} logs -f {res} {container} --tail {line}"
         elif args[0] in ('v'):
             regular = args[1:]
             try:
@@ -780,6 +787,7 @@ def ki():
                         except:
                             sys.exit()
                         result_len = len(result_lines)
+                        search_term = pod
                         podList = pod.split()
                         pod = podList[0] if podList else ""
 
@@ -798,8 +806,14 @@ def ki():
                                         if last_res in e:
                                             pod = str(result_len-n-1)
                                             break
-
-                        args = ''.join(podList[1:]) if len(podList) > 1 else "p"
+                        if len(podList) > 1:
+                            if podList[1][0] in ('l','g','c'):
+                                parts = search_term.split(None, 2)
+                                args = podList[1][0] + " " + parts[2] if len(parts) == 3 else ' '.join(podList[1:])
+                            else:
+                                args = ''.join(podList[1:])
+                        else:
+                            args = "p"
                         if pod.isdigit() and int(pod) < result_len or ( result_len == 1 and pod != '*'):
                             index = int(pod) if pod.isdigit() and int(pod) < result_len else 0
                             res = result_lines[index].split()[0 if sys.argv[1] not in ('-a','--a') else (1 if obj not in ("PersistentVolume") else 0)]

@@ -104,7 +104,7 @@ def cmd_obj(ns, obj, res, args, iip="x"):
         if args == "p":
             cmd = "kubectl -n "+ns+" exec -it "+res+" -- sh"
         elif args == "del":
-            cmd = "kubectl -n "+ns+" delete pod "+res+" &"
+            cmd = "kubectl -n "+ns+" delete pod "+res+" --wait=false"
         elif args == "delf":
             action = "delete"
             cmd = "kubectl -n "+ns+" delete pod "+res+" --grace-period=0 --force"

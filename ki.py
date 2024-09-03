@@ -1,7 +1,7 @@
 #!/usr/bin/python3
 #*************************************************
 # Description : Kubectl Pro
-# Version     : 5.0
+# Version     : 5.2
 #*************************************************
 from collections import deque
 import os,re,sys,time,readline,subprocess
@@ -56,7 +56,11 @@ def cmd_obj(ns, obj, res, args, iip="x"):
             cmd = "kubectl "+action+" "+obj.lower()+" "+res+action2
         else:
             action = "ssh"
-            cmd = action +" root@"+iip
+            node_ip = get_data("kubectl get node " + res + " -o jsonpath='{.status.addresses[?(@.type==\"InternalIP\")].address}'")[0]
+            if find_ip(node_ip):
+                cmd = action +" root@"+node_ip
+            else:
+                cmd = action +" root@"+iip
     elif obj in ("Event"):
         action = "get"
         cmd = "kubectl -n "+ns+" "+action+" "+obj+"  --sort-by=.metadata.creationTimestamp"
@@ -128,7 +132,7 @@ def cmd_obj(ns, obj, res, args, iip="x"):
                 result_list = get_data("kubectl -n "+ns+" get pod "+res+" -o jsonpath='{.spec.containers[:].name}'")[0].split()
             except:
                 sys.exit()
-            container = "--all-containers --max-log-requests=16"
+            container = "--all-containers --max-log-requests=28"
             if search_term:
                 if search_term.isdigit():
                     if 0 < int(search_term) < 10000:
@@ -139,10 +143,10 @@ def cmd_obj(ns, obj, res, args, iip="x"):
                     cmd = f"kubectl -n {ns} logs -f {res} {container} --tail {search_term}"
                 else:
                     if args[0] == 'l':
-                        cmd = f"kubectl -n {ns} logs -f --tail 1024 {res} {container} | grep --line-buffered --color=auto '{search_term}'"
+                        cmd = f"kubectl -n {ns} logs -f --tail 1024 {res} {container} | grep -a --color=auto '{search_term}'"
                     else:
                         grep_option = "" if args[0] == 'g' else "-C 10"
-                        cmd = f"kubectl -n {ns} logs -f {res} {container} | grep --line-buffered --color=auto {grep_option} '{search_term}'"
+                        cmd = f"kubectl -n {ns} logs -f {res} {container} | grep -a --color=auto {grep_option} '{search_term}'"
             else:
                 if 'KI_LINE' in os.environ:
                     line = os.environ['KI_LINE']
@@ -321,7 +325,8 @@ def get_config(config_lines: list, ns: str):
         with open(ki_dict,'r') as f:
             dc = eval(f.read())
             dc.pop(os.path.realpath(default_config), None)
-            history_lines = [k[0] for k in sorted(dc.items(), key=lambda d: d[1])][-5:]
+            history_lines = [k[0] for k in sorted(dc.items(), key=lambda d: d[1])][-8:]
+    config_lines.remove(os.path.realpath(default_config))
     return find_optimal(history_lines,ns) or find_optimal(config_lines,ns) or default_config
 
 def find_ns(config_struct: list):

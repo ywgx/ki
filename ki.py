@@ -680,7 +680,7 @@ def ki():
                     begin = time.perf_counter()
                     while True:
                         if ns:
-                            cmd = "kubectl get pod --no-headers --field-selector=status.phase=Running -n "+ns
+                            cmd = "kubectl get pod --no-headers -n "+ns
                             pods = [ e.split()[0] for e in get_data(cmd) ]
                             pod = find_optimal(pods,sys.argv[3]) if pods else None
                             if not (pods and pod):

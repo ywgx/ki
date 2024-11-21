@@ -1,7 +1,7 @@
 #!/usr/bin/python3
 #*************************************************
 # Description : Kubectl Pro
-# Version     : 5.2
+# Version     : 5.3
 #*************************************************
 from collections import deque
 import os,re,sys,time,readline,subprocess
@@ -64,7 +64,7 @@ def cmd_obj(ns, obj, res, args, iip="x"):
     elif obj in ("Event"):
         action = "get"
         cmd = "kubectl -n "+ns+" "+action+" "+obj+"  --sort-by=.metadata.creationTimestamp"
-    elif obj in ("Deployment","DaemonSet","Service","StatefulSet","Ingress","ConfigMap","Secret","PersistentVolume","PersistentVolumeClaim","CronJob","Job","VirtualService","Gateway","DestinationRule","EnvoyFilter"):
+    elif obj in ("Deployment","DaemonSet","Service","StatefulSet","Ingress","ConfigMap","Secret","PersistentVolume","PersistentVolumeClaim","CronJob","Job","VirtualService","Gateway","HTTPRoute","DestinationRule","EnvoyFilter"):
         action2 = ""
         if args in ("cle","delete"):
             if confirm_action("This command will delete the "+obj):
@@ -104,7 +104,7 @@ def cmd_obj(ns, obj, res, args, iip="x"):
         l = get_obj(ns,res)
         obj = l[0]
         name = l[1]
-        d = {'d':'Deployment','s':'Service','i':'Ingress','f':'StatefulSet','a':'DaemonSet','p':'Pod','V':'VirtualService','G':'Gateway','D':'DestinationRule','E':'EnvoyFilter'}
+        d = {'d':'Deployment','s':'Service','i':'Ingress','f':'StatefulSet','a':'DaemonSet','p':'Pod','g':'Gateway','h':'HTTPRoute','V':'VirtualService','D':'DestinationRule','E':'EnvoyFilter'}
         if args == "p":
             cmd = "kubectl -n "+ns+" exec -it "+res+" -- sh"
         elif args == "del":
@@ -673,7 +673,7 @@ def ki():
             ext = " -o wide"
             os.environ['KUBECONFIG'] = l[1]
             if len(sys.argv) == 4:
-                d = {'d':['Deployment'," -o wide"],'s':['Service'," -o wide"],'i':['Ingress'," -o wide"],'c':['ConfigMap'," -o wide"],'t':['Secret'," -o wide"],'n':['Node'," -o wide"],'p':['PersistentVolumeClaim'," -o wide"],'v':['PersistentVolume'," -o wide"],'f':['StatefulSet'," -o wide"],'j':['CronJob'," -o wide"],'b':['Job'," -o wide"],'P':['Pod'," -o wide"],'e':['Event',''],'r':['ReplicaSet',''],'a':['DaemonSet',''],'q':['ResourceQuota',''],'V':['VirtualService',""],'G':['Gateway',''],'E':['EnvoyFilter',''],'D':['DestinationRule','']}
+                d = {'d':['Deployment'," -o wide"],'s':['Service'," -o wide"],'i':['Ingress'," -o wide"],'c':['ConfigMap'," -o wide"],'t':['Secret'," -o wide"],'n':['Node'," -o wide"],'p':['PersistentVolumeClaim'," -o wide"],'v':['PersistentVolume'," -o wide"],'f':['StatefulSet'," -o wide"],'j':['CronJob'," -o wide"],'b':['Job'," -o wide"],'P':['Pod'," -o wide"],'e':['Event',''],'r':['ReplicaSet',''],'a':['DaemonSet',''],'q':['ResourceQuota',''],'V':['VirtualService',""],'g':['Gateway',''],'h':['HTTPRoute',''],'E':['EnvoyFilter',''],'D':['DestinationRule','']}
                 obj = d[sys.argv[3][0]][0] if sys.argv[3][0] in d else "Pod"
                 ext = d[sys.argv[3][0]][1] if sys.argv[3][0] in d else ""
                 if sys.argv[1] in ('-i','-l','-e','-es','-ei','-o','-os','-oi'):
@@ -845,7 +845,7 @@ def ki():
         print(style % "Kubectl pro controls the Kubernetes cluster manager,find more information at: https://ki.xabc.io\n")
         doc_dict = {
          "1. ki":"List all namespaces",
-         "2. ki xx":"List all pods in the namespace ( if there are multiple ~/.kube/kubeconfig*,the best matching kubeconfig will be found ,the namespace parameter supports fuzzy matching,after outputting the pod list, select: xxx filters the query\n         select: index l ( [ l ] Print the logs for a container in a pod or specified resource \n         select: index l 100 ( Print the logs of the latest 100 lines \n         select: index l xxx ( Print the logs and filters the specified characters \n         select: index r ( [ r ] Rollout restart the pod \n         select: index o ( [ o ] Output the [Deployment,StatefulSet,Service,Ingress,Configmap,Secret].yml file \n         select: index del ( [ del ] Delete the pod \n         select: index cle ( [ cle ] Delete the Deployment/StatefulSet \n         select: index e[siVGDE] ( [ e[siVGDE] ] Edit the Deploy/Service/Ingress/VirtualService/Gateway/DestinationRule/EnvoyFilter \n         select: index s5 ( [ s3 ] Set the Deploy/StatefulSet replicas=3 \n         select: index dp ( Describe a pod \n         select: * ( Watching... ",
+         "2. ki xx":"List all pods in the namespace ( if there are multiple ~/.kube/kubeconfig*,the best matching kubeconfig will be found ,the namespace parameter supports fuzzy matching,after outputting the pod list, select: xxx filters the query\n         select: index l ( [ l ] Print the logs for a container in a pod or specified resource \n         select: index l 100 ( Print the logs of the latest 100 lines \n         select: index l xxx ( Print the logs and filters the specified characters \n         select: index r ( [ r ] Rollout restart the pod \n         select: index o ( [ o ] Output the [Deployment,StatefulSet,Service,Ingress,Configmap,Secret].yml file \n         select: index del ( [ del ] Delete the pod \n         select: index cle ( [ cle ] Delete the Deployment/StatefulSet \n         select: index e[siVGDE] ( [ e[siVGDE] ] Edit the Deploy/Service/Ingress/VirtualService/Gateway/HTTPRoute/DestinationRule/EnvoyFilter \n         select: index s5 ( [ s3 ] Set the Deploy/StatefulSet replicas=3 \n         select: index dp ( Describe a pod \n         select: * ( Watching... ",
          "3. ki xx d":"List the Deployment of a namespace",
          "4. ki xx f":"List the StatefulSet of a namespace",
          "5. ki xx s":"List the Service of a namespace",
@@ -857,16 +857,17 @@ def ki():
          "11. ki xx p":"List the PersistentVolumeClaim of a namespace",
          "12. ki xx q":"List the ResourceQuota of a namespace",
          "13. ki xx V":"List the VirtualService of a namespace",
-         "14. ki xx G":"List the Gateway of a namespace",
-         "15. ki xx D":"List the DestinationRule of a namespace",
-         "16. ki xx E":"List the EnvoyFilter of a namespace",
-         "17. ki -i $ns $pod":"Login in the container,this way can be one-stop",
-         "18. ki -l $ns $pod":"Print the logs for a container,this way can be one-stop",
-         "19. ki -e[si] $ns $pod":"Edit the Deploy/Service/Ingress for a container,this way can be one-stop",
-         "20. ki $k8s.$ns":"Select the kubernetes which namespace in the kubernetes ( if there are multiple ~/.kube/kubeconfig*,this way can be one-stop. ",
-         "21. ki --s":"Select the kubernetes to be connected ( if there are multiple ~/.kube/kubeconfig*,the kubeconfig storage can be kubeconfig-hz,kubeconfig-sh,etc. ",
-         "22. ki --c":"Enable write caching of namespace ( ~/.history/.ns_dict ",
-         "23. ki --a":"List all pods in the kubernetes",
+         "14. ki xx g":"List the Gateway of a namespace",
+         "15. ki xx h":"List the HTTPRoute of a namespace",
+         "16. ki xx D":"List the DestinationRule of a namespace",
+         "17. ki xx E":"List the EnvoyFilter of a namespace",
+         "18. ki -i $ns $pod":"Login in the container,this way can be one-stop",
+         "19. ki -l $ns $pod":"Print the logs for a container,this way can be one-stop",
+         "20. ki -e[si] $ns $pod":"Edit the Deploy/Service/Ingress for a container,this way can be one-stop",
+         "21. ki $k8s.$ns":"Select the kubernetes which namespace in the kubernetes ( if there are multiple ~/.kube/kubeconfig*,this way can be one-stop. ",
+         "22. ki --s":"Select the kubernetes to be connected ( if there are multiple ~/.kube/kubeconfig*,the kubeconfig storage can be kubeconfig-hz,kubeconfig-sh,etc. ",
+         "23. ki --c":"Enable write caching of namespace ( ~/.history/.ns_dict ",
+         "24. ki --a":"List all pods in the kubernetes",
          "Tips:": "Within the selection process of Pod filtering, where '$' represents the most recent Pod, while '~' and '!' denote the Pod from the previous operation, and the remaining symbols indicate the Pod that has been operated on the most."}
         for k,v in doc_dict.items():
             print(style % k,v)

@@ -845,7 +845,7 @@ def ki():
         print(style % "Kubectl pro controls the Kubernetes cluster manager,find more information at: https://ki.xabc.io\n")
         doc_dict = {
          "1. ki":"List all namespaces",
-         "2. ki xx":"List all pods in the namespace ( if there are multiple ~/.kube/kubeconfig*,the best matching kubeconfig will be found ,the namespace parameter supports fuzzy matching,after outputting the pod list, select: xxx filters the query\n         select: index l ( [ l ] Print the logs for a container in a pod or specified resource \n         select: index l 100 ( Print the logs of the latest 100 lines \n         select: index l xxx ( Print the logs and filters the specified characters \n         select: index r ( [ r ] Rollout restart the pod \n         select: index o ( [ o ] Output the [Deployment,StatefulSet,Service,Ingress,Configmap,Secret].yml file \n         select: index del ( [ del ] Delete the pod \n         select: index cle ( [ cle ] Delete the Deployment/StatefulSet \n         select: index e[siVGDE] ( [ e[siVGDE] ] Edit the Deploy/Service/Ingress/VirtualService/Gateway/HTTPRoute/DestinationRule/EnvoyFilter \n         select: index s5 ( [ s3 ] Set the Deploy/StatefulSet replicas=3 \n         select: index dp ( Describe a pod \n         select: * ( Watching... ",
+         "2. ki xx":"List all pods in the namespace ( if there are multiple ~/.kube/kubeconfig*,the best matching kubeconfig will be found ,the namespace parameter supports fuzzy matching,after outputting the pod list, select: xxx filters the query\n         select: index l ( [ l ] Print the logs for a container in a pod or specified resource \n         select: index l 100 ( Print the logs of the latest 100 lines \n         select: index l xxx ( Print the logs and filters the specified characters \n         select: index r ( [ r ] Rollout restart the pod \n         select: index o ( [ o ] Output the [Deployment,StatefulSet,Service,Ingress,Configmap,Secret].yml file \n         select: index del ( [ del ] Delete the pod \n         select: index cle ( [ cle ] Delete the Deployment/StatefulSet \n         select: index e[sighVDE] ( [ e[sighVDE] ] Edit the Deploy/Service/Ingress/Gateway/HTTPRoute/VirtualService/DestinationRule/EnvoyFilter \n         select: index s5 ( [ s3 ] Set the Deploy/StatefulSet replicas=3 \n         select: index dp ( Describe a pod \n         select: * ( Watching... ",
          "3. ki xx d":"List the Deployment of a namespace",
          "4. ki xx f":"List the StatefulSet of a namespace",
          "5. ki xx s":"List the Service of a namespace",
@@ -856,9 +856,9 @@ def ki():
          "10. ki xx v":"List the PersistentVolume of a namespace",
          "11. ki xx p":"List the PersistentVolumeClaim of a namespace",
          "12. ki xx q":"List the ResourceQuota of a namespace",
-         "13. ki xx V":"List the VirtualService of a namespace",
-         "14. ki xx g":"List the Gateway of a namespace",
-         "15. ki xx h":"List the HTTPRoute of a namespace",
+         "13. ki xx g":"List the Gateway of a namespace",
+         "14. ki xx h":"List the HTTPRoute of a namespace",
+         "15. ki xx V":"List the VirtualService of a namespace",
          "16. ki xx D":"List the DestinationRule of a namespace",
          "17. ki xx E":"List the EnvoyFilter of a namespace",
          "18. ki -i $ns $pod":"Login in the container,this way can be one-stop",

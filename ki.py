@@ -36,7 +36,7 @@ def cmp_file(f1, f2):
 
 def confirm_action(caution):
     try:
-        confirm = input(caution+"\nAre you certain you want to execute this high-risk action? (yes/no): ")
+        confirm = input(caution+", Confirm execution of high-risk operation? (yes/no): ")
         return confirm.lower() in ("yes","y")
     except:
         return False
@@ -113,14 +113,14 @@ def cmd_obj(ns, obj, res, args, iip="x"):
             action = "delete"
             cmd = "kubectl -n "+ns+" delete pod "+res+" --grace-period=0 --force"
         elif args in ("cle","delete"):
-            if confirm_action("This command will delete the deployment associated with the pod."):
+            if confirm_action("This command will delete the deployment associated with the pod"):
                 action = "delete"
                 cmd = "kubectl -n "+ns+" "+action+" "+obj.lower()+" "+name
             else:
                 print("Operation canceled.")
                 return
         elif args in ("destroy","destory"):
-            if confirm_action("This command will delete the deployment,service,ingress associated with the pod."):
+            if confirm_action("Delete associated Deployment, Service, and Ingress resources for the Pod"):
                 action = "delete"
                 cmd = "kubectl -n "+ns+" "+action+" "+obj.lower()+",service,ingress "+name
             else:

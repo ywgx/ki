@@ -1,7 +1,7 @@
 #!/usr/bin/python3
 #*************************************************
 # Description : Kubectl Pro
-# Version     : 5.3
+# Version     : 5.4
 #*************************************************
 from collections import deque
 import os,re,sys,time,readline,subprocess
@@ -322,12 +322,27 @@ def find_history(config,num=1):
 def get_config(config_lines: list, ns: str):
     history_lines = []
     if os.path.exists(ki_dict):
-        with open(ki_dict,'r') as f:
+        with open(ki_dict, 'r') as f:
             dc = eval(f.read())
             dc.pop(os.path.realpath(default_config), None)
-            history_lines = [k[0] for k in sorted(dc.items(), key=lambda d: d[1])][-8:]
+            history_lines = [k[0] for k in sorted(dc.items(), key=lambda d: d[1], reverse=True)]
+
     config_lines.remove(os.path.realpath(default_config))
-    return find_optimal(history_lines,ns) or find_optimal(config_lines,ns) or default_config
+    matching_configs = [config for config in config_lines if ns in config]
+
+    if not matching_configs:
+        return default_config
+
+    def score_config(config):
+        base_score = dc.get(config, 0)
+        match_score = len(set(config.lower()) & set(ns.lower())) / len(set(ns.lower()))
+        history_score = len(history_lines) - history_lines.index(config) if config in history_lines else 0
+        total_score = base_score * 0.5 + match_score * 0.3 + history_score * 0.2
+        return total_score
+
+    scored_configs = [(config, score_config(config)) for config in matching_configs]
+    scored_configs.sort(key=lambda x: x[1], reverse=True)
+    return scored_configs[0][0]
 
 def find_ns(config_struct: list):
     ns = None
@@ -427,7 +442,7 @@ def switch_config(switch_num: int,k8s: str,ns: str,time: str):
         os.unlink(default_config)
         os.symlink(os.environ['KUBECONFIG'],default_config)
         print("\033[1;93m{}\033[0m".format("[ "+time+"  "+str(switch_num+1)+"-SWITCH  "+k8s+" / "+ns+" ] "))
-        find_history(os.environ['KUBECONFIG'],1)
+        find_history(os.environ['KUBECONFIG'],3)
         switch_num > 0 and subprocess.Popen("ki --c",shell=True,stdout=subprocess.PIPE,stderr=subprocess.PIPE,universal_newlines=True)
         switch = True
     return switch
@@ -619,6 +634,7 @@ def ki():
                 if config and os.path.exists(default_config) and config not in {default_config,os.path.realpath(default_config)}:
                     os.unlink(default_config)
                     os.symlink(config,default_config)
+                    find_history(config,32)
                     print("\033[1;93m{}\033[0m".format("[ SWITCH "+config.split("/")[-1]+" ] "))
             else:
                 lr = set()
@@ -655,7 +671,7 @@ def ki():
                                     os.symlink(res,default_config)
                                     print('\033[{}C\033[1A'.format(10),end = '')
                                     print("\033[1;32m{}\033[0m".format(res.split('/')[-1]))
-                                    find_history(res,32)
+                                    find_history(res,24)
                                     os.path.exists(ki_unlock) or open(ki_lock,"a").close()
                                 break
                         else:

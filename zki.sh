@@ -3,8 +3,6 @@ function parse_git_branch() {
 }
 source <(kubectl completion bash)
 export GREP_COLORS='ms=1;91'
-export HISTTIMEFORMAT="%F %T "
-export HISTSIZE=10000
 export EDITOR=vim
 export KUBE_EDITOR=vim
 export KI_LINE=$([ -e ~/.history/.line ] && cat ~/.history/.line || echo 200)
@@ -13,5 +11,6 @@ alias vi=vim
 alias ls='ls --color'
 alias ll='ls -l'
 alias kn='cd ~/.kube;for file in $(find . -name "kubeconfig-*-NULL"); do mv "$file" "${file%-NULL}"; done'
+alias kubectl="kubectl --insecure-skip-tls-verify "
 [ $USER = root ] && STYLE="\033c\033[5;32m%s\033[1;m\n" || STYLE="\033[5;32m%s\033[1;m\n"
 [[ $- == *i* ]] && [ -e ~/.kube/config ] && printf $STYLE "$(/usr/local/bin/ki --w)"

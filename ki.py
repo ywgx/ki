@@ -1,7 +1,7 @@
 #!/usr/bin/python3
 #*************************************************
 # Description : Kubectl Pro
-# Version     : 5.4
+# Version     : 5.5
 #*************************************************
 from collections import deque
 import os,re,sys,time,readline,subprocess
@@ -20,6 +20,7 @@ ki_ns_dict = history + "/.ns_dict"
 ki_pod_dict = history + "/.pod_dict"
 ki_latest_ns_dict = history + "/.latest_ns_dict"
 ki_current_ns_dict = history + "/.current_ns_dict"
+KUBECTL_OPTIONS = "--insecure-skip-tls-verify"
 #-----------------FUN-----------------------------
 def cmp_file(f1, f2):
     if os.path.getsize(f1) != os.path.getsize(f2):
@@ -46,24 +47,24 @@ def cmd_obj(ns, obj, res, args, iip="x"):
     if obj in ("Node"):
         if args[0] in ('c','u'):
             action = "cordon" if args[0] == 'c' else "uncordon"
-            cmd = "kubectl "+action+" "+res
+            cmd = f"kubectl {KUBECTL_OPTIONS} "+action+" "+res
         elif args[0] in ('d','e'):
             action = "describe" if args[0] == 'd' else "edit"
-            cmd = "kubectl "+action+" "+obj.lower()+" "+res
+            cmd = f"kubectl {KUBECTL_OPTIONS} "+action+" "+obj.lower()+" "+res
         elif args[0] == 'o':
             action = "get"
             action2 = " -o yaml > "+res+"."+obj.lower()+".yml"
-            cmd = "kubectl "+action+" "+obj.lower()+" "+res+action2
+            cmd = f"kubectl {KUBECTL_OPTIONS} "+action+" "+obj.lower()+" "+res+action2
         else:
             action = "ssh"
-            node_ip = get_data("kubectl get node " + res + " -o jsonpath='{.status.addresses[?(@.type==\"InternalIP\")].address}'")[0]
+            node_ip = get_data(f"kubectl {KUBECTL_OPTIONS} get node " + res + " -o jsonpath='{.status.addresses[?(@.type==\"InternalIP\")].address}'")[0]
             if find_ip(node_ip):
                 cmd = action +" root@"+node_ip
             else:
                 cmd = action +" root@"+iip
     elif obj in ("Event"):
         action = "get"
-        cmd = "kubectl -n "+ns+" "+action+" "+obj+"  --sort-by=.metadata.creationTimestamp"
+        cmd = f"kubectl {KUBECTL_OPTIONS} -n "+ns+" "+action+" "+obj+"  --sort-by=.metadata.creationTimestamp"
     elif obj in ("Deployment","DaemonSet","Service","StatefulSet","Ingress","ConfigMap","Secret","PersistentVolume","PersistentVolumeClaim","CronJob","Job","VirtualService","Gateway","HTTPRoute","DestinationRule","EnvoyFilter"):
         action2 = ""
         if args in ("cle","delete"):
@@ -81,7 +82,7 @@ def cmd_obj(ns, obj, res, args, iip="x"):
             action2 = " -o yaml > "+res+"."+obj.lower()+".yml"
         else:
             action = "get"
-        cmd = "kubectl -n "+ns+" "+action+" "+obj.lower()+" "+res+action2 if obj not in ("PersistentVolume") else "kubectl "+action+" "+obj.lower()+" "+res+action2
+        cmd = f"kubectl {KUBECTL_OPTIONS} -n "+ns+" "+action+" "+obj.lower()+" "+res+action2 if obj not in ("PersistentVolume") else f"kubectl {KUBECTL_OPTIONS} "+action+" "+obj.lower()+" "+res+action2
     elif obj in ("ResourceQuota"):
         action2 = ""
         if args[0] == "e":
@@ -99,37 +100,37 @@ def cmd_obj(ns, obj, res, args, iip="x"):
                 return
         else:
             action = "get"
-        cmd = "kubectl -n "+ns+" "+action+" "+obj.lower()+" "+res+action2
+        cmd = f"kubectl {KUBECTL_OPTIONS} -n "+ns+" "+action+" "+obj.lower()+" "+res+action2
     else:
         l = get_obj(ns,res)
         obj = l[0]
         name = l[1]
         d = {'d':'Deployment','s':'Service','i':'Ingress','f':'StatefulSet','a':'DaemonSet','p':'Pod','g':'Gateway','h':'HTTPRoute','V':'VirtualService','D':'DestinationRule','E':'EnvoyFilter'}
         if args == "p":
-            cmd = "kubectl -n "+ns+" exec -it "+res+" -- sh"
+            cmd = f"kubectl {KUBECTL_OPTIONS} -n "+ns+" exec -it "+res+" -- sh"
         elif args == "del":
-            cmd = "kubectl -n "+ns+" delete pod "+res+" --wait=false"
+            cmd = f"kubectl {KUBECTL_OPTIONS} -n "+ns+" delete pod "+res+" --wait=false"
         elif args == "delf":
             action = "delete"
-            cmd = "kubectl -n "+ns+" delete pod "+res+" --grace-period=0 --force"
+            cmd = f"kubectl {KUBECTL_OPTIONS} -n "+ns+" delete pod "+res+" --grace-period=0 --force"
         elif args in ("cle","delete"):
             if confirm_action("This command will delete the deployment associated with the pod"):
                 action = "delete"
-                cmd = "kubectl -n "+ns+" "+action+" "+obj.lower()+" "+name
+                cmd = f"kubectl {KUBECTL_OPTIONS} -n "+ns+" "+action+" "+obj.lower()+" "+name
             else:
                 print("Operation canceled.")
                 return
         elif args in ("destroy","destory"):
             if confirm_action("Delete associated Deployment, Service, and Ingress resources for the Pod"):
                 action = "delete"
-                cmd = "kubectl -n "+ns+" "+action+" "+obj.lower()+",service,ingress "+name
+                cmd = f"kubectl {KUBECTL_OPTIONS} -n "+ns+" "+action+" "+obj.lower()+",service,ingress "+name
             else:
                 print("Operation canceled.")
                 return
         elif args[0] in ('l', 'c', 'g'):
             search_term = args[1:].strip()
             try:
-                result_list = get_data("kubectl -n "+ns+" get pod "+res+" -o jsonpath='{.spec.containers[:].name}'")[0].split()
+                result_list = get_data(f"kubectl {KUBECTL_OPTIONS} -n "+ns+" get pod "+res+" -o jsonpath='{.spec.containers[:].name}'")[0].split()
             except:
                 sys.exit()
             container = "--all-containers --max-log-requests=28"
@@ -140,66 +141,66 @@ def cmd_obj(ns, obj, res, args, iip="x"):
                         with open(ki_line,'w') as f:
                             f.write(search_term)
                 if search_term.isdigit() and len(search_term) < 12:
-                    cmd = f"kubectl -n {ns} logs -f {res} {container} --tail {search_term}"
+                    cmd = f"kubectl {KUBECTL_OPTIONS} -n {ns} logs -f {res} {container} --tail {search_term}"
                 else:
                     if args[0] == 'l':
-                        cmd = f"kubectl -n {ns} logs -f --tail 1024 {res} {container} | grep -a --color=auto '{search_term}'"
+                        cmd = f"kubectl {KUBECTL_OPTIONS} -n {ns} logs -f --tail 1024 {res} {container} | grep -a --color=auto '{search_term}'"
                     else:
                         grep_option = "" if args[0] == 'g' else "-C 10"
-                        cmd = f"kubectl -n {ns} logs -f {res} {container} | grep -a --color=auto {grep_option} '{search_term}'"
+                        cmd = f"kubectl {KUBECTL_OPTIONS} -n {ns} logs -f {res} {container} | grep -a --color=auto {grep_option} '{search_term}'"
             else:
                 if 'KI_LINE' in os.environ:
                     line = os.environ['KI_LINE']
                 elif os.path.exists(ki_line):
                     with open(ki_line,'r') as f:
                         line_file = str(f.read())
-                        os.environ['KI_LINE'] = line_file if line_file.isdigit() else str(200)
+                        os.environ['KI_LINE'] = line_file if line_file.isdigit() and int(line_file) < 4096 else str(200)
                         line = os.environ['KI_LINE']
                 else:
                     line = str(200)
-                cmd = f"kubectl -n {ns} logs -f {res} {container} --tail {line}"
+                cmd = f"kubectl {KUBECTL_OPTIONS} -n {ns} logs -f {res} {container} --tail {line}"
         elif args[0] in ('v'):
             regular = args[1:]
             try:
-                result_list = get_data("kubectl -n "+ns+" get pod "+res+" -o jsonpath='{.spec.containers[:].name}'")[0].split()
+                result_list = get_data(f"kubectl {KUBECTL_OPTIONS} -n "+ns+" get pod "+res+" -o jsonpath='{.spec.containers[:].name}'")[0].split()
             except:
                 sys.exit()
             container = name if name in result_list else "--all-containers"
-            cmd = "kubectl -n "+ns+" logs -f "+res+" "+container+" --previous --tail "+ ( regular if regular and regular.isdigit() and len(regular) < 12 else "5000" )
+            cmd = f"kubectl {KUBECTL_OPTIONS} -n "+ns+" logs -f "+res+" "+container+" --previous --tail "+ ( regular if regular and regular.isdigit() and len(regular) < 12 else "4096" )
         elif args[0] in ('r'):
-            cmd = "kubectl -n "+ns+" rollout restart "+obj.lower()+" "+name
+            cmd = f"kubectl {KUBECTL_OPTIONS} -n "+ns+" rollout restart "+obj.lower()+" "+name
         elif args[0] in ('u'):
-            cmd = "kubectl -n "+ns+" rollout undo "+obj.lower()+"/"+name
+            cmd = f"kubectl {KUBECTL_OPTIONS} -n "+ns+" rollout undo "+obj.lower()+"/"+name
         elif args[0] in ('o'):
             action = "get"
             if len(args) > 1:
                 obj = d.get(args[1],'Pod')
                 if obj == 'Pod': name = res
-            cmd = "kubectl -n "+ns+" "+action+" "+obj.lower()+" "+name+" -o yaml > "+name+"."+obj.lower()+".yml"
+            cmd = f"kubectl {KUBECTL_OPTIONS} -n "+ns+" "+action+" "+obj.lower()+" "+name+" -o yaml > "+name+"."+obj.lower()+".yml"
         elif args[0] in ('d','e'):
             action = "describe" if args[0] == 'd' else "edit"
             if len(args) > 1:
                 obj = d.get(args[1],'Pod')
                 if obj == 'Pod': name = res
-            cmd = "kubectl -n "+ns+" "+action+" "+obj.lower()+" "+name
+            cmd = f"kubectl {KUBECTL_OPTIONS} -n "+ns+" "+action+" "+obj.lower()+" "+name
         elif args[0] in ('s'):
             if confirm_action("This command will scale the "+obj):
                 regular = args.split('s')[-1]
                 action = "scale"
                 replicas = regular if regular.isdigit() and -1 < int(regular) < 30 else str(1)
-                cmd = "kubectl -n "+ns+" "+action+" --replicas="+replicas+" "+obj.lower()+"/"+name
+                cmd = f"kubectl {KUBECTL_OPTIONS} -n "+ns+" "+action+" --replicas="+replicas+" "+obj.lower()+"/"+name
             else:
                 print("Operation canceled.")
                 return
         elif args[0] in ('n'):
             action = "ssh"
             try:
-                hostIP = get_data("kubectl -n "+ns+" get pod "+res+" -o jsonpath='{.status.hostIP}'")[0]
+                hostIP = get_data(f"kubectl {KUBECTL_OPTIONS} -n "+ns+" get pod "+res+" -o jsonpath='{.status.hostIP}'")[0]
             except:
                 sys.exit()
             cmd = action +" root@"+hostIP
         else:
-            cmd = "kubectl -n "+ns+" exec -it "+res+" -- sh"
+            cmd = "kubectl {KUBECTL_OPTIONS} -n "+ns+" exec -it "+res+" -- sh"
     return cmd,obj,name
 
 def find_ip(res: str):
@@ -210,9 +211,9 @@ def find_ip(res: str):
 def find_optimal(namespace_list: list, namespace: str):
     namespace_list.sort()
     has_namespace = [namespace in row for row in namespace_list]
-    index_scores = [row.index(namespace) * 0.8 if has_namespace[i] else 10000 for i, row in enumerate(namespace_list)]
-    contain_scores = [len(row.replace(namespace, '')) * 0.42 for row in namespace_list]
-    result_scores = [(index_scores[i] + container) * (1 if has_namespace[i] else 1.62) for i, container in enumerate(contain_scores)]
+    index_scores = [row.index(namespace) * 0.618 if has_namespace[i] else 8192 for i, row in enumerate(namespace_list)]
+    contain_scores = [len(row.replace(namespace, '')) * 0.618 for row in namespace_list]
+    result_scores = [(index_scores[i] + container) * (1 if has_namespace[i] else 1.618) for i, container in enumerate(contain_scores)]
     if result_scores:
         return namespace_list[result_scores.index(min(result_scores))] if len(set(index_scores)) != 1 else ( namespace_list[has_namespace.index(True)] if True in has_namespace else None )
     else:
@@ -385,7 +386,7 @@ def find_ns(config_struct: list):
                     os.path.exists(ki_cache) and os.unlink(ki_cache)
                     ns_list = cache_ns(config_struct)[config]
         else:
-            cmd = "kubectl get ns --no-headers --kubeconfig "+config
+            cmd = f"kubectl {KUBECTL_OPTIONS} get ns --no-headers --kubeconfig "+config
             ns_list = [ e.split()[0] for e in get_data(cmd) ]
         ns = find_optimal(ns_list,ns_pattern)
         if ns:
@@ -400,14 +401,14 @@ def cache_ns(config_struct: list):
         d_latest = {}
         current_d = {}
         current_config = os.path.realpath(default_config)
-        cmd = "kubectl get ns --sort-by=.metadata.creationTimestamp --no-headers --kubeconfig " + current_config
+        cmd = f"kubectl {KUBECTL_OPTIONS} get ns --sort-by=.metadata.creationTimestamp --no-headers --kubeconfig " + current_config
         l = get_data(cmd)
         ns_list = [ e.split()[0] for e in l ]
         current_d[current_config] = ns_list
         with open(ki_current_ns_dict,'w') as f: f.write(str(current_d))
         for config in config_struct[1]:
             s = []
-            cmd = "kubectl get ns --sort-by=.metadata.creationTimestamp --no-headers --kubeconfig " + config
+            cmd = f"kubectl {KUBECTL_OPTIONS} get ns --sort-by=.metadata.creationTimestamp --no-headers --kubeconfig " + config
             retry_count = 0
             max_retries = 2
             while retry_count < max_retries:
@@ -418,8 +419,8 @@ def cache_ns(config_struct: list):
                         s = ns_list
                     else:
                         for ns in ns_list:
-                            cmd1 = "kubectl get pod --no-headers --kubeconfig "+config+" -n "+ns
-                            cmd2 = "kubectl get cronjob --no-headers --kubeconfig "+config+" -n "+ns
+                            cmd1 = f"kubectl {KUBECTL_OPTIONS} get pod --no-headers --kubeconfig "+config+" -n "+ns
+                            cmd2 = f"kubectl {KUBECTL_OPTIONS} get cronjob --no-headers --kubeconfig "+config+" -n "+ns
                             if get_data(cmd1) or get_data(cmd2):
                                 s.append(ns)
                     d[config] = s
@@ -456,7 +457,7 @@ def get_data(cmd: str):
 
 def get_obj(ns: str,res: str,args='x'):
     d = {'s':"Service",'i':"Ingress"}
-    cmd = "kubectl -n "+ns+" get pod "+res+" -o jsonpath='{.metadata.ownerReferences[0].kind}'"
+    cmd = f"kubectl {KUBECTL_OPTIONS} -n "+ns+" get pod "+res+" -o jsonpath='{.metadata.ownerReferences[0].kind}'"
     l1 = res.split('-')
     l2 = get_data(cmd)
     obj = l2[0] if l2 else "Pod"
@@ -585,7 +586,7 @@ def record(res: str,name: str,obj: str,cmd: str,kubeconfig: str,ns: str,config_s
     with open(ki_pod_dict,'w') as f: f.write(str(dc))
 
 def ki():
-    ( len(sys.argv) == 1 or sys.argv[1] not in ('-n','-t','-t1','-t2','-r','-i','-e','-es','-ei','-o','-os','-oi','-restart','-s','--s','-l','--l','--lock','--u','--unlock','--w','--watch','--h','--help','--c','--cache','--k','-a','--a') ) and sys.argv.insert(1,'-n')
+    ( len(sys.argv) == 1 or sys.argv[1] not in ('-n','-t','-t4','-t3','-t2','-r','-i','-e','-es','-ei','-o','-os','-oi','-restart','-s','--s','-l','--l','--lock','--u','--unlock','--w','--watch','--h','--help','--c','--cache','--k','-a','--a') ) and sys.argv.insert(1,'-n')
     len(sys.argv) == 2 and sys.argv[1] in ('-i','-e','-es','-ei','-o','-os','-oi') and sys.argv.insert(1,'-n')
     len(sys.argv) == 2 and sys.argv[1] in ('-a','--a') and sys.argv.extend(['kube','Pod'])
     len(sys.argv) == 3 and sys.argv[1] in ('-a','--a') and sys.argv.insert(2,'kube')
@@ -599,7 +600,7 @@ def ki():
         os.path.exists(ki_unlock) or open(ki_unlock,"a").close()
         os.path.exists(ki_lock) and os.unlink(ki_lock)
     elif len(sys.argv) == 2 and sys.argv[1] == '-n':
-        cmd = "kubectl get ns  --sort-by=.metadata.creationTimestamp --no-headers"
+        cmd = f"kubectl get ns  --sort-by=.metadata.creationTimestamp --no-headers {KUBECTL_OPTIONS}"
         print("\033[1;38;5;208m{}\033[0m".format(cmd.split('  --')[0]))
         os.environ['KUBECONFIG'] = os.path.realpath(default_config)
         l = get_data(cmd)
@@ -678,7 +679,7 @@ def ki():
                             break
                 else:
                     print("\033[1;32m{}\033[0m\033[5;32m{}\033[0m".format("File not found ",default_config))
-    elif 2 < len(sys.argv) < 5 and sys.argv[1] in ('-n','-r','-t','-t1','-t2','-i','-l','-e','-es','-ei','-o','-os','-oi','-a','--a'):
+    elif 2 < len(sys.argv) < 5 and sys.argv[1] in ('-n','-r','-t','-t4','-t3','-t2','-i','-l','-e','-es','-ei','-o','-os','-oi','-a','--a'):
         l = find_ns(config_struct)
         ns = l[0]
         switch = l[2]
@@ -696,7 +697,7 @@ def ki():
                     begin = time.perf_counter()
                     while True:
                         if ns:
-                            cmd = "kubectl get pod --no-headers -n "+ns
+                            cmd = f"kubectl {KUBECTL_OPTIONS} get pod --no-headers -n "+ns
                             pods = [ e.split()[0] for e in get_data(cmd) ]
                             pod = find_optimal(pods,sys.argv[3]) if pods else None
                             if not (pods and pod):
@@ -705,7 +706,7 @@ def ki():
                                 os.environ['KUBECONFIG'] in config_struct[1] and config_struct[1].remove(os.environ['KUBECONFIG'])
                                 if config_struct[1]:
                                     for n,config in enumerate(config_struct[1]):
-                                        cmd = "kubectl get ns --no-headers --kubeconfig "+config
+                                        cmd = f"kubectl {KUBECTL_OPTIONS} get ns --no-headers --kubeconfig "+config
                                         ns_list = [ e.split()[0] for e in get_data(cmd) ]
                                         ns = find_optimal(ns_list,ns_pattern)
                                         if ns:
@@ -721,10 +722,10 @@ def ki():
                                 switch_config(switch_num,k8s,ns,str(round(end-begin,3)))
                                 name = pod
                                 if sys.argv[1] in ('-i'):
-                                    cmd = "kubectl -n "+ns+" exec -it "+pod+" -- sh"
+                                    cmd = f"kubectl {KUBECTL_OPTIONS} -n "+ns+" exec -it "+pod+" -- sh"
                                 elif sys.argv[1] in ('-l'):
                                     line = os.environ['KI_LINE'] if 'KI_LINE' in os.environ else str(1000)
-                                    cmd = "kubectl -n "+ns+" logs -f "+pod+" --all-containers --tail "+line
+                                    cmd = f"kubectl {KUBECTL_OPTIONS} -n "+ns+" logs -f "+pod+" --all-containers --tail "+line
                                 else:
                                     l = get_obj(ns,pod,sys.argv[1])
                                     obj = l[0]
@@ -735,7 +736,7 @@ def ki():
                                     else:
                                         action = "get"
                                         action2 = " -o yaml > "+name+"."+obj+".yml"
-                                    cmd = "kubectl -n "+ns+" "+action+" "+obj.lower()+" "+name+action2
+                                    cmd = f"kubectl {KUBECTL_OPTIONS} -n "+ns+" "+action+" "+obj.lower()+" "+name+action2
                                 print("\033[1;38;5;208m{}\033[0m".format(cmd))
                                 record(pod,name,obj,cmd,k8s,ns,config_struct)
                                 os.system(cmd)
@@ -751,12 +752,15 @@ def ki():
                 if ns:
                     if not pod:
                         if sys.argv[1] in ('-n','-r'):
-                            cmd = "kubectl"+" get "+obj.lower()+ext+" -n "+ ns+("  --sort-by=.status.containerStatuses[0].restartCount" if sys.argv[1].split('n')[-1] else "  --sort-by=.metadata.creationTimestamp") + " --no-headers"
-                        elif sys.argv[1] in ('-a','--a'):
-                            cmd = "kubectl"+" get "+obj.lower()+ext+" -A  --sort-by=.metadata.creationTimestamp --no-headers"
+                            cmd = f"kubectl get "+obj.lower()+ext+" -n "+ ns+("  --sort-by=.status.containerStatuses[0].restartCount" if sys.argv[1].split('n')[-1] else "  --sort-by=.metadata.creationTimestamp") + f" --no-headers {KUBECTL_OPTIONS}"
+                        elif sys.argv[1] in ('-a','--a','-A'):
+                            cmd = f"kubectl get "+obj.lower()+ext+f" -A  --sort-by=.metadata.creationTimestamp --no-headers {KUBECTL_OPTIONS}"
                         else:
                             key = sys.argv[1].split('t')[-1] if sys.argv[1].split('t')[-1].isdigit() else "3"
-                            cmd = "kubectl top "+obj.lower()+" -n "+ ns +"  --no-headers|sort --key "+key+" --numeric"
+                            if sys.argv[-1] in ('-a','--a','-A'):
+                                cmd = f"kubectl top "+obj.lower()+" -A "+f"  --no-headers {KUBECTL_OPTIONS}|sort --key "+key+" --numeric"
+                            else:
+                                cmd = f"kubectl top "+obj.lower()+" -n "+ ns +f"  --no-headers {KUBECTL_OPTIONS}|sort --key "+key+" --numeric"
                         result_lines = get_data(cmd)
                         if not result_lines:
                             kn = re.split("[./]",sys.argv[2])
@@ -764,7 +768,7 @@ def ki():
                             os.environ['KUBECONFIG'] in config_struct[1] and config_struct[1].remove(os.environ['KUBECONFIG'])
                             if config_struct[1]:
                                 for n,config in enumerate(config_struct[1]):
-                                    cmd = "kubectl get ns --no-headers --kubeconfig "+config
+                                    cmd = f"kubectl {KUBECTL_OPTIONS} get ns --no-headers --kubeconfig "+config
                                     ns_list = [ e.split()[0] for e in get_data(cmd) ]
                                     ns = find_optimal(ns_list,ns_pattern)
                                     if ns:

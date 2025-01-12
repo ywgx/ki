@@ -1,7 +1,7 @@
 #!/usr/bin/python3
 #*************************************************
 # Description : Kubectl Pro
-# Version     : 5.5
+# Version     : 5.6
 #*************************************************
 from collections import deque
 import os,re,sys,time,readline,subprocess
@@ -21,6 +21,9 @@ ki_pod_dict = history + "/.pod_dict"
 ki_latest_ns_dict = history + "/.latest_ns_dict"
 ki_current_ns_dict = history + "/.current_ns_dict"
 KUBECTL_OPTIONS = "--insecure-skip-tls-verify"
+KI_AI_URL = os.getenv("KI_AI_URL", "https://api.openai.com/v1/chat/completions")
+KI_AI_KEY = os.getenv("KI_AI_KEY", "")
+KI_AI_MODEL = os.getenv("KI_AI_MODEL", "gpt-4o")
 #-----------------FUN-----------------------------
 def cmp_file(f1, f2):
     if os.path.getsize(f1) != os.path.getsize(f2):
@@ -208,7 +211,7 @@ def find_ip(res: str):
     ips = re.findall(ip_regex, res)
     return ips[0] if ips else ""
 
-def find_optimal(namespace_list: list, namespace: str):
+def enhanced_find_optimal(namespace_list: list, namespace: str):
     namespace_list.sort()
     has_namespace = [namespace in row for row in namespace_list]
     index_scores = [row.index(namespace) * 0.618 if has_namespace[i] else 8192 for i, row in enumerate(namespace_list)]
@@ -218,6 +221,28 @@ def find_optimal(namespace_list: list, namespace: str):
         return namespace_list[result_scores.index(min(result_scores))] if len(set(index_scores)) != 1 else ( namespace_list[has_namespace.index(True)] if True in has_namespace else None )
     else:
         return None
+
+def find_optimal(namespace_list: list, namespace: str):
+    # 先用 get_feature 提取特征
+    features = get_feature(namespace_list)
+
+    for ns, feature in features.items():
+        if namespace == feature:
+            return ns
+    # 计算匹配分数
+    scores = []
+    for ns in namespace_list:
+        feature = features[ns]
+        # 特征匹配分数
+        feature_score = 1.0 if namespace in feature else 0.0
+        # 原有的位置和长度分数
+        position_score = ns.index(namespace) * 0.618 if namespace in ns else 8192
+        contain_score = len(ns.replace(namespace, '')) * 0.618
+
+        total_score = (position_score + contain_score) * (1 if feature_score else 1.618)
+        scores.append(total_score)
+
+    return namespace_list[scores.index(min(scores))] if scores else None
 
 def find_config():
     os.path.exists(history) or os.mkdir(history)
@@ -585,13 +610,510 @@ def record(res: str,name: str,obj: str,cmd: str,kubeconfig: str,ns: str,config_s
         dc[key] = [name,[(name,1)]]
     with open(ki_pod_dict,'w') as f: f.write(str(dc))
 
+def analyze_cluster():
+    """分析集群状态并生成报告"""
+    import json
+    import requests
+    from datetime import datetime
+
+    print("\033[1;93m正在分析集群状态...\033[0m")
+
+    # 收集集群信息
+    data = {
+        "timestamp": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+        "cluster_info": {},
+        "node_status": [],
+        "pod_status": {},
+        "resource_usage": {},
+        "events": []
+    }
+
+    try:
+        # 获取集群版本信息
+        try:
+            version_output = get_data(f"kubectl {KUBECTL_OPTIONS} version -o json")
+            if version_output:
+                version_json = version_output[0].strip()
+                data["cluster_info"]["version"] = json.loads(version_json)
+        except:
+            data["cluster_info"]["version"] = "无法获取版本信息"
+
+        # 获取节点状态
+        nodes = get_data(f"kubectl {KUBECTL_OPTIONS} get nodes -o wide")
+        if len(nodes) > 1:  # 跳过标题行
+            for node in nodes[1:]:
+                node_info = node.split()
+                if len(node_info) >= 5:
+                    data["node_status"].append({
+                        "name": node_info[0],
+                        "status": node_info[1],
+                        "roles": node_info[2] if len(node_info) > 2 else "unknown",
+                        "version": node_info[3] if len(node_info) > 3 else "unknown",
+                        "internal_ip": node_info[5] if len(node_info) > 5 else "unknown"
+                    })
+
+        # 获取所有命名空间的 Pod 状态
+        ns_list = get_data(f"kubectl {KUBECTL_OPTIONS} get ns --no-headers")
+        for ns in ns_list:
+            ns_name = ns.split()[0]
+            pods = get_data(f"kubectl {KUBECTL_OPTIONS} get pods -n {ns_name} --no-headers")
+            running = 0
+            failed = 0
+            pending = 0
+            for pod in pods:
+                status = pod.split()[2]
+                if status == "Running":
+                    running += 1
+                elif status in ["Failed", "Error", "CrashLoopBackOff"]:
+                    failed += 1
+                elif status == "Pending":
+                    pending += 1
+
+            data["pod_status"][ns_name] = {
+                "total": len(pods),
+                "running": running,
+                "failed": failed,
+                "pending": pending
+            }
+
+        # 获取资源使用情况
+        for node in data["node_status"]:
+            try:
+                usage = get_data(f"kubectl {KUBECTL_OPTIONS} top node {node['name']}")
+                if len(usage) > 1:  # 跳过标题行
+                    usage_info = usage[1].split()
+                    if len(usage_info) >= 5:
+                        data["resource_usage"][node["name"]] = {
+                            "cpu": usage_info[2],
+                            "memory": usage_info[4]
+                        }
+            except:
+                continue
+
+        # 获取最近事件
+        events = get_data(f"kubectl {KUBECTL_OPTIONS} get events --sort-by=.metadata.creationTimestamp")
+        if events:
+            data["events"] = [event.strip() for event in events[-5:]]  # 最近5个事件
+
+        # 调用 AI API 分析数据
+        if not KI_AI_KEY:
+            raise Exception("请设置 KI_AI_KEY 环境变量")
+
+        # 准备发送给 AI 的提示信息
+        prompt = f"""请作为 Kubernetes 专家分析以下集群数据并生成简明扼要的健康状态报告:
+
+集群信息:
+- 时间戳: {data['timestamp']}
+- 节点数量: {len(data['node_status'])}
+- 命名空间数量: {len(data['pod_status'])}
+
+节点状态:
+{json.dumps(data['node_status'], indent=2, ensure_ascii=False)}
+
+Pod 状态 (按命名空间):
+{json.dumps(data['pod_status'], indent=2, ensure_ascii=False)}
+
+资源使用情况:
+{json.dumps(data['resource_usage'], indent=2, ensure_ascii=False)}
+
+最近事件:
+{json.dumps(data['events'], indent=2, ensure_ascii=False)}
+
+请提供:
+1. 集群整体健康状况评估
+2. 发现的潜在问题
+3. 资源使用建议
+4. 优化建议
+"""
+
+        response = requests.post(
+            f"{KI_AI_URL}",
+            headers={
+                "Authorization": f"Bearer {KI_AI_KEY}",
+                "Content-Type": "application/json"
+            },
+            json={
+                "model": KI_AI_MODEL,
+                "messages": [{
+                    "role": "system",
+                    "content": "你是一个经验丰富的 Kubernetes 集群分析专家。请基于提供的数据生成专业的分析报告。"
+                }, {
+                    "role": "user",
+                    "content": prompt
+                }],
+                "temperature": 0.3
+            }
+        )
+
+        if response.status_code == 200:
+            result = response.json()
+            print("\n\033[1;32m集群健康状态报告:\033[0m")
+            print(result["choices"][0]["message"]["content"])
+        else:
+            print(f"\033[1;31mAI API 调用失败: {response.status_code}\033[0m")
+            print(response.text)
+
+    except Exception as e:
+        print(f"\033[1;31m分析过程中出错: {str(e)}\033[0m")
+
+def analyze_cluster_stream():
+    """分析集群状态并生成报告"""
+    import json
+    import requests
+    from datetime import datetime
+
+    print("\033[1;93m正在分析集群状态...\033[0m")
+
+    # 收集集群信息
+    data = {
+        "timestamp": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+        "cluster_info": {},
+        "node_status": [],
+        "pod_status": {},
+        "resource_usage": {},
+        "events": []
+    }
+
+    try:
+        # 获取集群版本信息
+        try:
+            version_output = get_data(f"kubectl {KUBECTL_OPTIONS} version -o json")
+            if version_output:
+                version_json = version_output[0].strip()
+                data["cluster_info"]["version"] = json.loads(version_json)
+        except:
+            data["cluster_info"]["version"] = "无法获取版本信息"
+
+        # 获取节点状态
+        nodes = get_data(f"kubectl {KUBECTL_OPTIONS} get nodes -o wide")
+        if len(nodes) > 1:
+            for node in nodes[1:]:
+                node_info = node.split()
+                if len(node_info) >= 5:
+                    data["node_status"].append({
+                        "name": node_info[0],
+                        "status": node_info[1],
+                        "roles": node_info[2] if len(node_info) > 2 else "unknown",
+                        "version": node_info[3] if len(node_info) > 3 else "unknown",
+                        "internal_ip": node_info[5] if len(node_info) > 5 else "unknown"
+                    })
+
+        # 获取所有命名空间的 Pod 状态
+        ns_list = get_data(f"kubectl {KUBECTL_OPTIONS} get ns --no-headers")
+        for ns in ns_list:
+            ns_name = ns.split()[0]
+            pods = get_data(f"kubectl {KUBECTL_OPTIONS} get pods -n {ns_name} --no-headers")
+            running = 0
+            failed = 0
+            pending = 0
+            for pod in pods:
+                status = pod.split()[2]
+                if status == "Running":
+                    running += 1
+                elif status in ["Failed", "Error", "CrashLoopBackOff"]:
+                    failed += 1
+                elif status == "Pending":
+                    pending += 1
+
+            data["pod_status"][ns_name] = {
+                "total": len(pods),
+                "running": running,
+                "failed": failed,
+                "pending": pending
+            }
+
+        # 获取资源使用情况
+        for node in data["node_status"]:
+            try:
+                usage = get_data(f"kubectl {KUBECTL_OPTIONS} top node {node['name']}")
+                if len(usage) > 1:
+                    usage_info = usage[1].split()
+                    if len(usage_info) >= 5:
+                        data["resource_usage"][node["name"]] = {
+                            "cpu": usage_info[2],
+                            "memory": usage_info[4]
+                        }
+            except:
+                continue
+
+        # 获取最近事件
+        events = get_data(f"kubectl {KUBECTL_OPTIONS} get events --sort-by=.metadata.creationTimestamp")
+        if events:
+            data["events"] = [event.strip() for event in events[-7:]]
+
+        # 调用 AI API 分析数据
+        if not KI_AI_KEY:
+            raise Exception("请设置 KI_AI_KEY 环境变量")
+
+        # 准备发送给 AI 的提示信息
+        prompt = f"""请作为 Kubernetes 专家分析以下集群数据并生成简明扼要的健康状态报告:
+
+集群信息:
+- 时间戳: {data['timestamp']}
+- 节点数量: {len(data['node_status'])}
+- 命名空间数量: {len(data['pod_status'])}
+
+节点状态:
+{json.dumps(data['node_status'], indent=2, ensure_ascii=False)}
+
+Pod 状态 (按命名空间,不含 Completed):
+{json.dumps(data['pod_status'], indent=2, ensure_ascii=False)}
+
+资源使用情况:
+{json.dumps(data['resource_usage'], indent=2, ensure_ascii=False)}
+
+最近事件:
+{json.dumps(data['events'], indent=2, ensure_ascii=False)}
+
+请提供:
+1. 集群整体健康状况评估
+2. 发现的潜在问题
+3. 资源使用建议
+4. 优化建议
+"""
+        print("\n\033[1;32m集群健康状态报告:\033[0m")
+
+        response = requests.post(
+            f"{KI_AI_URL}",
+            headers={
+                "Authorization": f"Bearer {KI_AI_KEY}",
+                "Content-Type": "application/json"
+            },
+            json={
+                "model": KI_AI_MODEL,
+                "messages": [{
+                    "role": "system",
+                    "content": "你是一个经验丰富的 Kubernetes 集群分析专家。请基于提供的数据生成专业的分析报告。(忽略 Completed 状态的容器)"
+                }, {
+                    "role": "user",
+                    "content": prompt
+                }],
+                "temperature": 0.3,
+                "stream": True
+            },
+            stream=True
+        )
+
+        if response.status_code == 200:
+            for line in response.iter_lines():
+                if line:
+                    try:
+                        json_response = json.loads(line.decode('utf-8').split('data: ')[1])
+                        if 'choices' in json_response and len(json_response['choices']) > 0:
+                            content = json_response['choices'][0].get('delta', {}).get('content', '')
+                            if content:
+                                print(content, end='', flush=True)
+                    except:
+                        continue
+            print()
+        else:
+            print(f"\033[1;31mAI API 调用失败: {response.status_code}\033[0m")
+            print(response.text)
+
+    except Exception as e:
+        print(f"\033[1;31m分析过程中出错: {str(e)}\033[0m")
+
+def chat_with_ai(question):
+    """与 AI 进行对话，支持各种 IT 运维、开发相关需求"""
+    import json
+    import requests
+    import re
+    import os
+    from datetime import datetime
+
+    if not question:
+        print("\033[1;31m请输入问题内容\033[0m")
+        return
+
+    if not KI_AI_KEY:
+        print("\033[1;31m错误: 请设置 KI_AI_KEY 环境变量\033[0m")
+        return
+
+    try:
+        print("\033[1;93m思考中...\033[0m")
+
+        # 让 AI 分析问题类型和是否需要生成文件
+        pre_check_response = requests.post(
+            f"{KI_AI_URL}",
+            headers={
+                "Authorization": f"Bearer {KI_AI_KEY}",
+                "Content-Type": "application/json"
+            },
+            json={
+                "model": KI_AI_MODEL,
+                "messages": [{
+                    "role": "system",
+                    "content": """你是一个 IT 专家。请分析用户的问题并返回 JSON 格式的结果：
+{
+    "type": "配置|代码|脚本|其他",
+    "needs_file": true|false,
+    "language": "yaml|k8s|golang|python|shell|rust|...",
+    "description": "简短描述这个问题的类型和目的"
+}"""
+                }, {
+                    "role": "user",
+                    "content": question
+                }],
+                "temperature": 0.1,
+            }
+        )
+
+        question_type = {"needs_file": False}
+        if pre_check_response.status_code == 200:
+            try:
+                question_type = json.loads(pre_check_response.json()['choices'][0]['message']['content'])
+            except:
+                pass
+
+        # 根据问题类型设置不同的系统提示
+        if question_type["needs_file"]:
+            system_prompt = f"""你是一个专业的 IT 专家。对于{question_type["description"]}类问题：
+
+1. 首先用 JSON 格式提供文件元数据：
+   ```json
+   {{
+     "files": [
+       {{
+         "name": "文件名（不含路径和时间戳）",
+         "type": "{question_type["language"]}",
+         "description": "这个文件的用途描述"
+       }}
+     ]
+   }}
+   ```
+
+2. 然后解释主要实现思路和关键点
+
+3. 提供完整的代码或配置，使用对应的代码块标记，例如：
+   ```{question_type["language"]}
+   // 代码内容
+   ```
+
+4. 最后提供使用说明或测试方法
+
+注意：
+- 文件名应该反映代码或配置的用途
+- 代码需要包含必要的注释
+- 配置文件需要包含关键配置项的说明"""
+        else:
+            system_prompt = "你是一个专业的 IT 专家，请针对问题提供详细的解答和建议。"
+
+        response = requests.post(
+            f"{KI_AI_URL}",
+            headers={
+                "Authorization": f"Bearer {KI_AI_KEY}",
+                "Content-Type": "application/json"
+            },
+            json={
+                "model": KI_AI_MODEL,
+                "messages": [{
+                    "role": "system",
+                    "content": system_prompt
+                }, {
+                    "role": "user",
+                    "content": question
+                }],
+                "temperature": 0.3,
+                "stream": True
+            },
+            stream=True
+        )
+
+        if response.status_code == 200:
+            full_response = ""
+            for line in response.iter_lines():
+                if line:
+                    try:
+                        json_response = json.loads(line.decode('utf-8').split('data: ')[1])
+                        if 'choices' in json_response and len(json_response['choices']) > 0:
+                            content = json_response['choices'][0].get('delta', {}).get('content', '')
+                            if content:
+                                print(content, end='', flush=True)
+                                full_response += content
+                    except:
+                        continue
+            print()
+
+            # 如果需要生成文件，处理代码或配置内容
+            if question_type["needs_file"]:
+                # 提取文件元数据
+                json_match = re.search(r'```json\n(.*?)\n```', full_response, re.DOTALL)
+                # 提取所有代码块
+                code_matches = re.finditer(r'```(\w+)\n(.*?)\n```', full_response, re.DOTALL)
+
+                file_info = []
+                if json_match:
+                    try:
+                        metadata = json.loads(json_match.group(1))
+                        file_info = metadata.get('files', [])
+                    except:
+                        pass
+
+                # 收集所有代码块
+                code_blocks = []
+                for match in code_matches:
+                    lang, content = match.group(1), match.group(2)
+                    if lang.lower() != 'json':  # 排除 JSON 元数据
+                        code_blocks.append((lang, content))
+
+                if code_blocks:
+                    timestamp = datetime.now().strftime("%Y%m%d-%H%M%S")
+
+                    # 保存文件
+                    for i, (lang, content) in enumerate(code_blocks):
+                        # 使用 AI 建议的文件名，如果没有则使用默认名称
+                        if i < len(file_info):
+                            base_name = file_info[i]['name']
+                            description = file_info[i]['description']
+                        else:
+                            ext = {
+                                'python': '.py',
+                                'shell': '.sh',
+                                'bash': '.sh',
+                                'yaml': '.yaml',
+                                'java': '.java',
+                                'javascript': '.js',
+                                'typescript': '.ts',
+                                'go': '.go',
+                                'rust': '.rs',
+                                'cpp': '.cpp',
+                                'c': '.c',
+                                'sql': '.sql',
+                                'dockerfile': 'Dockerfile',
+                                'xml': '.xml',
+                                'json': '.json',
+                                'ini': '.ini',
+                                'conf': '.conf',
+                                'toml': '.toml'
+                            }.get(lang.lower(), '.txt')
+                            base_name = f'script_{i+1}{ext}'
+                            description = f"{lang} 代码文件"
+
+                        file_path = f'/tmp/ki-{base_name}-{timestamp}'
+
+                        os.makedirs(os.path.dirname(file_path), exist_ok=True)
+
+                        with open(file_path, 'w') as f:
+                            f.write(content.strip())
+
+                        print(f"\n\033[1;32m已保存文件: {file_path} ({description})\033[0m")
+
+        else:
+            print(f"\033[1;31mAPI 调用失败: {response.status_code}\033[0m")
+            print(response.text)
+
+    except Exception as e:
+        print(f"\033[1;31m错误: {str(e)}\033[0m")
+
 def ki():
-    ( len(sys.argv) == 1 or sys.argv[1] not in ('-n','-t','-t4','-t3','-t2','-r','-i','-e','-es','-ei','-o','-os','-oi','-restart','-s','--s','-l','--l','--lock','--u','--unlock','--w','--watch','--h','--help','--c','--cache','--k','-a','--a') ) and sys.argv.insert(1,'-n')
+    ( len(sys.argv) == 1 or sys.argv[1] not in ('-n','-t','-t4','-t3','-t2','--ai','-r','-i','-e','-es','-ei','-o','-os','-oi','-restart','-s','--s','-l','--l','--lock','--u','--unlock','--w','--watch','--h','--help','--c','--cache','--k','-a','--a') ) and sys.argv.insert(1,'-n')
     len(sys.argv) == 2 and sys.argv[1] in ('-i','-e','-es','-ei','-o','-os','-oi') and sys.argv.insert(1,'-n')
     len(sys.argv) == 2 and sys.argv[1] in ('-a','--a') and sys.argv.extend(['kube','Pod'])
     len(sys.argv) == 3 and sys.argv[1] in ('-a','--a') and sys.argv.insert(2,'kube')
     config_struct = find_config()
-    if len(sys.argv) == 2 and sys.argv[1] in ('--w','--watch'):
+    if len(sys.argv) == 2 and sys.argv[1] == '--ai':
+        analyze_cluster_stream()
+    elif len(sys.argv) == 2 and sys.argv[1] in ('--w','--watch'):
         info_w(os.environ["PWD"],config_struct[1])
     elif len(sys.argv) == 2 and sys.argv[1] in ('--l','--lock'):
         os.path.exists(ki_unlock) and os.unlink(ki_unlock)
@@ -628,6 +1150,10 @@ def ki():
         cache_ns(config_struct)
         end = time.perf_counter()
         print("\033[1;93m{}\033[0m".format("[ "+str(round(end-begin,3))+" ] "))
+    elif len(sys.argv) > 2 and sys.argv[1] == '--ai':
+        question = ' '.join(sys.argv[2:])
+        chat_with_ai(question)
+        return
     elif 1 < len(sys.argv) < 4 and sys.argv[1] in ('-s','--s'):
         if config_struct[1] and len(config_struct[1]) > 1:
             if len(sys.argv) == 3:

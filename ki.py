@@ -211,17 +211,6 @@ def find_ip(res: str):
     ips = re.findall(ip_regex, res)
     return ips[0] if ips else ""
 
-def enhanced_find_optimal(namespace_list: list, namespace: str):
-    namespace_list.sort()
-    has_namespace = [namespace in row for row in namespace_list]
-    index_scores = [row.index(namespace) * 0.618 if has_namespace[i] else 8192 for i, row in enumerate(namespace_list)]
-    contain_scores = [len(row.replace(namespace, '')) * 0.618 for row in namespace_list]
-    result_scores = [(index_scores[i] + container) * (1 if has_namespace[i] else 1.618) for i, container in enumerate(contain_scores)]
-    if result_scores:
-        return namespace_list[result_scores.index(min(result_scores))] if len(set(index_scores)) != 1 else ( namespace_list[has_namespace.index(True)] if True in has_namespace else None )
-    else:
-        return None
-
 def find_optimal(namespace_list: list, namespace: str):
     # 先用 get_feature 提取特征
     features = get_feature(namespace_list)

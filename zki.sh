@@ -14,6 +14,7 @@ alias kubectl="kubectl --insecure-skip-tls-verify "
 alias vi=vim
 alias ls='ls --color'
 alias ll='ls -l'
+alias kl='kl.py'
 alias kn='cd ~/.kube;for file in $(find . -name "kubeconfig-*-NULL"); do mv "$file" "${file%-NULL}"; done'
 [ $USER = root ] && STYLE="\033c\033[5;32m%s\033[1;m\n" || STYLE="\033[5;32m%s\033[1;m\n"
 [[ $- == *i* ]] && [ -e ~/.kube/config ] && printf $STYLE "$(/usr/local/bin/ki --w)"

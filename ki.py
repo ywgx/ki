@@ -325,6 +325,7 @@ def find_history(config,num=1):
 
 def get_config(config_lines: list, ns: str):
     history_lines = []
+    dc = {}
     if os.path.exists(ki_dict):
         with open(ki_dict, 'r') as f:
             dc = eval(f.read())
@@ -1067,7 +1068,7 @@ def chat_with_ai(question):
                             base_name = f'script_{i+1}{ext}'
                             description = f"{lang} 代码文件"
 
-                        file_path = f'/tmp/ki-{base_name}-{timestamp}'
+                        file_path = f'/tmp/ki/ki-{base_name}-{timestamp}'
 
                         os.makedirs(os.path.dirname(file_path), exist_ok=True)
 

@@ -1,7 +1,7 @@
 #!/usr/bin/python3
 #*************************************************
 # Description : Kubectl Pro
-# Version     : 5.6
+# Version     : 5.7
 #*************************************************
 from collections import deque
 import os,re,sys,time,readline,subprocess
@@ -223,6 +223,7 @@ def find_optimal(namespace_list: list, namespace: str):
         return None
 
 def find_config():
+    global header_config
     os.path.exists(history) or os.mkdir(history)
     cmd = '''find $HOME/.kube -maxdepth 2 -type f -name 'kubeconfig*' -a ! -name 'kubeconfig-*-NULL' 2>/dev/null|egrep '.*' || ( find $HOME/.kube -maxdepth 1 -type f 2>/dev/null|egrep '.*' &>/dev/null && grep -l "current-context" `find $HOME/.kube -maxdepth 1 -type f` )'''
     result_set = { e.split('\n')[0] for e in get_data(cmd) }
@@ -244,8 +245,8 @@ def find_config():
                 pass
             os.symlink(result_lines[0],default_config)
             kubeconfig = result_lines[0].split("/")[-1]
+        header_config = os.path.realpath(default_config)
     elif result_num > 1:
-        global header_config
         dc = {}
         if os.path.exists(ki_dict) and os.path.getsize(ki_dict) > 5:
             with open(ki_dict,'r') as f:
@@ -284,6 +285,8 @@ def find_config():
                 pass
             os.symlink(result_lines[0],default_config)
             kubeconfig = result_lines[0].split("/")[-1]
+    else:
+        header_config = os.path.realpath(default_config)
     return [kubeconfig,result_lines,result_num]
 
 def compress_list(l: list):

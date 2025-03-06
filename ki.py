@@ -1,7 +1,7 @@
 #!/usr/bin/python3
 #*************************************************
 # Description : Kubectl Pro
-# Version     : 5.7
+# Version     : 5.8
 #*************************************************
 from collections import deque
 import os,re,sys,time,readline,subprocess
@@ -309,7 +309,7 @@ def compress_list(l: list):
     else:
         return l
 
-def find_history(config,num=1):
+def find_history(config,num=3):
     if config != header_config:
         dc = {}
         if os.path.exists(ki_dict) and os.path.getsize(ki_dict) > 5:
@@ -450,7 +450,7 @@ def switch_config(switch_num: int,k8s: str,ns: str,time: str):
         os.unlink(default_config)
         os.symlink(os.environ['KUBECONFIG'],default_config)
         print("\033[1;93m{}\033[0m".format("[ "+time+"  "+str(switch_num+1)+"-SWITCH  "+k8s+" / "+ns+" ] "))
-        find_history(os.environ['KUBECONFIG'],3)
+        find_history(os.environ['KUBECONFIG'],8)
         switch_num > 0 and subprocess.Popen("ki --c",shell=True,stdout=subprocess.PIPE,stderr=subprocess.PIPE,universal_newlines=True)
         switch = True
     return switch
@@ -1143,7 +1143,7 @@ def ki():
                 if config and os.path.exists(default_config) and config not in {default_config,os.path.realpath(default_config)}:
                     os.unlink(default_config)
                     os.symlink(config,default_config)
-                    find_history(config,32)
+                    find_history(config,72)
                     print("\033[1;93m{}\033[0m".format("[ SWITCH "+config.split("/")[-1]+" ] "))
             else:
                 lr = set()
@@ -1343,6 +1343,8 @@ def ki():
                             if podList[1][0] in ('l','g','c'):
                                 parts = search_term.split(None, 2)
                                 args = podList[1][0] + " " + parts[2] if len(parts) == 3 else ' '.join(podList[1:])
+                            elif podList[1].isdigit():
+                                args = "l " + podList[1]
                             else:
                                 args = ''.join(podList[1:])
                         else:

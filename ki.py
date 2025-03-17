@@ -1,7 +1,7 @@
 #!/usr/bin/python3
 #*************************************************
 # Description : Kubectl Pro
-# Version     : 5.8
+# Version     : 5.9
 #*************************************************
 from collections import deque
 import os,re,sys,time,readline,subprocess
@@ -373,7 +373,6 @@ def find_ns(config_struct: list):
                         config_struct[1] = [current_config]
             except:
                 os.path.exists(ki_cache) and os.unlink(ki_cache)
-                ns_list = cache_ns(config_struct)[config]
 
     config = get_config(config_struct[1], kn[0]) or default_config if len(kn) > 1 else default_config
 
@@ -390,6 +389,7 @@ def find_ns(config_struct: list):
                     d = eval(f.read())
                     ns_list = d[config]
                 except:
+                    print("\033[93mBuilding cache, please wait about 30s...\033[0m")
                     os.path.exists(ki_cache) and os.unlink(ki_cache)
                     ns_list = cache_ns(config_struct)[config]
         else:
@@ -402,41 +402,59 @@ def find_ns(config_struct: list):
     return ns,kubeconfig,switch,result_num
 
 def cache_ns(config_struct: list):
-    if not os.path.exists(ki_cache) or ( os.path.exists(ki_cache) and int(time.time()-os.stat(ki_cache).st_mtime) > 1800 ):
+    from concurrent.futures import ThreadPoolExecutor, as_completed
+    if not os.path.exists(ki_cache) or (os.path.exists(ki_cache) and int(time.time()-os.stat(ki_cache).st_mtime) > 1800):
         open(ki_cache,"a").close()
         d = {}
         d_latest = {}
         current_d = {}
         current_config = os.path.realpath(default_config)
+
         cmd = f"kubectl {KUBECTL_OPTIONS} get ns --sort-by=.metadata.creationTimestamp --no-headers --kubeconfig " + current_config
         l = get_data(cmd)
-        ns_list = [ e.split()[0] for e in l ]
+        ns_list = [e.split()[0] for e in l]
         current_d[current_config] = ns_list
         with open(ki_current_ns_dict,'w') as f: f.write(str(current_d))
-        for config in config_struct[1]:
-            s = []
+
+        def check_ns(config, ns):
+            cmd = f"kubectl {KUBECTL_OPTIONS} get pod,cronjob --no-headers --kubeconfig {config} -n {ns}"
+            return bool(get_data(cmd))
+
+        def process_config(config):
             cmd = f"kubectl {KUBECTL_OPTIONS} get ns --sort-by=.metadata.creationTimestamp --no-headers --kubeconfig " + config
             retry_count = 0
             max_retries = 2
             while retry_count < max_retries:
                 l = get_data(cmd)
                 if l:
-                    ns_list = [ e.split()[0] for e in l ]
+                    ns_list = [e.split()[0] for e in l]
+                    latest_ns = l[-1].split()[0] if l else ""
+
                     if os.path.exists(ki_all):
-                        s = ns_list
-                    else:
-                        for ns in ns_list:
-                            cmd1 = f"kubectl {KUBECTL_OPTIONS} get pod --no-headers --kubeconfig "+config+" -n "+ns
-                            cmd2 = f"kubectl {KUBECTL_OPTIONS} get cronjob --no-headers --kubeconfig "+config+" -n "+ns
-                            if get_data(cmd1) or get_data(cmd2):
-                                s.append(ns)
-                    d[config] = s
-                    d_latest[config] = l[-1].split()[0]
-                    break
+                        return config, ns_list, latest_ns
+
+                    valid_ns = []
+                    with ThreadPoolExecutor(max_workers=min(10, len(ns_list))) as inner_executor:
+                        futures = {inner_executor.submit(check_ns, config, ns): ns for ns in ns_list}
+                        for future in as_completed(futures):
+                            if future.result():
+                                valid_ns.append(futures[future])
+                    return config, valid_ns, latest_ns
                 else:
                     retry_count += 1
                     if retry_count == max_retries:
                         os.path.exists(config) and os.rename(config, config + "-NULL")
+                        return config, [], ""
+            return config, [], ""
+
+        with ThreadPoolExecutor(max_workers=min(10, len(config_struct[1]))) as executor:
+            futures = [executor.submit(process_config, config) for config in config_struct[1]]
+            for future in as_completed(futures):
+                config, s, latest = future.result()
+                if s:
+                    d[config] = s
+                    d_latest[config] = latest
+
         with open(ki_ns_dict,'w') as f: f.write(str(d))
         with open(ki_latest_ns_dict,'w') as f: f.write(str(d_latest))
         os.path.exists(ki_cache) and os.unlink(ki_cache)
@@ -1128,6 +1146,7 @@ def ki():
     elif len(sys.argv) == 2 and sys.argv[1] in ('--k'):
         info_k()
     elif len(sys.argv) == 2 and sys.argv[1] in ('--c','--cache'):
+        print("\033[93mBuilding cache, please wait about 30s...\033[0m")
         begin = time.perf_counter()
         cache_ns(config_struct)
         end = time.perf_counter()

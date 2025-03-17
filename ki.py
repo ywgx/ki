@@ -1,7 +1,7 @@
 #!/usr/bin/python3
 #*************************************************
 # Description : Kubectl Pro
-# Version     : 5.9
+# Version     : 6.0
 #*************************************************
 from collections import deque
 import os,re,sys,time,readline,subprocess
@@ -14,6 +14,7 @@ ki_dict = history + "/.dict"
 ki_last = history + "/.last"
 ki_lock = history + "/.lock"
 ki_line = history + "/.line"
+ki_cool = history + "/.cool"
 ki_cache = history + "/.cache"
 ki_unlock = history + "/.unlock"
 ki_ns_dict = history + "/.ns_dict"
@@ -389,7 +390,6 @@ def find_ns(config_struct: list):
                     d = eval(f.read())
                     ns_list = d[config]
                 except:
-                    print("\033[93mBuilding cache, please wait about 30s...\033[0m")
                     os.path.exists(ki_cache) and os.unlink(ki_cache)
                     ns_list = cache_ns(config_struct)[config]
         else:
@@ -403,6 +403,17 @@ def find_ns(config_struct: list):
 
 def cache_ns(config_struct: list):
     from concurrent.futures import ThreadPoolExecutor, as_completed
+
+    if os.path.exists(ki_cool) and int(time.time() - os.stat(ki_cool).st_mtime) < 180:
+        if os.path.exists(ki_ns_dict):
+            try:
+                with open(ki_ns_dict, 'r') as f:
+                    return eval(f.read())
+            except:
+                pass
+    open(ki_cool, "w").close()
+
+    print("\033[93mBuilding cache, please wait about 30s...\033[0m")
     if not os.path.exists(ki_cache) or (os.path.exists(ki_cache) and int(time.time()-os.stat(ki_cache).st_mtime) > 1800):
         open(ki_cache,"a").close()
         d = {}
@@ -1146,7 +1157,6 @@ def ki():
     elif len(sys.argv) == 2 and sys.argv[1] in ('--k'):
         info_k()
     elif len(sys.argv) == 2 and sys.argv[1] in ('--c','--cache'):
-        print("\033[93mBuilding cache, please wait about 30s...\033[0m")
         begin = time.perf_counter()
         cache_ns(config_struct)
         end = time.perf_counter()

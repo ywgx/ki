@@ -1,30 +1,32 @@
 #!/usr/bin/python3
 #*************************************************
 # Description : Kubectl Pro
-# Version     : 6.0
+# Version     : 6.1
 #*************************************************
 from collections import deque
 import os,re,sys,time,readline,subprocess
 #-----------------VAR-----------------------------
 home = os.environ["HOME"]
-history = home + "/.history"
 default_config = home + "/.kube/config"
+history = home + "/.history"
 ki_all = history + "/.all"
-ki_dict = history + "/.dict"
-ki_last = history + "/.last"
-ki_lock = history + "/.lock"
-ki_line = history + "/.line"
-ki_cool = history + "/.cool"
-ki_cache = history + "/.cache"
-ki_unlock = history + "/.unlock"
-ki_ns_dict = history + "/.ns_dict"
+ki_history = "/var/tmp/.history"
+ki_home = ki_history if os.path.exists(ki_all) else history
+ki_cool = ki_home + "/.cool"
+ki_cache = ki_home + "/.cache"
+ki_ns_dict = ki_home + "/.ns_dict"
 ki_pod_dict = history + "/.pod_dict"
+ki_kube_dict = history + "/.kube_dict"
 ki_latest_ns_dict = history + "/.latest_ns_dict"
 ki_current_ns_dict = history + "/.current_ns_dict"
+ki_last = history + "/.last"
+ki_line = history + "/.line"
+ki_lock = history + "/.lock"
+ki_unlock = history + "/.unlock"
 KUBECTL_OPTIONS = "--insecure-skip-tls-verify"
-KI_AI_URL = os.getenv("KI_AI_URL", "https://api.openai.com/v1/chat/completions")
+KI_AI_URL = os.getenv("KI_AI_URL", "https://api.deepseek.com/v1/chat/completions")
 KI_AI_KEY = os.getenv("KI_AI_KEY", "")
-KI_AI_MODEL = os.getenv("KI_AI_MODEL", "gpt-4o")
+KI_AI_MODEL = os.getenv("KI_AI_MODEL", "deepseek-chat")
 #-----------------FUN-----------------------------
 def cmp_file(f1, f2):
     if os.path.getsize(f1) != os.path.getsize(f2):
@@ -69,10 +71,18 @@ def cmd_obj(ns, obj, res, args, iip="x"):
     elif obj in ("Event"):
         action = "get"
         cmd = f"kubectl {KUBECTL_OPTIONS} -n "+ns+" "+action+" "+obj+"  --sort-by=.metadata.creationTimestamp"
-    elif obj in ("Deployment","DaemonSet","Service","StatefulSet","Ingress","ConfigMap","Secret","PersistentVolume","PersistentVolumeClaim","CronJob","Job","VirtualService","Gateway","HTTPRoute","DestinationRule","EnvoyFilter"):
+    elif obj in ("Deployment","DaemonSet","Service","StatefulSet","Ingress","ConfigMap","Secret","PersistentVolume","PersistentVolumeClaim","CronJob","Job","VirtualService","Gateway","HTTPRoute","DestinationRule","EnvoyFilter", "all"):
         action2 = ""
+        actual_obj = obj
+        actual_res = res
+        if obj == "all" and "/" in res:
+            parts = res.split("/", 1)
+            if len(parts) == 2:
+                actual_obj = parts[0].capitalize()
+                actual_res = parts[1]
+
         if args in ("cle","delete"):
-            if confirm_action("This command will delete the "+obj):
+            if confirm_action("This command will delete the "+actual_obj):
                 action = "delete"
             else:
                 print("Operation canceled.")
@@ -83,10 +93,17 @@ def cmd_obj(ns, obj, res, args, iip="x"):
             action = "describe"
         elif args[0] == 'o':
             action = "get"
-            action2 = " -o yaml > "+res+"."+obj.lower()+".yml"
+            action2 = " -o yaml > "+actual_res+"."+actual_obj.lower()+".yml"
         else:
             action = "get"
-        cmd = f"kubectl {KUBECTL_OPTIONS} -n "+ns+" "+action+" "+obj.lower()+" "+res+action2 if obj not in ("PersistentVolume") else f"kubectl {KUBECTL_OPTIONS} "+action+" "+obj.lower()+" "+res+action2
+            actual_obj = obj
+            actual_res = res
+
+        if obj == "all" and args[0] in ('e', 'd', 'o'):
+            cmd = f"kubectl {KUBECTL_OPTIONS} -n {ns} {action} {actual_obj.lower()} {actual_res}{action2}"
+        else:
+            cmd = f"kubectl {KUBECTL_OPTIONS} -n {ns} {action} {actual_obj.lower()} {actual_res}{action2}" if actual_obj not in ("PersistentVolume") else f"kubectl {KUBECTL_OPTIONS} {action} {actual_obj.lower()} {actual_res}{action2}"
+
     elif obj in ("ResourceQuota"):
         action2 = ""
         if args[0] == "e":
@@ -109,7 +126,7 @@ def cmd_obj(ns, obj, res, args, iip="x"):
         l = get_obj(ns,res)
         obj = l[0]
         name = l[1]
-        d = {'d':'Deployment','s':'Service','i':'Ingress','f':'StatefulSet','a':'DaemonSet','p':'Pod','g':'Gateway','h':'HTTPRoute','V':'VirtualService','D':'DestinationRule','E':'EnvoyFilter'}
+        d = {'d':'Deployment','s':'Service','i':'Ingress','f':'StatefulSet','a':'DaemonSet','p':'Pod','g':'Gateway','h':'HTTPRoute','A':'all','V':'VirtualService','D':'DestinationRule','E':'EnvoyFilter'}
         if args == "p":
             cmd = f"kubectl {KUBECTL_OPTIONS} -n "+ns+" exec -it "+res+" -- sh"
         elif args == "del":
@@ -226,6 +243,7 @@ def find_optimal(namespace_list: list, namespace: str):
 def find_config():
     global header_config
     os.path.exists(history) or os.mkdir(history)
+    os.path.exists(ki_history) or os.mkdir(ki_history)
     cmd = '''find $HOME/.kube -maxdepth 2 -type f -name 'kubeconfig*' -a ! -name 'kubeconfig-*-NULL' 2>/dev/null|egrep '.*' || ( find $HOME/.kube -maxdepth 1 -type f 2>/dev/null|egrep '.*' &>/dev/null && grep -l "current-context" `find $HOME/.kube -maxdepth 1 -type f` )'''
     result_set = { e.split('\n')[0] for e in get_data(cmd) }
     result_num = len(result_set)
@@ -249,15 +267,15 @@ def find_config():
         header_config = os.path.realpath(default_config)
     elif result_num > 1:
         dc = {}
-        if os.path.exists(ki_dict) and os.path.getsize(ki_dict) > 5:
-            with open(ki_dict,'r') as f:
+        if os.path.exists(ki_kube_dict) and os.path.getsize(ki_kube_dict) > 5:
+            with open(ki_kube_dict,'r') as f:
                 try:
                     dc = eval(f.read())
                     for config in list(dc.keys()):
                         if not os.path.exists(config):
                             del dc[config]
                 except:
-                    os.unlink(ki_dict)
+                    os.unlink(ki_kube_dict)
         if os.path.exists(ki_last) and os.path.getsize(ki_last) > 0:
             with open(ki_last,'r') as f:
                 last_config = f.read()
@@ -313,8 +331,8 @@ def compress_list(l: list):
 def find_history(config,num=3):
     if config != header_config:
         dc = {}
-        if os.path.exists(ki_dict) and os.path.getsize(ki_dict) > 5:
-            with open(ki_dict,'r') as f:
+        if os.path.exists(ki_kube_dict) and os.path.getsize(ki_kube_dict) > 5:
+            with open(ki_kube_dict,'r') as f:
                 dc = eval(f.read())
                 dc[config] = dc[config] + num if config in dc else 1
                 dc.pop(default_config,None)
@@ -325,13 +343,13 @@ def find_history(config,num=3):
         result_dict = sorted(dc.items(),key = lambda dc:dc[1])
         for i,j in zip(result_dict,compress_list([ i[1] for i in result_dict ])):
             dc[i[0]] = j
-        with open(ki_dict,'w') as f: f.write(str(dc))
+        with open(ki_kube_dict,'w') as f: f.write(str(dc))
 
 def get_config(config_lines: list, ns: str):
     history_lines = []
     dc = {}
-    if os.path.exists(ki_dict):
-        with open(ki_dict, 'r') as f:
+    if os.path.exists(ki_kube_dict):
+        with open(ki_kube_dict, 'r') as f:
             dc = eval(f.read())
             dc.pop(os.path.realpath(default_config), None)
             history_lines = [k[0] for k in sorted(dc.items(), key=lambda d: d[1], reverse=True)]
@@ -441,9 +459,6 @@ def cache_ns(config_struct: list):
                     ns_list = [e.split()[0] for e in l]
                     latest_ns = l[-1].split()[0] if l else ""
 
-                    if os.path.exists(ki_all):
-                        return config, ns_list, latest_ns
-
                     valid_ns = []
                     with ThreadPoolExecutor(max_workers=min(10, len(ns_list))) as inner_executor:
                         futures = {inner_executor.submit(check_ns, config, ns): ns for ns in ns_list}
@@ -478,7 +493,7 @@ def switch_config(switch_num: int,k8s: str,ns: str,time: str):
             with open(ki_last,'w') as f: f.write(os.path.realpath(default_config))
         os.unlink(default_config)
         os.symlink(os.environ['KUBECONFIG'],default_config)
-        print("\033[1;93m{}\033[0m".format("[ "+time+"  "+str(switch_num+1)+"-SWITCH  "+k8s+" / "+ns+" ] "))
+        print("\033[1;93m{}\033[0m".format("[ "+time+"  "+str(switch_num+1)+"-SWITCH ---> "+k8s+" / "+ns+" ] "))
         find_history(os.environ['KUBECONFIG'],8)
         switch_num > 0 and subprocess.Popen("ki --c",shell=True,stdout=subprocess.PIPE,stderr=subprocess.PIPE,universal_newlines=True)
         switch = True
@@ -583,8 +598,8 @@ def info_w(k8s_path: str,result_lines: list):
         os.path.exists(ki_lock) and int(time.time()-os.stat(ki_lock).st_mtime) > 3600 and os.unlink(ki_lock)
         os.path.exists(ki_current_ns_dict) and int(time.time()-os.stat(ki_current_ns_dict).st_mtime) > 300 and os.unlink(ki_current_ns_dict)
 def info_k():
-    if os.path.exists(ki_pod_dict) and os.path.exists(ki_dict):
-        with open(ki_pod_dict,'r') as f1, open(ki_dict,'r') as f2:
+    if os.path.exists(ki_pod_dict) and os.path.exists(ki_kube_dict):
+        with open(ki_pod_dict,'r') as f1, open(ki_kube_dict,'r') as f2:
             dc1 = eval(f1.read())
             dc2 = eval(f2.read())
             for k in sorted(dc1):
@@ -1173,7 +1188,7 @@ def ki():
                     os.unlink(default_config)
                     os.symlink(config,default_config)
                     find_history(config,72)
-                    print("\033[1;93m{}\033[0m".format("[ SWITCH "+config.split("/")[-1]+" ] "))
+                    print("\033[1;93m{}\033[0m".format("[ SWITCH ---> "+config.split("/")[-1]+" ] "))
             else:
                 lr = set()
                 for i in config_struct[1]:
@@ -1227,7 +1242,7 @@ def ki():
             ext = " -o wide"
             os.environ['KUBECONFIG'] = l[1]
             if len(sys.argv) == 4:
-                d = {'d':['Deployment'," -o wide"],'s':['Service'," -o wide"],'i':['Ingress'," -o wide"],'c':['ConfigMap'," -o wide"],'t':['Secret'," -o wide"],'n':['Node'," -o wide"],'p':['PersistentVolumeClaim'," -o wide"],'v':['PersistentVolume'," -o wide"],'f':['StatefulSet'," -o wide"],'j':['CronJob'," -o wide"],'b':['Job'," -o wide"],'P':['Pod'," -o wide"],'e':['Event',''],'r':['ReplicaSet',''],'a':['DaemonSet',''],'q':['ResourceQuota',''],'V':['VirtualService',""],'g':['Gateway',''],'h':['HTTPRoute',''],'E':['EnvoyFilter',''],'D':['DestinationRule','']}
+                d = {'d':['Deployment'," -o wide"],'s':['Service'," -o wide"],'i':['Ingress'," -o wide"],'c':['ConfigMap'," -o wide"],'t':['Secret'," -o wide"],'n':['Node'," -o wide"],'p':['PersistentVolumeClaim'," -o wide"],'v':['PersistentVolume'," -o wide"],'f':['StatefulSet'," -o wide"],'j':['CronJob'," -o wide"],'b':['Job'," -o wide"],'P':['Pod'," -o wide"],'e':['Event',''],'r':['ReplicaSet',''],'a':['DaemonSet',''],'q':['ResourceQuota',''],'V':['VirtualService',""],'g':['Gateway',''],'h':['HTTPRoute',''],'A':['all',''],'E':['EnvoyFilter',''],'D':['DestinationRule','']}
                 obj = d[sys.argv[3][0]][0] if sys.argv[3][0] in d else "Pod"
                 ext = d[sys.argv[3][0]][1] if sys.argv[3][0] in d else ""
                 if sys.argv[1] in ('-i','-l','-e','-es','-ei','-o','-os','-oi'):
@@ -1289,7 +1304,8 @@ def ki():
                 if ns:
                     if not pod:
                         if sys.argv[1] in ('-n','-r'):
-                            cmd = f"kubectl get "+obj.lower()+ext+" -n "+ ns+("  --sort-by=.status.containerStatuses[0].restartCount" if sys.argv[1].split('n')[-1] else "  --sort-by=.metadata.creationTimestamp") + f" --no-headers {KUBECTL_OPTIONS}"
+                            sort_by = "" if obj.lower() == "all" else "  --sort-by=.status.containerStatuses[0].restartCount" if sys.argv[1].split('n')[-1] else "  --sort-by=.metadata.creationTimestamp"
+                            cmd = f"kubectl get "+obj.lower()+ext+" -n "+ ns + sort_by + f" --no-headers {KUBECTL_OPTIONS}"
                         elif sys.argv[1] in ('-a','--a','-A'):
                             cmd = f"kubectl get "+obj.lower()+ext+f" -A  --sort-by=.metadata.creationTimestamp --no-headers {KUBECTL_OPTIONS}"
                         else:

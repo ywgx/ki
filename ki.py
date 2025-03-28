@@ -7,14 +7,10 @@ from collections import deque
 import os,re,sys,time,readline,subprocess
 #-----------------VAR-----------------------------
 home = os.environ["HOME"]
-default_config = home + "/.kube/config"
 history = home + "/.history"
-ki_all = history + "/.all"
-ki_history = "/var/tmp/.history"
-ki_home = ki_history if os.path.exists(ki_all) else history
-ki_cool = ki_home + "/.cool"
-ki_cache = ki_home + "/.cache"
-ki_ns_dict = ki_home + "/.ns_dict"
+ki_cool = history + "/.cool"
+ki_cache = history + "/.cache"
+ki_ns_dict = history + "/.ns_dict"
 ki_pod_dict = history + "/.pod_dict"
 ki_kube_dict = history + "/.kube_dict"
 ki_latest_ns_dict = history + "/.latest_ns_dict"
@@ -23,10 +19,11 @@ ki_last = history + "/.last"
 ki_line = history + "/.line"
 ki_lock = history + "/.lock"
 ki_unlock = history + "/.unlock"
-KUBECTL_OPTIONS = "--insecure-skip-tls-verify"
+default_config = home + "/.kube/config"
 KI_AI_URL = os.getenv("KI_AI_URL", "https://api.deepseek.com/v1/chat/completions")
 KI_AI_KEY = os.getenv("KI_AI_KEY", "")
 KI_AI_MODEL = os.getenv("KI_AI_MODEL", "deepseek-chat")
+KUBECTL_OPTIONS = "--insecure-skip-tls-verify"
 #-----------------FUN-----------------------------
 def cmp_file(f1, f2):
     if os.path.getsize(f1) != os.path.getsize(f2):
@@ -243,7 +240,6 @@ def find_optimal(namespace_list: list, namespace: str):
 def find_config():
     global header_config
     os.path.exists(history) or os.mkdir(history)
-    os.path.exists(ki_history) or os.mkdir(ki_history)
     cmd = '''find $HOME/.kube -maxdepth 2 -type f -name 'kubeconfig*' -a ! -name 'kubeconfig-*-NULL' 2>/dev/null|egrep '.*' || ( find $HOME/.kube -maxdepth 1 -type f 2>/dev/null|egrep '.*' &>/dev/null && grep -l "current-context" `find $HOME/.kube -maxdepth 1 -type f` )'''
     result_set = { e.split('\n')[0] for e in get_data(cmd) }
     result_num = len(result_set)

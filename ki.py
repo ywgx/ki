@@ -1,7 +1,7 @@
 #!/usr/bin/python3
 #*************************************************
 # Description : Kubectl Pro
-# Version     : 6.1
+# Version     : 6.2
 #*************************************************
 from collections import deque
 import os,re,sys,time,readline,subprocess
@@ -1216,6 +1216,7 @@ def ki():
                                 res = (config_struct[1][index]).split()[0]
                             if res:
                                 if res not in {default_config,os.path.realpath(default_config)}:
+                                    find_history(os.path.realpath(default_config),-24)
                                     os.unlink(default_config)
                                     os.symlink(res,default_config)
                                     print('\033[{}C\033[1A'.format(10),end = '')

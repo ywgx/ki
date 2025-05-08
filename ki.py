@@ -1,7 +1,7 @@
 #!/usr/bin/python3
 #*************************************************
 # Description : Kubectl Pro
-# Version     : 6.2
+# Version     : 6.3
 #*************************************************
 from collections import deque
 import os,re,sys,time,readline,subprocess
@@ -1407,11 +1407,13 @@ def ki():
                         pod = ""
                 else:
                     print("No resources found.")
-                    subprocess.Popen("ki --c",shell=True,stdout=subprocess.PIPE,stderr=subprocess.PIPE,universal_newlines=True)
+                    if not os.path.exists(ki_cache) or (os.path.exists(ki_cache) and int(time.time()-os.stat(ki_cache).st_mtime) > 86400):
+                        subprocess.Popen("ki --c",shell=True,stdout=subprocess.PIPE,stderr=subprocess.PIPE,universal_newlines=True)
                     sys.exit()
         else:
             print("No namespace found in the kubernetes.")
-            subprocess.Popen("ki --c",shell=True,stdout=subprocess.PIPE,stderr=subprocess.PIPE,universal_newlines=True)
+            if not os.path.exists(ki_cache) or (os.path.exists(ki_cache) and int(time.time()-os.stat(ki_cache).st_mtime) > 86400):
+                subprocess.Popen("ki --c",shell=True,stdout=subprocess.PIPE,stderr=subprocess.PIPE,universal_newlines=True)
     elif len(sys.argv) == 2 and sys.argv[1] in ('--h','--help'):
         style = "\033[1;32m%s\033[0m"
         print(style % "Kubectl pro controls the Kubernetes cluster manager,find more information at: https://ki.xabc.io\n")

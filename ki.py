@@ -402,10 +402,11 @@ def find_ns(config_struct: list):
             with open(ns_dict,'r') as f:
                 try:
                     d = eval(f.read())
-                    ns_list = d[config]
+                    ns_list = d.get(config, [])
                 except:
                     os.path.exists(ki_cache) and os.unlink(ki_cache)
-                    ns_list = cache_ns(config_struct)[config]
+                    cache_data = cache_ns(config_struct)
+                    ns_list = cache_data.get(config, [])
         else:
             cmd = f"kubectl {KUBECTL_OPTIONS} get ns --no-headers --kubeconfig "+config
             ns_list = [ e.split()[0] for e in get_data(cmd) ]
@@ -469,12 +470,13 @@ def cache_ns(config_struct: list):
                         return config, [], ""
             return config, [], ""
 
-        with ThreadPoolExecutor(max_workers=min(10, len(config_struct[1]))) as executor:
-            futures = [executor.submit(process_config, config) for config in config_struct[1]]
+        valid_configs = [cfg for cfg in config_struct[1] if os.path.exists(cfg)]
+        with ThreadPoolExecutor(max_workers=min(10, len(valid_configs))) as executor:
+            futures = [executor.submit(process_config, config) for config in valid_configs]
             for future in as_completed(futures):
                 config, s, latest = future.result()
+                d[config] = s
                 if s:
-                    d[config] = s
                     d_latest[config] = latest
 
         with open(ki_ns_dict,'w') as f: f.write(str(d))

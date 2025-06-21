@@ -1,7 +1,7 @@
 #!/usr/bin/python3
 #*************************************************
 # Description : Kubectl Pro
-# Version     : 6.3
+# Version     : 6.5
 #*************************************************
 from collections import deque
 import os,re,sys,time,readline,subprocess
@@ -24,6 +24,7 @@ KI_AI_URL = os.getenv("KI_AI_URL", "https://api.deepseek.com/v1/chat/completions
 KI_AI_KEY = os.getenv("KI_AI_KEY", "")
 KI_AI_MODEL = os.getenv("KI_AI_MODEL", "deepseek-chat")
 KUBECTL_OPTIONS = "--insecure-skip-tls-verify"
+CACHE_DURATION = 8 * 60 * 60
 #-----------------FUN-----------------------------
 def cmp_file(f1, f2):
     if os.path.getsize(f1) != os.path.getsize(f2):
@@ -419,7 +420,7 @@ def find_ns(config_struct: list):
 def cache_ns(config_struct: list):
     from concurrent.futures import ThreadPoolExecutor, as_completed
 
-    if os.path.exists(ki_cool) and int(time.time() - os.stat(ki_cool).st_mtime) < 180:
+    if os.path.exists(ki_cool) and int(time.time() - os.stat(ki_cool).st_mtime) < CACHE_DURATION:
         if os.path.exists(ki_ns_dict):
             try:
                 with open(ki_ns_dict, 'r') as f:
@@ -429,7 +430,7 @@ def cache_ns(config_struct: list):
     open(ki_cool, "w").close()
 
     print("\033[93mBuilding cache, please wait about 30s...\033[0m")
-    if not os.path.exists(ki_cache) or (os.path.exists(ki_cache) and int(time.time()-os.stat(ki_cache).st_mtime) > 1800):
+    if not os.path.exists(ki_cache) or (os.path.exists(ki_cache) and int(time.time()-os.stat(ki_cache).st_mtime) > CACHE_DURATION):
         open(ki_cache,"a").close()
         d = {}
         d_latest = {}

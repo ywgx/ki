@@ -1,7 +1,7 @@
 #!/usr/bin/python3
 #*************************************************
 # Description : Kubectl Pro
-# Version     : 6.5
+# Version     : 6.6
 #*************************************************
 from collections import deque
 import os,re,sys,time,readline,subprocess
@@ -1395,6 +1395,7 @@ def ki():
                         else:
                             args = "p"
                         if pod.isdigit() and int(pod) < result_len or ( result_len == 1 and pod != '*'):
+                            filtered_count = len(result_lines)
                             index = int(pod) if pod.isdigit() and int(pod) < result_len else 0
                             res = result_lines[index].split()[0 if sys.argv[1] not in ('-a','--a') else (1 if obj not in ("PersistentVolume") else 0)]
                             iip = result_lines[index].split()[5] if len(result_lines[index].split()) > 5 else find_ip(res)
@@ -1405,6 +1406,8 @@ def ki():
                                 print("\033[1;38;5;208m{}\033[0m".format(l[0]))
                                 record(res,l[2],l[1],l[0],k8s,ns,config_struct)
                                 os.system(l[0])
+                                if filtered_count == 1:
+                                    pod = ""
                             print('\r')
                     else:
                         pod = ""

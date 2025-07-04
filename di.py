@@ -295,7 +295,7 @@ def main():
             # 显示状态栏
             if len(containers) > 3:
                 now = time.strftime("%T", time.localtime())
-                status = f"[ Docker Containers: {len(containers)} ] [ {now} ]"
+                status = f"[ Containers: {len(containers)} ] [ {now} ]"
                 if watch_mode:
                     status += " [ Watching... ]"
                 print(f"\033[1;93m{status}\033[0m")

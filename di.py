@@ -1,7 +1,7 @@
 #!/usr/bin/python3
 #*************************************************
 # Description : Docker Pro - Simplified Docker Management
-# Version     : 1.3
+# Version     : 1.5
 #*************************************************
 import os,re,sys,time,subprocess,atexit
 from collections import deque, Counter
@@ -141,6 +141,20 @@ def get_containers(pattern=""):
 
     return containers
 
+def filter_containers(containers: list, pattern: str):
+    """过滤容器列表"""
+    if not pattern:
+        return containers
+
+    filtered = []
+    for container in containers:
+        if (pattern.lower() in container['name'].lower() or
+            pattern.lower() in container['image'].lower() or
+            pattern in container['id']):
+            filtered.append(container)
+
+    return filtered
+
 def format_container_line(index, container, feature_dict=None, last_used=None, most_used=None):
     """格式化容器显示行，高亮显示特征字符串和特殊标记"""
     status_color = "\033[1;32m" if "Up" in container['status'] else "\033[1;31m"
@@ -250,7 +264,11 @@ def main():
             print("  <index>         - Enter the container")
             print("  <index> l       - Show container logs (tail 100)")
             print("  <index> l <n>   - Show container logs (tail n lines)")
-            print("  <feature>       - Select by unique feature string (highlighted in \033[1;95mpurple\033[0m)")
+            print("  /<feature>      - Select by unique feature string (prefix with /)")
+            print("  <pattern>       - Filter containers (type any text to filter)")
+            print("  <Enter>         - If filtered to 1 container: enter it")
+            print("                    If multiple containers: clear filter")
+            print("  <               - Clear filter and show all containers")
             print("  ^               - Select last used container (marked with \033[1;93m^\033[0m)")
             print("  ~,@,#,$,%,etc   - Select most used container (marked with \033[1;91m~\033[0m)")
             print("  *               - Watch mode (refresh every 3s)")
@@ -258,22 +276,42 @@ def main():
             print("  q or Ctrl+C     - Quit\n")
             print("Tips:")
             print("  - The \033[1;95mpurple\033[0m characters are unique features for quick selection")
-            print("  - Any special character (except ^) selects the most used container\n")
+            print("  - Use / prefix to select by feature (e.g., /api)")
+            print("  - Without / prefix, text will filter the list")
+            print("  - Any special character (except ^ and <) selects the most used container")
+            print("  - You can continuously filter results by typing search patterns\n")
             return
         else:
             pattern = ' '.join(sys.argv[1:])
 
     # 主循环
     watch_mode = False
+    all_containers = []  # 保存所有容器
+    filtered_containers = []  # 保存过滤后的容器
+    active_filter = ""  # 当前激活的过滤条件
+
     try:
         while True:
-            containers = get_containers(pattern)
+            # 获取所有容器
+            if not watch_mode or not all_containers:
+                all_containers = get_containers(pattern)
 
-            if not containers:
+            if not all_containers:
                 print("\033[1;31mNo containers found.\033[0m")
                 if pattern:
                     print(f"Pattern: '{pattern}'")
                 return
+
+            # 应用过滤
+            if active_filter:
+                filtered_containers = filter_containers(all_containers, active_filter)
+                containers = filtered_containers
+                # 如果过滤无结果，直接清除过滤
+                if not containers:
+                    active_filter = ""
+                    containers = all_containers
+            else:
+                containers = all_containers
 
             # 计算特征字符串
             container_names = [c['name'] for c in containers]
@@ -288,14 +326,24 @@ def main():
                 print("\033[2J\033[H", end='')
 
             # 显示容器列表
-            print("\033[1;38;5;208mdocker ps\033[0m")
+            cmd_display = "docker ps"
+            if active_filter:
+                cmd_display += f" | grep '{active_filter}'"
+            print(f"\033[1;38;5;208m{cmd_display}\033[0m")
+
             for i, container in enumerate(containers):
                 print(format_container_line(i, container, feature_dict, last_used, most_used))
 
             # 显示状态栏
-            if len(containers) > 3:
+            if len(containers) > 3 or active_filter:
                 now = time.strftime("%T", time.localtime())
-                status = f"[ Containers: {len(containers)} ] [ {now} ]"
+                status_parts = [f"Containers: {len(containers)}"]
+                if active_filter:
+                    status_parts.append(f"Filter: '{active_filter}'")
+                    status_parts.append(f"Total: {len(all_containers)}")
+                status_parts.append(now)
+                status = " ] [ ".join(status_parts)
+                status = f"[ {status} ]"
                 if watch_mode:
                     status += " [ Watching... ]"
                 print(f"\033[1;93m{status}\033[0m")
@@ -304,7 +352,7 @@ def main():
                 # 获取用户输入
                 if watch_mode:
                     time.sleep(3)
-                    containers = get_containers(pattern)
+                    all_containers = get_containers(pattern)
                     continue
 
                 user_input = input("\033[1;95mselect\033[0m\033[5;95m:\033[0m").strip()
@@ -315,7 +363,41 @@ def main():
                 elif user_input == '*':
                     watch_mode = True
                     continue
+                elif user_input == '<':
+                    # 清除过滤条件
+                    active_filter = ""
+                    filtered_containers = []
+                    continue
                 elif user_input == '':
+                    # 空输入的智能处理
+                    if active_filter:
+                        # 有过滤条件时
+                        if len(containers) == 1:
+                            # 只有一个结果，直接进入
+                            container = containers[0]
+                            record_history(container['name'])
+                            cmd = execute_container_action(container, "exec")
+                            if cmd:
+                                print('\033[1A\033[2K', end='')
+                                print(f"\033[1;38;5;208m{cmd}\033[0m")
+                                os.system(cmd)
+                                print()
+                        else:
+                            # 多个结果，清除过滤
+                            active_filter = ""
+                            filtered_containers = []
+                    else:
+                        # 没有过滤条件时
+                        if len(containers) == 1:
+                            # 只有一个容器，直接进入
+                            container = containers[0]
+                            record_history(container['name'])
+                            cmd = execute_container_action(container, "exec")
+                            if cmd:
+                                print('\033[1A\033[2K', end='')
+                                print(f"\033[1;38;5;208m{cmd}\033[0m")
+                                os.system(cmd)
+                                print()
                     continue
 
                 # 解析选择和命令
@@ -323,85 +405,90 @@ def main():
                 if not parts:
                     continue
 
-                index_str = parts[0]
-                command = parts[1] if len(parts) > 1 else ""
-                args = parts[2] if len(parts) > 2 else ""
+                first_part = parts[0]
+
+                # 检查是否是索引或特殊命令
+                is_index = False
+                selected_index = -1
 
                 # 处理特殊索引
-                if index_str == ':':
-                    index = len(containers) - 1
-                elif index_str == '^':
+                if first_part == ':':
+                    if containers:
+                        selected_index = len(containers) - 1
+                        is_index = True
+                elif first_part == '^':
                     # 上一次操作的容器
                     if last_used:
-                        found = False
                         for i, container in enumerate(containers):
                             if container['name'] == last_used:
-                                index = i
-                                found = True
+                                selected_index = i
+                                is_index = True
                                 break
-                        if not found:
+                        if not is_index:
                             print(f"\033[1;31mLast used container '{last_used}' not found in current list.\033[0m")
                             continue
                     else:
                         print("\033[1;31mNo history found.\033[0m")
                         continue
-                elif not index_str[0].isalnum():
+                elif len(first_part) == 1 and not first_part.isalnum() and first_part not in ('<', '^', '/'):
                     # 任意特殊标点符号，默认匹配最常操作的容器
                     if most_used:
-                        found = False
                         for i, container in enumerate(containers):
                             if container['name'] == most_used:
-                                index = i
-                                found = True
+                                selected_index = i
+                                is_index = True
                                 break
-                        if not found:
+                        if not is_index:
                             print(f"\033[1;31mMost used container '{most_used}' not found in current list.\033[0m")
                             continue
                     else:
                         print("\033[1;31mNo history found.\033[0m")
                         continue
-                elif index_str.isdigit():
-                    index = int(index_str)
-                else:
-                    # 先尝试通过特征字符串查找
-                    feature_index = find_by_feature(containers, feature_dict, index_str)
+                elif first_part.isdigit():
+                    selected_index = int(first_part)
+                    is_index = True
+                elif first_part.startswith('/') and len(first_part) > 1:
+                    # 使用 / 前缀进行特征匹配选择
+                    feature_str = first_part[1:]
+                    feature_index = find_by_feature(containers, feature_dict, feature_str)
                     if feature_index is not None:
-                        index = feature_index
+                        selected_index = feature_index
+                        is_index = True
                     else:
-                        # 再尝试模糊匹配容器名
-                        matched = find_optimal([c['name'] for c in containers], index_str)
-                        if matched:
-                            index = next(i for i, c in enumerate(containers) if c['name'] == matched)
-                        else:
-                            print(f"\033[1;31mInvalid selection: {index_str}\033[0m")
-                            continue
+                        print(f"\033[1;31mNo container matches feature: {feature_str}\033[0m")
+                        continue
 
-                # 验证索引
-                if index < 0 or index >= len(containers):
-                    print(f"\033[1;31mInvalid index: {index}\033[0m")
-                    continue
+                # 如果找到了有效的索引，执行操作
+                if is_index and 0 <= selected_index < len(containers):
+                    container = containers[selected_index]
 
-                container = containers[index]
+                    # 记录历史
+                    record_history(container['name'])
 
-                # 记录历史（但不立即保存）
-                record_history(container['name'])
+                    # 定期保存（每10次操作保存一次）
+                    if len(history) % 10 == 0:
+                        save_history()
 
-                # 定期保存（每10次操作保存一次）
-                if len(history) % 10 == 0:
-                    save_history()
+                    # 检查是否有附加命令
+                    command = parts[1] if len(parts) > 1 else ""
+                    args = parts[2] if len(parts) > 2 else ""
 
-                # 执行操作
-                if command.startswith('l'):
-                    cmd = execute_container_action(container, "logs", args)
+                    # 执行操作
+                    if command.startswith('l'):
+                        cmd = execute_container_action(container, "logs", args)
+                    else:
+                        cmd = execute_container_action(container, "exec")
+
+                    if cmd:
+                        # 移动光标到输入行并清除
+                        print('\033[1A\033[2K', end='')
+                        print(f"\033[1;38;5;208m{cmd}\033[0m")
+                        os.system(cmd)
+                        print()
                 else:
-                    cmd = execute_container_action(container, "exec")
-
-                if cmd:
-                    # 移动光标到输入行并清除
-                    print('\033[1A\033[2K', end='')
-                    print(f"\033[1;38;5;208m{cmd}\033[0m")
-                    os.system(cmd)
-                    print()
+                    # 不是有效的索引，将整个输入作为过滤条件
+                    active_filter = user_input
+                    continue
 
             except KeyboardInterrupt:
                 print("\n\033[1;32mBye!\033[0m")

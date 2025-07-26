@@ -68,6 +68,8 @@
       align-items: center;
       justify-content: space-between;
       gap: 12px;
+      padding: 16px;
+      padding-top: 0;
     }
     .news-link {
       display: inline-block;
@@ -92,14 +94,6 @@
       text-overflow: ellipsis;
       white-space: nowrap;
     }
-    .news-nav {
-      display: none;
-      justify-content: center;
-      gap: 8px;
-      padding: 8px;
-      background: #f9fafb;
-      border-top: 1px solid #e5e7eb;
-    }
 
     /* Mobile Styles */
     @media(max-width: 768px){
@@ -122,7 +116,7 @@
         height: 60px;
         flex-shrink: 0;
       }
-      .news-body, .news-nav { display: none; }
+      .news-body { display: none; }
       .news-mobile-link {
         display: flex;
         align-items: center;
@@ -163,16 +157,15 @@
     <div class="news-body">
       <div id="news-title" class="news-title"></div>
       <div id="news-content" class="news-content"></div>
-      <div class="news-footer">
+    </div>
+    <div class="news-footer">
         <a id="news-link" class="news-link" href="" target="_blank" rel="noopener">了解更多</a>
         <span id="news-brand" class="news-brand"></span>
-      </div>
     </div>
     <!-- Mobile content -->
     <a id="news-mobile-link" class="news-mobile-link" href="" target="_blank" rel="noopener">
       <div id="news-mobile-title" class="news-mobile-title"></div>
     </a>
-    <div id="news-nav" class="news-nav"></div>
   </div>
   <!-- News Carousel HTML End -->
 
@@ -211,10 +204,6 @@
       brand.textContent = news.title;
       mobileLink.href = news.link || '#';
       mobileTitle.textContent = news.title;
-
-      document.querySelectorAll('.news-dot').forEach((dot, i) => {
-        dot.classList.toggle('active', i === index);
-      });
     };
 
     const nextNews = () => {
@@ -230,25 +219,6 @@
         if (!data.success || !data.ads?.length) return;
 
         newsData = data.ads.sort((a, b) => b.priority - a.priority);
-        const nav = $('news-nav');
-        nav.innerHTML = '';
-
-        if (newsData.length > 1 && window.innerWidth > 768) {
-          nav.style.display = 'flex';
-          newsData.forEach((_, index) => {
-            const dot = document.createElement('span');
-            dot.className = 'news-dot';
-            dot.onclick = (e) => {
-              e.stopPropagation(); // Prevent click-through on mobile
-              showNews(index);
-              if (newsInterval) clearInterval(newsInterval);
-              newsInterval = setInterval(nextNews, 5000);
-            };
-            nav.appendChild(dot);
-          });
-        } else {
-          nav.style.display = 'none';
-        }
 
         showNews(0);
         $('news-container').classList.add('show');

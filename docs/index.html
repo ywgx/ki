@@ -1,242 +1,112 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-<title>𝑲𝒊</title>
-<meta charset="UTF-8">
-<meta http-equiv="X-UA-Compatible" content="IE=edge,chrome=1">
-<meta name="description" content="ki">
-<meta name="keywords" content="Kubernetes,DevOps,SaltStack,Ansible,腾讯云,阿里云,物联网,金融云">
-<meta name="viewport" content="width=device-width,user-scalable=no,initial-scale=1.0,maximum-scale=1.0,minimum-scale=1.0">
-<link rel="stylesheet" href="//static.xabc.io/vue.css">
-<style> .sidebar-nav li{ line-height: 1.50em }</style>
+  <meta charset="UTF-8">
+  <title>𝑲𝒊</title>
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <link rel="stylesheet" href="//static.xabc.io/vue.css">
+  <style>
+    .news-wrapper{
+      position:fixed;
+      top:120px;
+      right:20px;
+      width:320px;
+      max-height:calc(100vh - 150px);
+      background:#fff;
+      border:1px solid #e5e7eb;
+      border-radius:8px;
+      box-shadow:0 4px 12px rgba(0,0,0,.1);
+      z-index:999;
+      font-size:13px;
+      line-height:1.6;
+      overflow:hidden;
+      display:none;
+      flex-direction:column;
+    }
+    .news-wrapper.show{display:flex;}
+    .news-image{width:100%;height:180px;object-fit:cover;background:#f3f4f6;}
+    .news-body{padding:16px;overflow-y:auto;flex:1;}
+    .news-title{font-weight:600;font-size:16px;margin-bottom:8px;color:#111827;}
+    .news-content{color:#4b5563;margin-bottom:12px;max-height:200px;overflow-y:auto;}
+    .news-footer{display:flex;align-items:center;justify-content:space-between;padding:0 16px 16px;}
+    .news-link{background:#2563eb;color:#fff;padding:8px 16px;border-radius:6px;text-decoration:none;font-size:14px;font-weight:500;}
+    .news-link:hover{background:#1d4ed8;}
+    .news-brand{font-size:13px;color:#6b7280;margin-left:12px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
+  </style>
 </head>
 <body>
-<section id="app"></section>
+  <section id="app"></section>
 
-<style>
-.xai-ads {
-  position: fixed !important;
-  top: 120px !important;
-  right: 20px !important;
-  width: 340px !important;
-  max-width: calc(100vw - 40px) !important;
-  max-height: calc(100vh - 150px) !important;
-  background: rgba(255, 255, 255, 0.95) !important;
-  border: 1px solid rgba(0, 0, 0, 0.1) !important;
-  border-radius: 20px !important;
-  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.08) !important;
-  backdrop-filter: blur(20px) !important;
-  -webkit-backdrop-filter: blur(20px) !important;
-  z-index: 9999 !important;
-  font-family: -apple-system, BlinkMacSystemFont, sans-serif !important;
-  overflow: hidden !important;
-  display: none;
-  flex-direction: column !important;
-  animation: slideIn 0.5s ease-out;
-  cursor: pointer;
-  transition: all 0.3s ease;
-}
-
-.xai-ads.show {
-  display: flex !important;
-}
-
-.xai-ads:hover {
-  transform: translateY(-2px);
-  box-shadow: 0 12px 40px rgba(0, 0, 0, 0.12) !important;
-}
-
-@keyframes slideIn {
-  from { opacity: 0; transform: translateX(100px); }
-  to { opacity: 1; transform: translateX(0); }
-}
-
-.xai-ads-link {
-  text-decoration: none !important;
-  color: inherit !important;
-  display: flex !important;
-  flex-direction: column !important;
-  flex: 1 !important;
-}
-
-.xai-ads .img-wrap {
-  width: 100% !important;
-  height: 200px !important;
-  background: rgba(0, 0, 0, 0.03) !important;
-  overflow: hidden !important;
-  border-radius: 20px 20px 0 0 !important;
-}
-
-.xai-ads .img-main {
-  width: 100% !important;
-  height: 100% !important;
-  object-fit: cover !important;
-  transition: transform 0.3s ease;
-}
-
-.xai-ads:hover .img-main {
-  transform: scale(1.05);
-}
-
-.xai-ads .content {
-  padding: 24px !important;
-  flex: 1 !important;
-  background: transparent !important;
-}
-
-.xai-ads .title {
-  font-weight: 700 !important;
-  font-size: 18px !important;
-  margin-bottom: 12px !important;
-  color: #1a202c !important;
-  line-height: 1.3 !important;
-}
-
-.xai-ads .desc {
-  color: rgba(0, 0, 0, 0.65) !important;
-  font-size: 14px !important;
-  line-height: 1.7 !important;
-}
-
-.xai-ads .nav {
-  display: flex !important;
-  justify-content: center !important;
-  gap: 12px !important;
-  padding: 16px !important;
-  background: rgba(0, 0, 0, 0.02) !important;
-  border-radius: 0 0 20px 20px !important;
-}
-
-.xai-ads .dot {
-  width: 8px !important;
-  height: 8px !important;
-  border-radius: 50% !important;
-  background: rgba(0, 0, 0, 0.2) !important;
-  cursor: pointer !important;
-  transition: all 0.3s ease;
-}
-
-.xai-ads .dot.active {
-  background: #1a202c !important;
-  transform: scale(1.2);
-}
-
-/* 深色模式 */
-@media (prefers-color-scheme: dark) {
-  .xai-ads {
-    background: rgba(26, 32, 44, 0.95) !important;
-    border-color: rgba(255, 255, 255, 0.1) !important;
-  }
-  .xai-ads .content { background: transparent !important; }
-  .xai-ads .title { color: #e2e8f0 !important; }
-  .xai-ads .desc { color: rgba(226, 232, 240, 0.7) !important; }
-  .xai-ads .nav { background: rgba(255, 255, 255, 0.02) !important; }
-  .xai-ads .dot { background: rgba(255, 255, 255, 0.2) !important; }
-  .xai-ads .dot.active { background: #e2e8f0 !important; }
-}
-</style>
-
-<div id="xai-ads" class="xai-ads">
-  <a id="ads-link" class="xai-ads-link" href="" target="_blank">
-    <div class="img-wrap">
-      <img id="ads-img" class="img-main" src="" alt="">
+  <div id="news-container" class="news-wrapper">
+    <img id="news-img" class="news-image" alt="News">
+    <div class="news-body">
+      <div id="news-title" class="news-title"></div>
+      <div id="news-content" class="news-content"></div>
     </div>
-    <div class="content">
-      <div id="ads-title" class="title"></div>
-      <div id="ads-desc" class="desc"></div>
+    <div class="news-footer">
+      <a id="news-link" class="news-link" href="#" target="_blank" rel="noopener">了解更多</a>
+      <span id="news-brand" class="news-brand"></span>
     </div>
-  </a>
-  <div id="ads-nav" class="nav"></div>
-</div>
+  </div>
 
-<script>
-// 检测是否为移动设备
-function isMobile() {
-  return /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent) || window.innerWidth <= 768;
-}
+  <script src="ki.js"></script>
+  <script src="//static.xabc.io/docsify.min.js"></script>
+  <script src="//static.xabc.io/search.min.js"></script>
 
-// 如果是移动设备，直接退出，不加载广告
-if (isMobile()) {
-  // 移动端不显示广告
-} else {
-  // PC端才执行广告逻辑
-  let ads = [], curIdx = 0, timer = null;
+  <script>
+    const news = {
+      data: [],
+      index: 0,
+      interval: null,
 
-  function showAd(idx) {
-    if (!ads.length) return;
+      show(index = 0) {
+        if (!this.data.length) return;
+        this.index = index;
+        const item = this.data[index];
+        const placeholder = 'data:image/svg+xml,%3Csvg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100"%3E%3Crect width="100" height="100" fill="%23f3f4f6"/%3E%3Ctext x="50" y="50" text-anchor="middle" dy=".3em" fill="%23999" font-size="14"%3ENEWS%3C/text%3E%3C/svg%3E';
 
-    const ad = ads[idx];
+        const img = document.getElementById('news-img');
+        img.src = item.image_url || placeholder;
+        img.onerror = () => img.src = placeholder;
 
-    document.getElementById('ads-img').src = ad.image_url || 'data:image/svg+xml,%3Csvg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100"%3E%3Crect width="100" height="100" fill="%23e2e8f0"/%3E%3C/svg%3E';
-    document.getElementById('ads-link').href = ad.link;
-    document.getElementById('ads-title').textContent = ad.title;
-    document.getElementById('ads-desc').innerHTML = ad.content;
+        document.getElementById('news-title').textContent = item.title;
+        document.getElementById('news-content').innerHTML = item.content;
+        document.getElementById('news-link').href = item.link || '#';
+        document.getElementById('news-brand').textContent = item.title;
+      },
 
-    document.querySelectorAll('.dot').forEach((d, i) =>
-      d.classList.toggle('active', i === idx)
-    );
+      next() {
+        if (this.data.length > 1) {
+          this.show((this.index + 1) % this.data.length);
+        }
+      },
 
-    curIdx = idx;
-  }
+      async load() {
+        try {
+          const res = await fetch('https://api.xaicontrol.com/x-ads?active=true');
+          const data = await res.json();
+          if (!data.success || !data.ads?.length) return;
 
-  function startRotation() {
-    if (timer) clearInterval(timer);
-    if (ads.length > 1) {
-      timer = setInterval(() => showAd((curIdx + 1) % ads.length), 5000);
-    }
-  }
+          this.data = data.ads.sort((a, b) => b.priority - a.priority);
+          this.show(0);
+          document.getElementById('news-container').classList.add('show');
 
-  (async () => {
-    try {
-      const res = await fetch('https://api.xaicontrol.com/x-ads');
-      const data = await res.json();
-      if (!data.success || !data.ads?.length) return;
+          clearInterval(this.interval);
+          if (this.data.length > 1) {
+            this.interval = setInterval(() => this.next(), 5000);
+          }
+        } catch(e) {
+          console.error('Failed to load news:', e);
+        }
+      },
 
-      ads = data.ads.sort((a,b) => b.priority - a.priority);
-
-      const nav = document.getElementById('ads-nav');
-      if (ads.length > 1) {
-        ads.forEach((_, i) => {
-          const dot = document.createElement('span');
-          dot.className = 'dot';
-          dot.onclick = (e) => {
-            e.preventDefault();
-            showAd(i);
-            startRotation();
-          };
-          nav.appendChild(dot);
-        });
-      } else {
-        nav.style.display = 'none';
+      init() {
+        this.load();
+        setInterval(() => this.load(), 5 * 60 * 1000);
       }
+    };
 
-      showAd(0);
-      document.getElementById('xai-ads').classList.add('show');
-      startRotation();
-
-    } catch(e) {
-      console.error('Ads error:', e);
-    }
-  })();
-
-  const container = document.getElementById('xai-ads');
-  container.addEventListener('mouseenter', () => clearInterval(timer));
-  container.addEventListener('mouseleave', startRotation);
-}
-
-// 监听窗口大小变化，动态隐藏/显示广告
-window.addEventListener('resize', () => {
-  const adsElement = document.getElementById('xai-ads');
-  if (isMobile()) {
-    adsElement.classList.remove('show');
-  } else if (ads && ads.length > 0) {
-    adsElement.classList.add('show');
-  }
-});
-</script>
-
-<script src="ki.js"></script>
-<script src="//static.xabc.io/docsify.min.js"></script>
-<script src="//static.xabc.io/search.min.js"></script>
+    document.addEventListener('DOMContentLoaded', () => news.init());
+  </script>
 </body>
 </html>

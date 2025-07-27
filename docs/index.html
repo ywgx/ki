@@ -15,30 +15,35 @@
 
 <style>
 .xai-ads {
-  position: fixed;
-  top: 120px;
-  right: 20px;
-  width: 340px;
-  max-width: calc(100vw - 40px);
-  max-height: calc(100vh - 150px);
-  background: rgba(255, 255, 255, 0.7);
-  border: 1px solid rgba(255, 255, 255, 0.3);
-  border-radius: 20px;
-  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.06);
-  backdrop-filter: blur(20px);
-  z-index: 999;
-  font-family: -apple-system, BlinkMacSystemFont, sans-serif;
-  overflow: hidden;
-  display: flex;
-  flex-direction: column;
+  position: fixed !important;
+  top: 120px !important;
+  right: 20px !important;
+  width: 340px !important;
+  max-width: calc(100vw - 40px) !important;
+  max-height: calc(100vh - 150px) !important;
+  background: rgba(255, 255, 255, 0.95) !important;
+  border: 1px solid rgba(0, 0, 0, 0.1) !important;
+  border-radius: 20px !important;
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.08) !important;
+  backdrop-filter: blur(20px) !important;
+  -webkit-backdrop-filter: blur(20px) !important;
+  z-index: 9999 !important;
+  font-family: -apple-system, BlinkMacSystemFont, sans-serif !important;
+  overflow: hidden !important;
+  display: none;
+  flex-direction: column !important;
   animation: slideIn 0.5s ease-out;
   cursor: pointer;
   transition: all 0.3s ease;
 }
 
+.xai-ads.show {
+  display: flex !important;
+}
+
 .xai-ads:hover {
   transform: translateY(-2px);
-  box-shadow: 0 12px 40px rgba(0, 0, 0, 0.1);
+  box-shadow: 0 12px 40px rgba(0, 0, 0, 0.12) !important;
 }
 
 @keyframes slideIn {
@@ -47,24 +52,25 @@
 }
 
 .xai-ads-link {
-  text-decoration: none;
-  color: inherit;
-  display: flex;
-  flex-direction: column;
-  flex: 1;
+  text-decoration: none !important;
+  color: inherit !important;
+  display: flex !important;
+  flex-direction: column !important;
+  flex: 1 !important;
 }
 
 .xai-ads .img-wrap {
-  width: 100%;
-  height: 200px;
-  background: rgba(0, 0, 0, 0.03);
-  overflow: hidden;
+  width: 100% !important;
+  height: 200px !important;
+  background: rgba(0, 0, 0, 0.03) !important;
+  overflow: hidden !important;
+  border-radius: 20px 20px 0 0 !important;
 }
 
 .xai-ads .img-main {
-  width: 100%;
-  height: 100%;
-  object-fit: cover;
+  width: 100% !important;
+  height: 100% !important;
+  object-fit: cover !important;
   transition: transform 0.3s ease;
 }
 
@@ -73,63 +79,64 @@
 }
 
 .xai-ads .content {
-  padding: 24px;
-  flex: 1;
-  background: rgba(255, 255, 255, 0.5);
+  padding: 24px !important;
+  flex: 1 !important;
+  background: transparent !important;
 }
 
 .xai-ads .title {
-  font-weight: 700;
-  font-size: 18px;
-  margin-bottom: 12px;
-  color: #1a202c;
-  line-height: 1.3;
+  font-weight: 700 !important;
+  font-size: 18px !important;
+  margin-bottom: 12px !important;
+  color: #1a202c !important;
+  line-height: 1.3 !important;
 }
 
 .xai-ads .desc {
-  color: rgba(0, 0, 0, 0.65);
-  font-size: 14px;
-  line-height: 1.7;
+  color: rgba(0, 0, 0, 0.65) !important;
+  font-size: 14px !important;
+  line-height: 1.7 !important;
 }
 
 .xai-ads .nav {
-  display: flex;
-  justify-content: center;
-  gap: 12px;
-  padding: 16px;
-  background: rgba(0, 0, 0, 0.02);
+  display: flex !important;
+  justify-content: center !important;
+  gap: 12px !important;
+  padding: 16px !important;
+  background: rgba(0, 0, 0, 0.02) !important;
+  border-radius: 0 0 20px 20px !important;
 }
 
 .xai-ads .dot {
-  width: 8px;
-  height: 8px;
-  border-radius: 50%;
-  background: rgba(0, 0, 0, 0.2);
-  cursor: pointer;
+  width: 8px !important;
+  height: 8px !important;
+  border-radius: 50% !important;
+  background: rgba(0, 0, 0, 0.2) !important;
+  cursor: pointer !important;
   transition: all 0.3s ease;
 }
 
 .xai-ads .dot.active {
-  background: #1a202c;
+  background: #1a202c !important;
   transform: scale(1.2);
 }
 
 /* 深色模式 */
 @media (prefers-color-scheme: dark) {
   .xai-ads {
-    background: rgba(26, 32, 44, 0.7);
-    border-color: rgba(255, 255, 255, 0.1);
+    background: rgba(26, 32, 44, 0.95) !important;
+    border-color: rgba(255, 255, 255, 0.1) !important;
   }
-  .xai-ads .content { background: rgba(0, 0, 0, 0.3); }
-  .xai-ads .title { color: #e2e8f0; }
-  .xai-ads .desc { color: rgba(226, 232, 240, 0.7); }
-  .xai-ads .nav { background: rgba(255, 255, 255, 0.02); }
-  .xai-ads .dot { background: rgba(255, 255, 255, 0.2); }
-  .xai-ads .dot.active { background: #e2e8f0; }
+  .xai-ads .content { background: transparent !important; }
+  .xai-ads .title { color: #e2e8f0 !important; }
+  .xai-ads .desc { color: rgba(226, 232, 240, 0.7) !important; }
+  .xai-ads .nav { background: rgba(255, 255, 255, 0.02) !important; }
+  .xai-ads .dot { background: rgba(255, 255, 255, 0.2) !important; }
+  .xai-ads .dot.active { background: #e2e8f0 !important; }
 }
 </style>
 
-<div id="xai-ads" class="xai-ads" style="display:none">
+<div id="xai-ads" class="xai-ads">
   <a id="ads-link" class="xai-ads-link" href="" target="_blank">
     <div class="img-wrap">
       <img id="ads-img" class="img-main" src="" alt="">
@@ -143,68 +150,89 @@
 </div>
 
 <script>
-let ads = [], curIdx = 0, timer = null;
-
-function showAd(idx) {
-  if (!ads.length) return;
-
-  const ad = ads[idx];
-
-  document.getElementById('ads-img').src = ad.image_url || 'data:image/svg+xml,%3Csvg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100"%3E%3Crect width="100" height="100" fill="%23e2e8f0"/%3E%3C/svg%3E';
-  document.getElementById('ads-link').href = ad.link;
-  document.getElementById('ads-title').textContent = ad.title;
-  document.getElementById('ads-desc').innerHTML = ad.content;
-
-  document.querySelectorAll('.dot').forEach((d, i) =>
-    d.classList.toggle('active', i === idx)
-  );
-
-  curIdx = idx;
+// 检测是否为移动设备
+function isMobile() {
+  return /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent) || window.innerWidth <= 768;
 }
 
-function startRotation() {
-  if (timer) clearInterval(timer);
-  if (ads.length > 1) {
-    timer = setInterval(() => showAd((curIdx + 1) % ads.length), 5000);
+// 如果是移动设备，直接退出，不加载广告
+if (isMobile()) {
+  // 移动端不显示广告
+} else {
+  // PC端才执行广告逻辑
+  let ads = [], curIdx = 0, timer = null;
+
+  function showAd(idx) {
+    if (!ads.length) return;
+
+    const ad = ads[idx];
+
+    document.getElementById('ads-img').src = ad.image_url || 'data:image/svg+xml,%3Csvg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100"%3E%3Crect width="100" height="100" fill="%23e2e8f0"/%3E%3C/svg%3E';
+    document.getElementById('ads-link').href = ad.link;
+    document.getElementById('ads-title').textContent = ad.title;
+    document.getElementById('ads-desc').innerHTML = ad.content;
+
+    document.querySelectorAll('.dot').forEach((d, i) =>
+      d.classList.toggle('active', i === idx)
+    );
+
+    curIdx = idx;
   }
-}
 
-(async () => {
-  try {
-    const res = await fetch('https://api.xaicontrol.com/x-ads');
-    const data = await res.json();
-    if (!data.success || !data.ads?.length) return;
-
-    ads = data.ads.sort((a,b) => b.priority - a.priority);
-
-    const nav = document.getElementById('ads-nav');
+  function startRotation() {
+    if (timer) clearInterval(timer);
     if (ads.length > 1) {
-      ads.forEach((_, i) => {
-        const dot = document.createElement('span');
-        dot.className = 'dot';
-        dot.onclick = (e) => {
-          e.preventDefault();
-          showAd(i);
-          startRotation();
-        };
-        nav.appendChild(dot);
-      });
-    } else {
-      nav.style.display = 'none';
+      timer = setInterval(() => showAd((curIdx + 1) % ads.length), 5000);
     }
-
-    showAd(0);
-    document.getElementById('xai-ads').style.display = 'flex';
-    startRotation();
-
-  } catch(e) {
-    console.error('Ads error:', e);
   }
-})();
 
-const container = document.getElementById('xai-ads');
-container.addEventListener('mouseenter', () => clearInterval(timer));
-container.addEventListener('mouseleave', startRotation);
+  (async () => {
+    try {
+      const res = await fetch('https://api.xaicontrol.com/x-ads');
+      const data = await res.json();
+      if (!data.success || !data.ads?.length) return;
+
+      ads = data.ads.sort((a,b) => b.priority - a.priority);
+
+      const nav = document.getElementById('ads-nav');
+      if (ads.length > 1) {
+        ads.forEach((_, i) => {
+          const dot = document.createElement('span');
+          dot.className = 'dot';
+          dot.onclick = (e) => {
+            e.preventDefault();
+            showAd(i);
+            startRotation();
+          };
+          nav.appendChild(dot);
+        });
+      } else {
+        nav.style.display = 'none';
+      }
+
+      showAd(0);
+      document.getElementById('xai-ads').classList.add('show');
+      startRotation();
+
+    } catch(e) {
+      console.error('Ads error:', e);
+    }
+  })();
+
+  const container = document.getElementById('xai-ads');
+  container.addEventListener('mouseenter', () => clearInterval(timer));
+  container.addEventListener('mouseleave', startRotation);
+}
+
+// 监听窗口大小变化，动态隐藏/显示广告
+window.addEventListener('resize', () => {
+  const adsElement = document.getElementById('xai-ads');
+  if (isMobile()) {
+    adsElement.classList.remove('show');
+  } else if (ads && ads.length > 0) {
+    adsElement.classList.add('show');
+  }
+});
 </script>
 
 <script src="ki.js"></script>

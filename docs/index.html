@@ -92,7 +92,7 @@
 
           clearInterval(this.interval);
           if (this.data.length > 1) {
-            this.interval = setInterval(() => this.next(), 5000);
+            this.interval = setInterval(() => this.next(), 2000);
           }
         } catch(e) {
           console.error('Failed to load news:', e);

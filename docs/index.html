@@ -11,7 +11,6 @@
       top: 120px;
       right: 20px;
       width: 340px;
-      max-width: calc(100vw - 40px);
       max-height: calc(100vh - 150px);
       background: rgba(255, 255, 255, 0.7);
       border: 1px solid rgba(255, 255, 255, 0.3);
@@ -21,7 +20,7 @@
       z-index: 999;
       font-family: -apple-system, BlinkMacSystemFont, sans-serif;
       overflow: hidden;
-      display: flex;
+      display: none;
       flex-direction: column;
       animation: slideIn 0.5s ease-out;
       cursor: pointer;
@@ -106,6 +105,11 @@
       transform: scale(1.2);
     }
 
+    /* 移动端隐藏广告 */
+    @media(max-width: 768px) {
+      .xai-ads { display: none !important; }
+    }
+
     /* 深色模式 */
     @media (prefers-color-scheme: dark) {
       .xai-ads {
@@ -119,17 +123,12 @@
       .xai-ads .dot { background: rgba(255, 255, 255, 0.2); }
       .xai-ads .dot.active { background: #e2e8f0; }
     }
-
-    /* 移动端隐藏广告 */
-    @media(max-width: 768px) {
-      .xai-ads { display: none !important; }
-    }
   </style>
 </head>
 <body>
   <section id="app"></section>
 
-  <div id="xai-ads" class="xai-ads" style="display:none">
+  <div id="xai-ads" class="xai-ads">
     <a id="ads-link" class="xai-ads-link" href="" target="_blank">
       <div class="img-wrap">
         <img id="ads-img" class="img-main" src="" alt="">
@@ -147,90 +146,85 @@
   <script src="//static.xabc.io/search.min.js"></script>
 
   <script>
-    let ads = [], curIdx = 0, timer = null;
+    // 广告管理
+    const ads = {
+      data: [],
+      index: 0,
+      timer: null,
 
-    function showAd(idx) {
-      if (!ads.length) return;
+      show(idx) {
+        if (!this.data.length) return;
 
-      const ad = ads[idx];
+        const ad = this.data[idx];
+        document.getElementById('ads-img').src = ad.image_url || 'data:image/svg+xml,%3Csvg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100"%3E%3Crect width="100" height="100" fill="%23e2e8f0"/%3E%3C/svg%3E';
+        document.getElementById('ads-link').href = ad.link;
+        document.getElementById('ads-title').textContent = ad.title;
+        document.getElementById('ads-desc').innerHTML = ad.content;
 
-      document.getElementById('ads-img').src = ad.image_url || 'data:image/svg+xml,%3Csvg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100"%3E%3Crect width="100" height="100" fill="%23e2e8f0"/%3E%3C/svg%3E';
-      document.getElementById('ads-link').href = ad.link;
-      document.getElementById('ads-title').textContent = ad.title;
-      document.getElementById('ads-desc').innerHTML = ad.content;
+        document.querySelectorAll('.dot').forEach((d, i) =>
+          d.classList.toggle('active', i === idx)
+        );
 
-      document.querySelectorAll('.dot').forEach((d, i) =>
-        d.classList.toggle('active', i === idx)
-      );
+        this.index = idx;
+      },
 
-      curIdx = idx;
-    }
-
-    function startRotation() {
-      if (timer) clearInterval(timer);
-      if (ads.length > 1) {
-        timer = setInterval(() => showAd((curIdx + 1) % ads.length), 5000);
-      }
-    }
-
-    async function loadAds() {
-      // 移动端不加载广告
-      if (window.innerWidth <= 768) return;
-
-      try {
-        const res = await fetch('https://api.xaicontrol.com/x-ads');
-        const data = await res.json();
-        if (!data.success || !data.ads?.length) return;
-
-        ads = data.ads.sort((a,b) => b.priority - a.priority);
-
-        const nav = document.getElementById('ads-nav');
-        nav.innerHTML = '';
-        if (ads.length > 1) {
-          ads.forEach((_, i) => {
-            const dot = document.createElement('span');
-            dot.className = 'dot';
-            dot.onclick = (e) => {
-              e.preventDefault();
-              showAd(i);
-              startRotation();
-            };
-            nav.appendChild(dot);
-          });
-        } else {
-          nav.style.display = 'none';
+      startRotation() {
+        if (this.timer) clearInterval(this.timer);
+        if (this.data.length > 1) {
+          this.timer = setInterval(() => this.show((this.index + 1) % this.data.length), 5000);
         }
+      },
 
-        showAd(0);
-        document.getElementById('xai-ads').style.display = 'flex';
-        startRotation();
+      async load() {
+        try {
+          const res = await fetch('https://api.xaicontrol.com/x-ads');
+          const data = await res.json();
+          if (!data.success || !data.ads?.length) return;
 
-      } catch(e) {
-        console.error('Ads error:', e);
+          this.data = data.ads.sort((a, b) => b.priority - a.priority);
+
+          // 创建导航点
+          const nav = document.getElementById('ads-nav');
+          nav.innerHTML = '';
+          if (this.data.length > 1) {
+            this.data.forEach((_, i) => {
+              const dot = document.createElement('span');
+              dot.className = 'dot';
+              dot.onclick = (e) => {
+                e.preventDefault();
+                this.show(i);
+                this.startRotation();
+              };
+              nav.appendChild(dot);
+            });
+          } else {
+            nav.style.display = 'none';
+          }
+
+          this.show(0);
+          document.getElementById('xai-ads').style.display = window.innerWidth > 768 ? 'flex' : 'none';
+          this.startRotation();
+
+        } catch(e) {
+          console.error('Ads error:', e);
+        }
+      },
+
+      init() {
+        // 只在桌面端加载广告
+        if (window.innerWidth > 768) {
+          this.load();
+
+          // 鼠标事件
+          const container = document.getElementById('xai-ads');
+          container.addEventListener('mouseenter', () => clearInterval(this.timer));
+          container.addEventListener('mouseleave', () => this.startRotation());
+        }
       }
-    }
+    };
 
-    const container = document.getElementById('xai-ads');
-    container.addEventListener('mouseenter', () => clearInterval(timer));
-    container.addEventListener('mouseleave', startRotation);
-
-    // 初始化
-    document.addEventListener('DOMContentLoaded', () => {
-      loadAds();
-      // 定期刷新广告
-      setInterval(loadAds, 5 * 60 * 1000);
-    });
-
-    // 监听窗口大小变化
-    window.addEventListener('resize', () => {
-      if (window.innerWidth <= 768) {
-        document.getElementById('xai-ads').style.display = 'none';
-        clearInterval(timer);
-      } else if (ads.length > 0) {
-        document.getElementById('xai-ads').style.display = 'flex';
-        startRotation();
-      }
-    });
+    // 页面加载完成后初始化
+    document.addEventListener('DOMContentLoaded', () => ads.init());
   </script>
 </body>
 </html>

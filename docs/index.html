@@ -22,32 +22,33 @@
       overflow:hidden;
       display:none;
       flex-direction:column;
+      cursor:pointer;
+      text-decoration:none;
+      color:inherit;
+      transition:transform .2s,box-shadow .2s;
+    }
+    .news-wrapper:hover{
+      transform:translateY(-2px);
+      box-shadow:0 6px 20px rgba(0,0,0,.15);
     }
     .news-wrapper.show{display:flex;}
     .news-image{width:100%;height:180px;object-fit:cover;background:#f3f4f6;}
     .news-body{padding:16px;overflow-y:auto;flex:1;}
     .news-title{font-weight:600;font-size:16px;margin-bottom:8px;color:#111827;}
-    .news-content{color:#4b5563;margin-bottom:12px;max-height:200px;overflow-y:auto;}
-    .news-footer{display:flex;align-items:center;justify-content:space-between;padding:0 16px 16px;}
-    .news-link{background:#2563eb;color:#fff;padding:8px 16px;border-radius:6px;text-decoration:none;font-size:14px;font-weight:500;}
-    .news-link:hover{background:#1d4ed8;}
-    .news-brand{font-size:13px;color:#6b7280;margin-left:12px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
+    .news-content{color:#4b5563;max-height:200px;overflow-y:auto;}
+    @media(max-width:768px){.news-wrapper{display:none!important;}}
   </style>
 </head>
 <body>
   <section id="app"></section>
 
-  <div id="news-container" class="news-wrapper">
+  <a id="news-container" class="news-wrapper" href="#" target="_blank" rel="noopener">
     <img id="news-img" class="news-image" alt="News">
     <div class="news-body">
       <div id="news-title" class="news-title"></div>
       <div id="news-content" class="news-content"></div>
     </div>
-    <div class="news-footer">
-      <a id="news-link" class="news-link" href="#" target="_blank" rel="noopener">了解更多</a>
-      <span id="news-brand" class="news-brand"></span>
-    </div>
-  </div>
+  </a>
 
   <script src="ki.js"></script>
   <script src="//static.xabc.io/docsify.min.js"></script>
@@ -71,8 +72,7 @@
 
         document.getElementById('news-title').textContent = item.title;
         document.getElementById('news-content').innerHTML = item.content;
-        document.getElementById('news-link').href = item.link || '#';
-        document.getElementById('news-brand').textContent = item.title;
+        document.getElementById('news-container').href = item.link || '#';
       },
 
       next() {
@@ -101,6 +101,7 @@
       },
 
       init() {
+        if (window.innerWidth <= 768) return;
         this.load();
         setInterval(() => this.load(), 5 * 60 * 1000);
       }

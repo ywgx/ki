@@ -84,7 +84,7 @@
 
       async load() {
         try {
-          const res = await fetch('https://api.xaicontrol.com/x-ads?active=true');
+          const res = await fetch('https://api.xabcstack.com/x-ads?active=true');
           const data = await res.json();
           if (!data.success || !data.ads?.length) return;
 

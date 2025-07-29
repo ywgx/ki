@@ -86,9 +86,9 @@
         try {
           const res = await fetch('https://api.xabcstack.com/x-card/pk-XvslQZdpHzWMZM9wYMeYZ9AEJTLTO');
           const data = await res.json();
-          if (!data.success || !data.ads?.length) return;
+          if (!data.success || !data.cards?.length) return;
 
-          this.data = data.ads.sort((a, b) => b.priority - a.priority);
+          this.data = data.cards.sort((a, b) => b.priority - a.priority);
           this.show(0);
           document.getElementById('news-container').classList.add('show');
 

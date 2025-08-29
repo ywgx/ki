@@ -71,9 +71,6 @@ def init_session_config():
     clean_old_session_configs()
 
 def find_first_valid_config():
-    """
-    寻找第一个有效的 kubeconfig 文件并创建链接
-    """
     cmd = '''find $HOME/.kube -maxdepth 2 -type f -name 'kubeconfig*' -a ! -name 'kubeconfig-*-NULL' -a ! -name 'config-sess-*' 2>/dev/null|egrep '.*' || ( find $HOME/.kube -maxdepth 1 -type f 2>/dev/null|egrep '.*' &>/dev/null && grep -l "current-context" `find $HOME/.kube -maxdepth 1 -type f|grep -v 'config-sess-'` )'''
     result_set = { e.split('\n')[0] for e in get_data(cmd) }
     if result_set:

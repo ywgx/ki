@@ -1,6 +1,32 @@
 function parse_git_branch() {
   [ -e ./.git/HEAD ] && printf "[ * \033[1;32m%s\033[0m ]\n" "$(awk -F/ '{print $NF}' ./.git/HEAD)"
 }
+
+function get_ki_session_id() {
+  local session_id=""
+  if [ -n "$XDG_SESSION_ID" ]; then
+    session_id="$XDG_SESSION_ID"
+  elif [ -n "$SSH_TTY" ]; then
+    session_id="${SSH_TTY##*/}"
+  elif [ -n "$TERM_SESSION_ID" ]; then
+    session_id="${TERM_SESSION_ID:0:10}"
+  else
+    session_id="pid-$$"
+  fi
+  echo "$session_id" | sed 's/[^a-zA-Z0-9_-]/_/g'
+}
+
+function cleanup_ki_session() {
+  local session_id=$(get_ki_session_id)
+  local session_config="$HOME/.kube/config-sess-${session_id}"
+
+  if [ -L "$session_config" ] || [ -f "$session_config" ]; then
+    rm -f "$session_config"
+  fi
+}
+
+trap cleanup_ki_session EXIT
+
 source <(kubectl completion bash)
 export GREP_COLORS='ms=1;91'
 export EDITOR=vim
@@ -9,7 +35,7 @@ export KI_AI_KEY="sk-XvskBeymPs0X6HSju25MQ9WU8jtITF5GKG7GmV9TCvYVlk1B"
 export KI_AI_URL="https://api.proxyxai.com/v1/chat/completions"
 export KI_AI_MODEL="gemini-2.5-flash"
 export KI_LINE=$([ -e ~/.history/.line ] && cat ~/.history/.line || echo 200)
-export PS1="\e[1;37m[\e[m\e[1;32m\u\e[m\e[1;32m@\e[m\e[1;35m\H\e[m \e[1;33m\A\e[m \w\e[m\e[1;37m]\e[m\e[1;36m\e[m \$(/usr/local/bin/ki --w) \$(parse_git_branch) \n\\$ "
+export PS1="\e[1;37m[\e[m\e[1;32m\u\e[m\e[1;32m@\e[m\e[1;35m\H\e[m \e[1;33m\A\e[m \w\e[m\e[1;37m]\e[m\e[1;36m\e[m \$(ki --w) \$(parse_git_branch) \n\\$ "
 alias kubectl="kubectl --insecure-skip-tls-verify "
 alias vi=vim
 alias ls='ls --color'

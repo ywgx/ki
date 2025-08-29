@@ -1,10 +1,10 @@
 #!/usr/bin/python3
 #*************************************************
 # Description : Kubectl Pro
-# Version     : 6.6
+# Version     : 6.7
 #*************************************************
 from collections import deque
-import os,re,sys,time,readline,subprocess
+import os,re,sys,time,readline,subprocess,hashlib
 #-----------------VAR-----------------------------
 home = os.environ["HOME"]
 history = home + "/.history"
@@ -20,12 +20,81 @@ ki_line = history + "/.line"
 ki_lock = history + "/.lock"
 ki_unlock = history + "/.unlock"
 default_config = home + "/.kube/config"
+session_config = None
 KI_AI_URL = os.getenv("KI_AI_URL", "https://api.deepseek.com/v1/chat/completions")
 KI_AI_KEY = os.getenv("KI_AI_KEY", "")
 KI_AI_MODEL = os.getenv("KI_AI_MODEL", "deepseek-chat")
 KUBECTL_OPTIONS = "--insecure-skip-tls-verify"
 CACHE_DURATION = 8 * 60 * 60
 #-----------------FUN-----------------------------
+def get_session_id():
+    session_id = None
+
+    if 'XDG_SESSION_ID' in os.environ:
+        session_id = os.environ['XDG_SESSION_ID']
+    elif 'SSH_TTY' in os.environ:
+        session_id = os.environ['SSH_TTY'].split('/')[-1]
+    elif 'TERM_SESSION_ID' in os.environ:
+        session_id = os.environ['TERM_SESSION_ID'][:10]
+    else:
+        try:
+            ppid = os.getppid()
+            session_id = f"pid-{ppid}"
+        except:
+            session_id = f"pid-{os.getpid()}"
+
+    session_id = re.sub(r'[^\w\-]', '_', str(session_id))
+    return session_id
+
+def get_session_config():
+    session_id = get_session_id()
+    return home + f"/.kube/config-sess-{session_id}"
+
+def init_session_config():
+    global session_config
+    session_config = get_session_config()
+
+    if not os.path.exists(session_config):
+        if os.path.exists(default_config) and os.path.islink(default_config):
+            target = os.path.realpath(default_config)
+            if os.path.exists(target):
+                os.symlink(target, session_config)
+            else:
+                find_first_valid_config()
+        elif os.path.exists(default_config):
+            os.rename(default_config, home+"/.kube/config-0")
+            os.symlink(home+"/.kube/config-0", default_config)
+            os.symlink(home+"/.kube/config-0", session_config)
+        else:
+            find_first_valid_config()
+
+    clean_old_session_configs()
+
+def find_first_valid_config():
+    """
+    寻找第一个有效的 kubeconfig 文件并创建链接
+    """
+    cmd = '''find $HOME/.kube -maxdepth 2 -type f -name 'kubeconfig*' -a ! -name 'kubeconfig-*-NULL' -a ! -name 'config-sess-*' 2>/dev/null|egrep '.*' || ( find $HOME/.kube -maxdepth 1 -type f 2>/dev/null|egrep '.*' &>/dev/null && grep -l "current-context" `find $HOME/.kube -maxdepth 1 -type f|grep -v 'config-sess-'` )'''
+    result_set = { e.split('\n')[0] for e in get_data(cmd) }
+    if result_set:
+        first_config = list(result_set)[0]
+        if not os.path.exists(default_config):
+            os.symlink(first_config, default_config)
+        os.symlink(first_config, session_config)
+
+def clean_old_session_configs():
+    try:
+        current_time = time.time()
+        for file in os.listdir(home + "/.kube"):
+            if file.startswith("config-sess-"):
+                file_path = home + f"/.kube/{file}"
+                if os.path.islink(file_path):
+                    file_stat = os.lstat(file_path)
+                    if current_time - file_stat.st_mtime > 2 * 24 * 3600:
+                        os.unlink(file_path)
+    except:
+        pass
+
 def cmp_file(f1, f2):
     if os.path.getsize(f1) != os.path.getsize(f2):
         return False
@@ -241,27 +310,36 @@ def find_optimal(namespace_list: list, namespace: str):
 def find_config():
     global header_config
     os.path.exists(history) or os.mkdir(history)
-    cmd = '''find $HOME/.kube -maxdepth 2 -type f -name 'kubeconfig*' -a ! -name 'kubeconfig-*-NULL' 2>/dev/null|egrep '.*' || ( find $HOME/.kube -maxdepth 1 -type f 2>/dev/null|egrep '.*' &>/dev/null && grep -l "current-context" `find $HOME/.kube -maxdepth 1 -type f` )'''
+
+    init_session_config()
+
+    current_config = session_config
+
+    cmd = '''find $HOME/.kube -maxdepth 2 -type f -name 'kubeconfig*' -a ! -name 'kubeconfig-*-NULL' -a ! -name 'config-sess-*' 2>/dev/null|egrep '.*' || ( find $HOME/.kube -maxdepth 1 -type f 2>/dev/null|egrep '.*' &>/dev/null && grep -l "current-context" `find $HOME/.kube -maxdepth 1 -type f|grep -v 'config-sess-'` )'''
     result_set = { e.split('\n')[0] for e in get_data(cmd) }
     result_num = len(result_set)
     result_lines = list(result_set)
     kubeconfig = None
+
     if result_num == 1:
-        if os.path.exists(default_config):
-            if not os.path.islink(default_config):
-                os.rename(default_config, home+"/.kube/config-0")
-                os.symlink(home+"/.kube/config-0",default_config)
-                kubeconfig = "config-0"
-            else:
-                kubeconfig = result_lines[0].split("/")[-1]
+        target_config = result_lines[0]
+        if os.path.exists(current_config):
+            if not os.path.islink(current_config):
+                os.unlink(current_config)
+                os.symlink(target_config, current_config)
+            elif os.path.realpath(current_config) != target_config:
+                os.unlink(current_config)
+                os.symlink(target_config, current_config)
         else:
-            try:
-                os.unlink(default_config)
-            except:
-                pass
-            os.symlink(result_lines[0],default_config)
-            kubeconfig = result_lines[0].split("/")[-1]
-        header_config = os.path.realpath(default_config)
+            os.symlink(target_config, current_config)
+
+        if os.path.exists(default_config):
+            os.unlink(default_config)
+        os.symlink(target_config, default_config)
+
+        kubeconfig = target_config.split("/")[-1]
+        header_config = os.path.realpath(current_config)
+
     elif result_num > 1:
         dc = {}
         if os.path.exists(ki_kube_dict) and os.path.getsize(ki_kube_dict) > 5:
@@ -273,6 +351,7 @@ def find_config():
                             del dc[config]
                 except:
                     os.unlink(ki_kube_dict)
+
         if os.path.exists(ki_last) and os.path.getsize(ki_last) > 0:
             with open(ki_last,'r') as f:
                 last_config = f.read()
@@ -280,29 +359,37 @@ def find_config():
                     last_config = result_lines[0]
         else:
             last_config = result_lines[0]
+
         result_dict = sorted(dc.items(),key = lambda dc:(dc[1], dc[0]),reverse=True)
         sort_list = deque([ i[0] for i in result_dict ])
-        header_config = sort_list[0] if sort_list else os.path.realpath(default_config)
+        header_config = sort_list[0] if sort_list else os.path.realpath(current_config) if os.path.exists(current_config) else result_lines[0]
+
         last_config in sort_list and sort_list.remove(last_config)
         sort_list.appendleft(last_config)
         result_lines = list(sort_list) + list(result_set - set(sort_list))
-        if os.path.exists(default_config):
-            if not os.path.islink(default_config):
-                os.rename(default_config, home+"/.kube/config-0")
-                os.symlink(home+"/.kube/config-0",default_config)
-                kubeconfig = "config-0"
+
+        if os.path.exists(current_config):
+            if not os.path.islink(current_config):
+                os.unlink(current_config)
+                os.symlink(result_lines[0], current_config)
+                kubeconfig = result_lines[0].split("/")[-1]
             else:
                 for e in result_lines:
-                    if cmp_file(e,default_config): kubeconfig = e.strip().split("/")[-1]
+                    if cmp_file(e, current_config):
+                        kubeconfig = e.strip().split("/")[-1]
+                if not kubeconfig:
+                    os.unlink(current_config)
+                    os.symlink(result_lines[0], current_config)
+                    kubeconfig = result_lines[0].split("/")[-1]
         else:
-            try:
-                os.unlink(default_config)
-            except:
-                pass
-            os.symlink(result_lines[0],default_config)
+            os.symlink(result_lines[0], current_config)
             kubeconfig = result_lines[0].split("/")[-1]
     else:
-        header_config = os.path.realpath(default_config)
+        if os.path.exists(current_config):
+            header_config = os.path.realpath(current_config)
+        else:
+            header_config = default_config
+
     return [kubeconfig,result_lines,result_num]
 
 def compress_list(l: list):
@@ -333,8 +420,10 @@ def find_history(config,num=3):
                 dc = eval(f.read())
                 dc[config] = dc[config] + num if config in dc else 1
                 dc.pop(default_config,None)
+                dc.pop(session_config,None)
                 for config in list(dc.keys()):
-                    if not os.path.exists(config): del dc[config]
+                    if not os.path.exists(config) or 'config-sess-' in config:
+                        del dc[config]
         else:
             dc[config] = 1
         result_dict = sorted(dc.items(),key = lambda dc:dc[1])
@@ -349,13 +438,18 @@ def get_config(config_lines: list, ns: str):
         with open(ki_kube_dict, 'r') as f:
             dc = eval(f.read())
             dc.pop(os.path.realpath(default_config), None)
+            dc.pop(os.path.realpath(session_config), None) if session_config else None
             history_lines = [k[0] for k in sorted(dc.items(), key=lambda d: d[1], reverse=True)]
 
-    config_lines.remove(os.path.realpath(default_config))
+    current_config = session_config if session_config and os.path.exists(session_config) else default_config
+    real_current = os.path.realpath(current_config) if os.path.exists(current_config) else None
+    if real_current and real_current in config_lines:
+        config_lines.remove(real_current)
+
     matching_configs = [config for config in config_lines if ns in config]
 
     if not matching_configs:
-        return default_config
+        return current_config
 
     def score_config(config):
         base_score = dc.get(config, 0)
@@ -377,26 +471,28 @@ def find_ns(config_struct: list):
     kn = re.split("[./]",sys.argv[2])
     ns_pattern = kn[-1] if len(kn) > 1 and len(kn[-1].strip()) > 0 else kn[0]
 
+    current_config = session_config if session_config and os.path.exists(session_config) else default_config
+
     if os.path.exists(ki_current_ns_dict) and int(time.time()-os.stat(ki_current_ns_dict).st_mtime) < 300:
         with open(ki_current_ns_dict) as f:
             try:
                 d = eval(f.read())
-                current_config = os.path.realpath(default_config)
-                if current_config in d:
-                    ns_list = d[current_config]
+                real_config = os.path.realpath(current_config)
+                if real_config in d:
+                    ns_list = d[real_config]
                     if find_optimal(ns_list,ns_pattern):
                         ns_dict = ki_current_ns_dict
-                        config_struct[1] = [current_config]
+                        config_struct[1] = [real_config]
             except:
                 os.path.exists(ki_cache) and os.unlink(ki_cache)
 
-    config = get_config(config_struct[1], kn[0]) or default_config if len(kn) > 1 else default_config
+    config = get_config(config_struct[1], kn[0]) or current_config if len(kn) > 1 else current_config
 
     if len(config_struct[1]) > 1:
-        current_config = os.path.realpath(config)
+        real_config = os.path.realpath(config)
         config_struct[1] = deque(config_struct[1])
-        current_config in config_struct[1] and config_struct[1].remove(current_config)
-        config_struct[1].appendleft(current_config)
+        real_config in config_struct[1] and config_struct[1].remove(real_config)
+        config_struct[1].appendleft(real_config)
 
     for n,config in enumerate(config_struct[1]):
         if os.path.exists(ns_dict):
@@ -435,7 +531,8 @@ def cache_ns(config_struct: list):
         d = {}
         d_latest = {}
         current_d = {}
-        current_config = os.path.realpath(default_config)
+
+        current_config = os.path.realpath(session_config) if session_config and os.path.exists(session_config) else os.path.realpath(default_config)
 
         cmd = f"kubectl {KUBECTL_OPTIONS} get ns --sort-by=.metadata.creationTimestamp --no-headers --kubeconfig " + current_config
         l = get_data(cmd)
@@ -471,7 +568,7 @@ def cache_ns(config_struct: list):
                         return config, [], ""
             return config, [], ""
 
-        valid_configs = [cfg for cfg in config_struct[1] if os.path.exists(cfg)]
+        valid_configs = [cfg for cfg in config_struct[1] if os.path.exists(cfg) and 'config-sess-' not in cfg]
         with ThreadPoolExecutor(max_workers=min(10, len(valid_configs))) as executor:
             futures = [executor.submit(process_config, config) for config in valid_configs]
             for future in as_completed(futures):
@@ -487,11 +584,19 @@ def cache_ns(config_struct: list):
 
 def switch_config(switch_num: int,k8s: str,ns: str,time: str):
     switch = False
-    if os.path.exists(default_config) and os.environ['KUBECONFIG'] not in {default_config,os.path.realpath(default_config)}:
-        if default_config != os.path.realpath(default_config):
-            with open(ki_last,'w') as f: f.write(os.path.realpath(default_config))
-        os.unlink(default_config)
-        os.symlink(os.environ['KUBECONFIG'],default_config)
+    current_config = session_config if session_config and os.path.exists(session_config) else default_config
+
+    if os.path.exists(current_config) and os.environ['KUBECONFIG'] not in {current_config,os.path.realpath(current_config)}:
+        if current_config != os.path.realpath(current_config):
+            with open(ki_last,'w') as f: f.write(os.path.realpath(current_config))
+
+        os.unlink(current_config)
+        os.symlink(os.environ['KUBECONFIG'], current_config)
+
+        if os.path.exists(default_config):
+            os.unlink(default_config)
+        os.symlink(os.environ['KUBECONFIG'], default_config)
+
         print("\033[1;93m{}\033[0m".format("[ "+time+"  "+str(switch_num+1)+"-SWITCH ---> "+k8s+" / "+ns+" ] "))
         find_history(os.environ['KUBECONFIG'],8)
         switch_num > 0 and subprocess.Popen("ki --c",shell=True,stdout=subprocess.PIPE,stderr=subprocess.PIPE,universal_newlines=True)
@@ -574,6 +679,8 @@ def get_feature(ns_list: list):
     return d
 
 def info_w(k8s_path: str,result_lines: list):
+    current_config = os.path.realpath(session_config) if session_config and os.path.exists(session_config) else os.path.realpath(default_config)
+
     l = k8s_path.split('/')
     if 'K8S' in l:
         if not os.path.exists(ki_lock) and len(l) > l.index('K8S')+1:
@@ -584,18 +691,22 @@ def info_w(k8s_path: str,result_lines: list):
                 k8s_str = '-'.join(k8s_dir.split('-')[0:-1])
             if result_lines:
                 config = find_optimal(result_lines,k8s_str) if k8s_str else None
-                if config and os.path.exists(default_config) and config not in {default_config,os.path.realpath(default_config)}:
-                    os.unlink(default_config)
+                if config and os.path.exists(session_config) and config not in {session_config,current_config}:
+                    os.unlink(session_config)
+                    os.symlink(config,session_config)
+                    if os.path.exists(default_config):
+                        os.unlink(default_config)
                     os.symlink(config,default_config)
                     print("\033[1;95m{}\033[0m".format("[ "+config.split("/")[-1]+" ]"))
                 else:
-                    print("\033[1;38;5;208m{}\033[0m".format("[ "+os.path.realpath(default_config).split("/")[-1]+" ]"))
+                    print("\033[1;38;5;208m{}\033[0m".format("[ "+current_config.split("/")[-1]+" ]"))
         else:
-            print("\033[1;38;5;208m{}\033[0m".format("[ "+os.path.realpath(default_config).split("/")[-1]+(" (lock)" if os.path.exists(ki_lock) else "")+" ]"))
+            print("\033[1;38;5;208m{}\033[0m".format("[ "+current_config.split("/")[-1]+(" (lock)" if os.path.exists(ki_lock) else "")+" ]"))
     else:
-        print("\033[1;32m{}\033[0m".format("[ "+os.path.realpath(default_config).split("/")[-1]+" ]"))
+        print("\033[1;32m{}\033[0m".format("[ "+current_config.split("/")[-1]+" ]"))
         os.path.exists(ki_lock) and int(time.time()-os.stat(ki_lock).st_mtime) > 3600 and os.unlink(ki_lock)
         os.path.exists(ki_current_ns_dict) and int(time.time()-os.stat(ki_current_ns_dict).st_mtime) > 300 and os.unlink(ki_current_ns_dict)
+
 def info_k():
     if os.path.exists(ki_pod_dict) and os.path.exists(ki_kube_dict):
         with open(ki_pod_dict,'r') as f1, open(ki_kube_dict,'r') as f2:
@@ -605,6 +716,7 @@ def info_k():
                 print("{:<56}{:<32}{}".format(k,dc1[k][0],dc1[k][1]))
             for k in sorted(dc2.items(),key=lambda d:d[1]):
                 print("{:<56}{}".format(k[0].split('/')[-1],k[1]))
+
 def record(res: str,name: str,obj: str,cmd: str,kubeconfig: str,ns: str,config_struct: list):
     l = os.environ['SSH_CONNECTION'].split() if 'SSH_CONNECTION' in os.environ else ['NULL','NULL','NULL']
     USER = os.environ['USER'] if 'USER' in os.environ else "NULL"
@@ -636,14 +748,12 @@ def record(res: str,name: str,obj: str,cmd: str,kubeconfig: str,ns: str,config_s
     with open(ki_pod_dict,'w') as f: f.write(str(dc))
 
 def analyze_cluster():
-    """分析集群状态并生成报告"""
     import json
     import requests
     from datetime import datetime
 
     print("\033[1;93m正在分析集群状态...\033[0m")
 
-    # 收集集群信息
     data = {
         "timestamp": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
         "cluster_info": {},
@@ -654,7 +764,6 @@ def analyze_cluster():
     }
 
     try:
-        # 获取集群版本信息
         try:
             version_output = get_data(f"kubectl {KUBECTL_OPTIONS} version -o json")
             if version_output:
@@ -663,9 +772,8 @@ def analyze_cluster():
         except:
             data["cluster_info"]["version"] = "无法获取版本信息"
 
-        # 获取节点状态
         nodes = get_data(f"kubectl {KUBECTL_OPTIONS} get nodes -o wide")
-        if len(nodes) > 1:  # 跳过标题行
+        if len(nodes) > 1:
             for node in nodes[1:]:
                 node_info = node.split()
                 if len(node_info) >= 5:
@@ -677,7 +785,6 @@ def analyze_cluster():
                         "internal_ip": node_info[5] if len(node_info) > 5 else "unknown"
                     })
 
-        # 获取所有命名空间的 Pod 状态
         ns_list = get_data(f"kubectl {KUBECTL_OPTIONS} get ns --no-headers")
         for ns in ns_list:
             ns_name = ns.split()[0]
@@ -701,11 +808,10 @@ def analyze_cluster():
                 "pending": pending
             }
 
-        # 获取资源使用情况
         for node in data["node_status"]:
             try:
                 usage = get_data(f"kubectl {KUBECTL_OPTIONS} top node {node['name']}")
-                if len(usage) > 1:  # 跳过标题行
+                if len(usage) > 1:
                     usage_info = usage[1].split()
                     if len(usage_info) >= 5:
                         data["resource_usage"][node["name"]] = {
@@ -715,16 +821,13 @@ def analyze_cluster():
             except:
                 continue
 
-        # 获取最近事件
         events = get_data(f"kubectl {KUBECTL_OPTIONS} get events --sort-by=.metadata.creationTimestamp")
         if events:
-            data["events"] = [event.strip() for event in events[-5:]]  # 最近5个事件
+            data["events"] = [event.strip() for event in events[-5:]]
 
-        # 调用 AI API 分析数据
         if not KI_AI_KEY:
             raise Exception("请设置 KI_AI_KEY 环境变量")
 
-        # 准备发送给 AI 的提示信息
         prompt = f"""请作为 Kubernetes 专家分析以下集群数据并生成简明扼要的健康状态报告:
 
 集群信息:
@@ -789,7 +892,6 @@ def analyze_cluster_stream():
 
     print("\033[1;93m正在分析集群状态...\033[0m")
 
-    # 收集集群信息
     data = {
         "timestamp": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
         "cluster_info": {},
@@ -800,7 +902,6 @@ def analyze_cluster_stream():
     }
 
     try:
-        # 获取集群版本信息
         try:
             version_output = get_data(f"kubectl {KUBECTL_OPTIONS} version -o json")
             if version_output:
@@ -809,7 +910,6 @@ def analyze_cluster_stream():
         except:
             data["cluster_info"]["version"] = "无法获取版本信息"
 
-        # 获取节点状态
         nodes = get_data(f"kubectl {KUBECTL_OPTIONS} get nodes -o wide")
         if len(nodes) > 1:
             for node in nodes[1:]:
@@ -823,7 +923,6 @@ def analyze_cluster_stream():
                         "internal_ip": node_info[5] if len(node_info) > 5 else "unknown"
                     })
 
-        # 获取所有命名空间的 Pod 状态
         ns_list = get_data(f"kubectl {KUBECTL_OPTIONS} get ns --no-headers")
         for ns in ns_list:
             ns_name = ns.split()[0]
@@ -847,7 +946,6 @@ def analyze_cluster_stream():
                 "pending": pending
             }
 
-        # 获取资源使用情况
         for node in data["node_status"]:
             try:
                 usage = get_data(f"kubectl {KUBECTL_OPTIONS} top node {node['name']}")
@@ -861,16 +959,13 @@ def analyze_cluster_stream():
             except:
                 continue
 
-        # 获取最近事件
         events = get_data(f"kubectl {KUBECTL_OPTIONS} get events --sort-by=.metadata.creationTimestamp")
         if events:
             data["events"] = [event.strip() for event in events[-7:]]
 
-        # 调用 AI API 分析数据
         if not KI_AI_KEY:
             raise Exception("请设置 KI_AI_KEY 环境变量")
 
-        # 准备发送给 AI 的提示信息
         prompt = f"""请作为 Kubernetes 专家分析以下集群数据并生成简明扼要的健康状态报告:
 
 集群信息:
@@ -957,7 +1052,6 @@ def chat_with_ai(question):
     try:
         print("\033[1;93m思考中...\033[0m")
 
-        # 让 AI 分析问题类型和是否需要生成文件
         pre_check_response = requests.post(
             f"{KI_AI_URL}",
             headers={
@@ -990,7 +1084,6 @@ def chat_with_ai(question):
             except:
                 pass
 
-        # 根据问题类型设置不同的系统提示
         if question_type["needs_file"]:
             system_prompt = f"""你是一个专业的 IT 专家。对于{question_type["description"]}类问题：
 
@@ -1059,11 +1152,8 @@ def chat_with_ai(question):
                         continue
             print()
 
-            # 如果需要生成文件，处理代码或配置内容
             if question_type["needs_file"]:
-                # 提取文件元数据
                 json_match = re.search(r'```json\n(.*?)\n```', full_response, re.DOTALL)
-                # 提取所有代码块
                 code_matches = re.finditer(r'```(\w+)\n(.*?)\n```', full_response, re.DOTALL)
 
                 file_info = []
@@ -1074,19 +1164,16 @@ def chat_with_ai(question):
                     except:
                         pass
 
-                # 收集所有代码块
                 code_blocks = []
                 for match in code_matches:
                     lang, content = match.group(1), match.group(2)
-                    if lang.lower() != 'json':  # 排除 JSON 元数据
+                    if lang.lower() != 'json':
                         code_blocks.append((lang, content))
 
                 if code_blocks:
                     timestamp = datetime.now().strftime("%Y%m%d-%H%M%S")
 
-                    # 保存文件
                     for i, (lang, content) in enumerate(code_blocks):
-                        # 使用 AI 建议的文件名，如果没有则使用默认名称
                         if i < len(file_info):
                             base_name = file_info[i]['name']
                             description = file_info[i]['description']
@@ -1136,6 +1223,10 @@ def ki():
     len(sys.argv) == 2 and sys.argv[1] in ('-a','--a') and sys.argv.extend(['kube','Pod'])
     len(sys.argv) == 3 and sys.argv[1] in ('-a','--a') and sys.argv.insert(2,'kube')
     config_struct = find_config()
+
+    current_config = session_config if session_config and os.path.exists(session_config) else default_config
+    os.environ['KUBECONFIG'] = os.path.realpath(current_config)
+
     if len(sys.argv) == 2 and sys.argv[1] == '--ai':
         analyze_cluster_stream()
     elif len(sys.argv) == 2 and sys.argv[1] in ('--w','--watch'):
@@ -1149,7 +1240,6 @@ def ki():
     elif len(sys.argv) == 2 and sys.argv[1] == '-n':
         cmd = f"kubectl get ns  --sort-by=.metadata.creationTimestamp --no-headers {KUBECTL_OPTIONS}"
         print("\033[1;38;5;208m{}\033[0m".format(cmd.split('  --')[0]))
-        os.environ['KUBECONFIG'] = os.path.realpath(default_config)
         l = get_data(cmd)
         ns_dict = get_feature([ e.split()[0] for e in l ])
         for e in l:
@@ -1183,8 +1273,11 @@ def ki():
         if config_struct[1] and len(config_struct[1]) > 1:
             if len(sys.argv) == 3:
                 config = get_config(config_struct[1], sys.argv[2])
-                if config and os.path.exists(default_config) and config not in {default_config,os.path.realpath(default_config)}:
-                    os.unlink(default_config)
+                if config and os.path.exists(session_config) and config not in {session_config,os.path.realpath(session_config)}:
+                    os.unlink(session_config)
+                    os.symlink(config,session_config)
+                    if os.path.exists(default_config):
+                        os.unlink(default_config)
                     os.symlink(config,default_config)
                     find_history(config,72)
                     print("\033[1;93m{}\033[0m".format("[ SWITCH ---> "+config.split("/")[-1]+" ] "))
@@ -1194,19 +1287,19 @@ def ki():
                     for j in config_struct[1]:
                         if cmp_file(i,j) and i != j:
                             e = i if len(i) < len(j) else j
-                            if e != default_config and e != os.path.realpath(default_config):
+                            if e != default_config and e != os.path.realpath(default_config) and e != session_config and e != os.path.realpath(session_config):
                                 lr.add(e)
                 for e in lr:
                     os.unlink(e)
                     config_struct[1].remove(e)
-                if os.path.exists(default_config):
+                if os.path.exists(session_config):
                     pattern = ""
                     res = None
                     while True:
                         config_struct[1] = [x for x in config_struct[1] if x.find(pattern) >= 0] if pattern else config_struct[1]
                         if config_struct[1]:
                             for n,e in enumerate(config_struct[1]):
-                                if cmp_file(e,default_config):
+                                if cmp_file(e,session_config):
                                     print("\033[1;95m{}\033[0m \033[1;32m{}\033[0m".format(n,e.strip().split('/')[-1]))
                                 else:
                                     print("\033[1;32m{}\033[0m {}".format(n,e.strip().split('/')[-1]))
@@ -1218,9 +1311,12 @@ def ki():
                                 index = int(pattern) if pattern.isdigit() else 0
                                 res = (config_struct[1][index]).split()[0]
                             if res:
-                                if res not in {default_config,os.path.realpath(default_config)}:
-                                    find_history(os.path.realpath(default_config),-24)
-                                    os.unlink(default_config)
+                                if res not in {session_config,os.path.realpath(session_config)}:
+                                    find_history(os.path.realpath(session_config),-24)
+                                    os.unlink(session_config)
+                                    os.symlink(res,session_config)
+                                    if os.path.exists(default_config):
+                                        os.unlink(default_config)
                                     os.symlink(res,default_config)
                                     print('\033[{}C\033[1A'.format(10),end = '')
                                     print("\033[1;32m{}\033[0m".format(res.split('/')[-1]))
@@ -1230,7 +1326,7 @@ def ki():
                         else:
                             break
                 else:
-                    print("\033[1;32m{}\033[0m\033[5;32m{}\033[0m".format("File not found ",default_config))
+                    print("\033[1;32m{}\033[0m\033[5;32m{}\033[0m".format("File not found ",session_config))
     elif 2 < len(sys.argv) < 5 and sys.argv[1] in ('-n','-r','-t','-t4','-t3','-t2','-i','-l','-e','-es','-ei','-o','-os','-oi','-a','--a'):
         l = find_ns(config_struct)
         ns = l[0]
@@ -1371,7 +1467,7 @@ def ki():
 
                         special_chars_pattern = re.compile(r'[^\w]')
                         if special_chars_pattern.match(pod):
-                            if pod == '$':
+                            if pod == ':':
                                 pod = str(result_len-1)
                             elif pod == '*':
                                 pass
@@ -1448,7 +1544,7 @@ def ki():
          "22. ki --s":"Select the kubernetes to be connected ( if there are multiple ~/.kube/kubeconfig*,the kubeconfig storage can be kubeconfig-hz,kubeconfig-sh,etc. ",
          "23. ki --c":"Enable write caching of namespace ( ~/.history/.ns_dict ",
          "24. ki --a":"List all pods in the kubernetes",
-         "Tips:": "Within the selection process of Pod filtering, where '$' represents the most recent Pod, while '~' and '!' denote the Pod from the previous operation, and the remaining symbols indicate the Pod that has been operated on the most."}
+         "Tips:": "Within the selection process of Pod filtering, where ' represents the most recent Pod, while '~' and '!' denote the Pod from the previous operation, and the remaining symbols indicate the Pod that has been operated on the most."}
         for k,v in doc_dict.items():
             print(style % k,v)
 def main():

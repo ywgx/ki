@@ -8,10 +8,12 @@ function get_ki_session_id() {
         session_id="$XDG_SESSION_ID"
     elif [ -n "$SSH_TTY" ]; then
         session_id="${SSH_TTY##*/}"
+    elif [ -n "$SSH_AUTH_SOCK" ]; then
+        session_id="${SSH_AUTH_SOCK##*.}"
     elif [ -n "$TERM_SESSION_ID" ]; then
         session_id="${TERM_SESSION_ID:0:10}"
     else
-        session_id="pid-$$"
+        session_id="default"
     fi
     echo "$session_id" | sed 's/[^a-zA-Z0-9_-]/_/g'
 }
@@ -50,6 +52,8 @@ function cleanup_ki_session() {
     if [ -L "$session_config" ] || [ -f "$session_config" ]; then
         rm -f "$session_config"
     fi
+
+    find "$HOME/.kube" -maxdepth 1 -type l -name 'config-sess-*' -mtime +3 -delete 2>/dev/null
 }
 
 init_ki_session_config
@@ -57,18 +61,18 @@ init_ki_session_config
 trap cleanup_ki_session EXIT
 
 source <(kubectl completion bash)
+export PS1="\e[1;37m[\e[m\e[1;32m\u\e[m\e[1;32m@\e[m\e[1;35m\H\e[m \e[1;33m\A\e[m \w\e[m\e[1;37m]\e[m\e[1;36m\e[m \$(ki --w) \$(parse_git_branch) \n\\$ "
 export GREP_COLORS='ms=1;91'
 export EDITOR=vim
 export KUBE_EDITOR=vim
+export KI_AI_URL="https://api.xaixapi.com/v1/chat/completions"
 export KI_AI_KEY="sk-XvskBeymPs0X6HSju25MQ9WU8jtITF5GKG7GmV9TCvYVlk1B"
-export KI_AI_URL="https://api.proxyxai.com/v1/chat/completions"
-export KI_AI_MODEL="gemini-2.5-flash"
+export KI_AI_MODEL="gemini-2.5-pro"
 export KI_LINE=$([ -e ~/.history/.line ] && cat ~/.history/.line || echo 200)
-export PS1="\e[1;37m[\e[m\e[1;32m\u\e[m\e[1;32m@\e[m\e[1;35m\H\e[m \e[1;33m\A\e[m \w\e[m\e[1;37m]\e[m\e[1;36m\e[m \$(ki --w) \$(parse_git_branch) \n\\$ "
-alias kubectl="kubectl --insecure-skip-tls-verify "
 alias vi=vim
 alias ls='ls --color'
 alias ll='ls -l'
 alias kn='cd ~/.kube;for file in $(find . -name "kubeconfig-*-NULL"); do mv "$file" "${file%-NULL}"; done'
+alias kubectl="kubectl --insecure-skip-tls-verify "
 [ $USER = root ] && STYLE="\033c\033[5;32m%s\033[1;m\n" || STYLE="\033[5;32m%s\033[1;m\n"
 [[ $- == *i* ]] && [ -e "$KUBECONFIG" ] && printf $STYLE "$(/usr/local/bin/ki --w)"

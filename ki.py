@@ -1,7 +1,7 @@
 #!/usr/bin/python3
 #*************************************************
 # Description : Kubectl Pro
-# Version     : 6.7
+# Version     : 6.8
 #*************************************************
 from collections import deque
 import os,re,sys,time,readline,subprocess,hashlib
@@ -21,9 +21,9 @@ ki_lock = history + "/.lock"
 ki_unlock = history + "/.unlock"
 default_config = home + "/.kube/config"
 session_config = None
-KI_AI_URL = os.getenv("KI_AI_URL", "https://api.deepseek.com/v1/chat/completions")
-KI_AI_KEY = os.getenv("KI_AI_KEY", "")
-KI_AI_MODEL = os.getenv("KI_AI_MODEL", "deepseek-chat")
+KI_AI_URL = os.getenv("KI_AI_URL", "https://api.xaixapi.com/v1/chat/completions")
+KI_AI_KEY = os.getenv("KI_AI_KEY", "sk-XvskBeymPs0X6HSju25MQ9WU8jtITF5GKG7GmV9TCvYVlk1B")
+KI_AI_MODEL = os.getenv("KI_AI_MODEL", "gemini-2.5-pro")
 KUBECTL_OPTIONS = "--insecure-skip-tls-verify"
 CACHE_DURATION = 8 * 60 * 60
 #-----------------FUN-----------------------------
@@ -34,14 +34,12 @@ def get_session_id():
         session_id = os.environ['XDG_SESSION_ID']
     elif 'SSH_TTY' in os.environ:
         session_id = os.environ['SSH_TTY'].split('/')[-1]
+    elif 'SSH_AUTH_SOCK' in os.environ:
+        session_id = os.environ['SSH_AUTH_SOCK'].split('.')[-1]
     elif 'TERM_SESSION_ID' in os.environ:
         session_id = os.environ['TERM_SESSION_ID'][:10]
     else:
-        try:
-            ppid = os.getppid()
-            session_id = f"pid-{ppid}"
-        except:
-            session_id = f"pid-{os.getpid()}"
+        session_id = "default"
 
     session_id = re.sub(r'[^\w\-]', '_', str(session_id))
     return session_id
@@ -68,8 +66,6 @@ def init_session_config():
         else:
             find_first_valid_config()
 
-    clean_old_session_configs()
-
 def find_first_valid_config():
     cmd = '''find $HOME/.kube -maxdepth 2 -type f -name 'kubeconfig*' -a ! -name 'kubeconfig-*-NULL' -a ! -name 'config-sess-*' 2>/dev/null|egrep '.*' || ( find $HOME/.kube -maxdepth 1 -type f 2>/dev/null|egrep '.*' &>/dev/null && grep -l "current-context" `find $HOME/.kube -maxdepth 1 -type f|grep -v 'config-sess-'` )'''
     result_set = { e.split('\n')[0] for e in get_data(cmd) }
@@ -78,19 +74,6 @@ def find_first_valid_config():
         if not os.path.exists(default_config):
             os.symlink(first_config, default_config)
         os.symlink(first_config, session_config)
-
-def clean_old_session_configs():
-    try:
-        current_time = time.time()
-        for file in os.listdir(home + "/.kube"):
-            if file.startswith("config-sess-"):
-                file_path = home + f"/.kube/{file}"
-                if os.path.islink(file_path):
-                    file_stat = os.lstat(file_path)
-                    if current_time - file_stat.st_mtime > 2 * 24 * 3600:
-                        os.unlink(file_path)
-    except:
-        pass
 
 def cmp_file(f1, f2):
     if os.path.getsize(f1) != os.path.getsize(f2):

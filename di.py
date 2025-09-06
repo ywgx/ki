@@ -169,6 +169,9 @@ def format_container_line(index, container, feature_dict=None, last_used=None, m
                           "\033[1;95m" + feature + "\033[0m" +
                           container['name'][pos+len(feature):])
 
+    # 在名称后面添加序号
+    name_display += f" \033[1;36m{index}\033[0m"  # 青色显示序号
+
     # 添加特殊标记
     marks = ""
     if container['name'] == last_used:

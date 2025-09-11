@@ -1,7 +1,7 @@
 #!/usr/bin/python3
 #*************************************************
 # Description : Kubectl Pro
-# Version     : 6.8
+# Version     : 6.9
 #*************************************************
 from collections import deque
 import os,re,sys,time,readline,subprocess,hashlib
@@ -52,7 +52,7 @@ def init_session_config():
     global session_config
     session_config = get_session_config()
 
-    if not os.path.exists(session_config):
+    if not os.path.lexists(session_config):
         if os.path.exists(default_config) and os.path.islink(default_config):
             target = os.path.realpath(default_config)
             if os.path.exists(target):
@@ -60,9 +60,21 @@ def init_session_config():
             else:
                 find_first_valid_config()
         elif os.path.exists(default_config):
-            os.rename(default_config, home+"/.kube/config-0")
-            os.symlink(home+"/.kube/config-0", default_config)
-            os.symlink(home+"/.kube/config-0", session_config)
+            config_0_path = home+"/.kube/config-0"
+
+            if not os.path.exists(config_0_path):
+                os.rename(default_config, config_0_path)
+            else:
+                if os.path.lexists(default_config):
+                    os.unlink(default_config)
+
+            if os.path.lexists(default_config):
+                os.unlink(default_config)
+            os.symlink(config_0_path, default_config)
+
+            if os.path.lexists(session_config):
+                os.unlink(session_config)
+            os.symlink(config_0_path, session_config)
         else:
             find_first_valid_config()
 
@@ -71,8 +83,13 @@ def find_first_valid_config():
     result_set = { e.split('\n')[0] for e in get_data(cmd) }
     if result_set:
         first_config = list(result_set)[0]
-        if not os.path.exists(default_config):
-            os.symlink(first_config, default_config)
+
+        if os.path.lexists(default_config):
+            os.unlink(default_config)
+        os.symlink(first_config, default_config)
+
+        if os.path.lexists(session_config):
+            os.unlink(session_config)
         os.symlink(first_config, session_config)
 
 def cmp_file(f1, f2):

@@ -4,6 +4,7 @@
 # Version     : 6.9
 #*************************************************
 from collections import deque
+from ast import literal_eval
 import os,re,sys,time,readline,subprocess,hashlib
 #-----------------VAR-----------------------------
 home = os.environ["HOME"]
@@ -26,7 +27,51 @@ KI_AI_KEY = os.getenv("KI_AI_KEY", "sk-XvskBeymPs0X6HSju25MQ9WU8jtITF5GKG7GmV9TC
 KI_AI_MODEL = os.getenv("KI_AI_MODEL", "gemini-2.5-pro")
 KUBECTL_OPTIONS = "--insecure-skip-tls-verify"
 CACHE_DURATION = 8 * 60 * 60
+NS_CACHE_DURATION = 300
+LOCK_TIMEOUT = 3600
+CACHE_EXPIRY_SECONDS = 86400
+GOLDEN_RATIO = 0.618
+BUFFER_SIZE = 8192
+SCORE_PENALTY = 8192
+HISTORY_SCORE_HIGH = 72
+HISTORY_SCORE_MID = 24
+HISTORY_SCORE_LOW = -24
+HISTORY_SCORE_DEFAULT = 8
+
+RESOURCE_TYPE_SHORT = {
+    'd':'Deployment','s':'Service','i':'Ingress','f':'StatefulSet',
+    'a':'DaemonSet','p':'Pod','g':'Gateway','h':'HTTPRoute',
+    'A':'all','V':'VirtualService','D':'DestinationRule','E':'EnvoyFilter'
+}
+
+RESOURCE_TYPE_MAPPING = {
+    's':"Service",'i':"Ingress"
+}
+
+RESOURCE_TYPE_FULL = {
+    'd':['Deployment'," -o wide"],'s':['Service'," -o wide"],
+    'i':['Ingress'," -o wide"],'c':['ConfigMap'," -o wide"],
+    't':['Secret'," -o wide"],'n':['Node'," -o wide"],
+    'p':['PersistentVolumeClaim'," -o wide"],'v':['PersistentVolume'," -o wide"],
+    'f':['StatefulSet'," -o wide"],'j':['CronJob'," -o wide"],
+    'b':['Job'," -o wide"],'P':['Pod'," -o wide"],
+    'e':['Event',''],'r':['ReplicaSet',''],'a':['DaemonSet',''],
+    'q':['ResourceQuota',''],'V':['VirtualService',""],
+    'g':['Gateway',''],'h':['HTTPRoute',''],'A':['all',''],
+    'E':['EnvoyFilter',''],'D':['DestinationRule','']
+}
+
 #-----------------FUN-----------------------------
+def switch_kubeconfig(target_config):
+    """切换 kubeconfig 配置"""
+    if os.path.lexists(session_config):
+        os.unlink(session_config)
+    os.symlink(target_config, session_config)
+
+    if os.path.exists(default_config):
+        os.unlink(default_config)
+    os.symlink(target_config, default_config)
+
 def get_session_id():
     session_id = None
 
@@ -95,7 +140,7 @@ def find_first_valid_config():
 def cmp_file(f1, f2):
     if os.path.getsize(f1) != os.path.getsize(f2):
         return False
-    bufsize = 8192
+    bufsize = BUFFER_SIZE
     with open(f1, 'rb') as fp1, open(f2, 'rb') as fp2:
         while True:
             b1 = fp1.read(bufsize)
@@ -190,7 +235,7 @@ def cmd_obj(ns, obj, res, args, iip="x"):
         l = get_obj(ns,res)
         obj = l[0]
         name = l[1]
-        d = {'d':'Deployment','s':'Service','i':'Ingress','f':'StatefulSet','a':'DaemonSet','p':'Pod','g':'Gateway','h':'HTTPRoute','A':'all','V':'VirtualService','D':'DestinationRule','E':'EnvoyFilter'}
+        d = RESOURCE_TYPE_SHORT
         if args == "p":
             cmd = f"kubectl {KUBECTL_OPTIONS} -n "+ns+" exec -it "+res+" -- sh"
         elif args == "del":
@@ -296,9 +341,9 @@ def find_ip(res: str):
 def find_optimal(namespace_list: list, namespace: str):
     namespace_list.sort()
     has_namespace = [namespace in row for row in namespace_list]
-    index_scores = [row.index(namespace) * 0.618 if has_namespace[i] else 8192 for i, row in enumerate(namespace_list)]
-    contain_scores = [len(row.replace(namespace, '')) * 0.618 for row in namespace_list]
-    result_scores = [(index_scores[i] + container) * (1 if has_namespace[i] else 1.618) for i, container in enumerate(contain_scores)]
+    index_scores = [row.index(namespace) * GOLDEN_RATIO if has_namespace[i] else SCORE_PENALTY for i, row in enumerate(namespace_list)]
+    contain_scores = [len(row.replace(namespace, '')) * GOLDEN_RATIO for row in namespace_list]
+    result_scores = [(index_scores[i] + container) * (1 if has_namespace[i] else 1 + GOLDEN_RATIO) for i, container in enumerate(contain_scores)]
     if result_scores:
         return namespace_list[result_scores.index(min(result_scores))] if len(set(index_scores)) != 1 else ( namespace_list[has_namespace.index(True)] if True in has_namespace else None )
     else:
@@ -342,7 +387,7 @@ def find_config():
         if os.path.exists(ki_kube_dict) and os.path.getsize(ki_kube_dict) > 5:
             with open(ki_kube_dict,'r') as f:
                 try:
-                    dc = eval(f.read())
+                    dc = literal_eval(f.read())
                     for config in list(dc.keys()):
                         if not os.path.exists(config):
                             del dc[config]
@@ -414,7 +459,7 @@ def find_history(config,num=3):
         dc = {}
         if os.path.exists(ki_kube_dict) and os.path.getsize(ki_kube_dict) > 5:
             with open(ki_kube_dict,'r') as f:
-                dc = eval(f.read())
+                dc = literal_eval(f.read())
                 dc[config] = dc[config] + num if config in dc else 1
                 dc.pop(default_config,None)
                 dc.pop(session_config,None)
@@ -433,7 +478,7 @@ def get_config(config_lines: list, ns: str):
     dc = {}
     if os.path.exists(ki_kube_dict):
         with open(ki_kube_dict, 'r') as f:
-            dc = eval(f.read())
+            dc = literal_eval(f.read())
             dc.pop(os.path.realpath(default_config), None)
             dc.pop(os.path.realpath(session_config), None) if session_config else None
             history_lines = [k[0] for k in sorted(dc.items(), key=lambda d: d[1], reverse=True)]
@@ -470,10 +515,10 @@ def find_ns(config_struct: list):
 
     current_config = session_config if session_config and os.path.exists(session_config) else default_config
 
-    if os.path.exists(ki_current_ns_dict) and int(time.time()-os.stat(ki_current_ns_dict).st_mtime) < 300:
+    if os.path.exists(ki_current_ns_dict) and int(time.time()-os.stat(ki_current_ns_dict).st_mtime) < NS_CACHE_DURATION:
         with open(ki_current_ns_dict) as f:
             try:
-                d = eval(f.read())
+                d = literal_eval(f.read())
                 real_config = os.path.realpath(current_config)
                 if real_config in d:
                     ns_list = d[real_config]
@@ -495,7 +540,7 @@ def find_ns(config_struct: list):
         if os.path.exists(ns_dict):
             with open(ns_dict,'r') as f:
                 try:
-                    d = eval(f.read())
+                    d = literal_eval(f.read())
                     ns_list = d.get(config, [])
                 except:
                     os.path.exists(ki_cache) and os.unlink(ki_cache)
@@ -517,7 +562,7 @@ def cache_ns(config_struct: list):
         if os.path.exists(ki_ns_dict):
             try:
                 with open(ki_ns_dict, 'r') as f:
-                    return eval(f.read())
+                    return literal_eval(f.read())
             except:
                 pass
     open(ki_cool, "w").close()
@@ -595,7 +640,7 @@ def switch_config(switch_num: int,k8s: str,ns: str,time: str):
         os.symlink(os.environ['KUBECONFIG'], default_config)
 
         print("\033[1;93m{}\033[0m".format("[ "+time+"  "+str(switch_num+1)+"-SWITCH ---> "+k8s+" / "+ns+" ] "))
-        find_history(os.environ['KUBECONFIG'],8)
+        find_history(os.environ['KUBECONFIG'],HISTORY_SCORE_DEFAULT)
         switch_num > 0 and subprocess.Popen("ki --c",shell=True,stdout=subprocess.PIPE,stderr=subprocess.PIPE,universal_newlines=True)
         switch = True
     return switch
@@ -608,7 +653,7 @@ def get_data(cmd: str):
         sys.exit()
 
 def get_obj(ns: str,res: str,args='x'):
-    d = {'s':"Service",'i':"Ingress"}
+    d = RESOURCE_TYPE_MAPPING
     cmd = f"kubectl {KUBECTL_OPTIONS} -n "+ns+" get pod "+res+" -o jsonpath='{.metadata.ownerReferences[0].kind}'"
     l1 = res.split('-')
     l2 = get_data(cmd)
@@ -689,11 +734,7 @@ def info_w(k8s_path: str,result_lines: list):
             if result_lines:
                 config = find_optimal(result_lines,k8s_str) if k8s_str else None
                 if config and os.path.exists(session_config) and config not in {session_config,current_config}:
-                    os.unlink(session_config)
-                    os.symlink(config,session_config)
-                    if os.path.exists(default_config):
-                        os.unlink(default_config)
-                    os.symlink(config,default_config)
+                    switch_kubeconfig(config)
                     print("\033[1;95m{}\033[0m".format("[ "+config.split("/")[-1]+" ]"))
                 else:
                     print("\033[1;38;5;208m{}\033[0m".format("[ "+current_config.split("/")[-1]+" ]"))
@@ -701,14 +742,14 @@ def info_w(k8s_path: str,result_lines: list):
             print("\033[1;38;5;208m{}\033[0m".format("[ "+current_config.split("/")[-1]+(" (lock)" if os.path.exists(ki_lock) else "")+" ]"))
     else:
         print("\033[1;32m{}\033[0m".format("[ "+current_config.split("/")[-1]+" ]"))
-        os.path.exists(ki_lock) and int(time.time()-os.stat(ki_lock).st_mtime) > 3600 and os.unlink(ki_lock)
-        os.path.exists(ki_current_ns_dict) and int(time.time()-os.stat(ki_current_ns_dict).st_mtime) > 300 and os.unlink(ki_current_ns_dict)
+        os.path.exists(ki_lock) and int(time.time()-os.stat(ki_lock).st_mtime) > LOCK_TIMEOUT and os.unlink(ki_lock)
+        os.path.exists(ki_current_ns_dict) and int(time.time()-os.stat(ki_current_ns_dict).st_mtime) > NS_CACHE_DURATION and os.unlink(ki_current_ns_dict)
 
 def info_k():
     if os.path.exists(ki_pod_dict) and os.path.exists(ki_kube_dict):
         with open(ki_pod_dict,'r') as f1, open(ki_kube_dict,'r') as f2:
-            dc1 = eval(f1.read())
-            dc2 = eval(f2.read())
+            dc1 = literal_eval(f1.read())
+            dc2 = literal_eval(f2.read())
             for k in sorted(dc1):
                 print("{:<56}{:<32}{}".format(k,dc1[k][0],dc1[k][1]))
             for k in sorted(dc2.items(),key=lambda d:d[1]):
@@ -726,7 +767,7 @@ def record(res: str,name: str,obj: str,cmd: str,kubeconfig: str,ns: str,config_s
     if os.path.exists(ki_pod_dict) and os.path.getsize(ki_pod_dict) > 5:
         with open(ki_pod_dict,'r') as f:
             try:
-                dc = eval(f.read())
+                dc = literal_eval(f.read())
                 dc_key_set = set(i.split('/')[0] for i in list(dc.keys()))
                 kubeconfig_set = set(i.split('/')[-1] for i in config_struct[1])
                 for i in dc_key_set - kubeconfig_set:
@@ -744,144 +785,7 @@ def record(res: str,name: str,obj: str,cmd: str,kubeconfig: str,ns: str,config_s
         dc[key] = [name,[(name,1)]]
     with open(ki_pod_dict,'w') as f: f.write(str(dc))
 
-def analyze_cluster():
-    import json
-    import requests
-    from datetime import datetime
-
-    print("\033[1;93m正在分析集群状态...\033[0m")
-
-    data = {
-        "timestamp": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
-        "cluster_info": {},
-        "node_status": [],
-        "pod_status": {},
-        "resource_usage": {},
-        "events": []
-    }
-
-    try:
-        try:
-            version_output = get_data(f"kubectl {KUBECTL_OPTIONS} version -o json")
-            if version_output:
-                version_json = version_output[0].strip()
-                data["cluster_info"]["version"] = json.loads(version_json)
-        except:
-            data["cluster_info"]["version"] = "无法获取版本信息"
-
-        nodes = get_data(f"kubectl {KUBECTL_OPTIONS} get nodes -o wide")
-        if len(nodes) > 1:
-            for node in nodes[1:]:
-                node_info = node.split()
-                if len(node_info) >= 5:
-                    data["node_status"].append({
-                        "name": node_info[0],
-                        "status": node_info[1],
-                        "roles": node_info[2] if len(node_info) > 2 else "unknown",
-                        "version": node_info[3] if len(node_info) > 3 else "unknown",
-                        "internal_ip": node_info[5] if len(node_info) > 5 else "unknown"
-                    })
-
-        ns_list = get_data(f"kubectl {KUBECTL_OPTIONS} get ns --no-headers")
-        for ns in ns_list:
-            ns_name = ns.split()[0]
-            pods = get_data(f"kubectl {KUBECTL_OPTIONS} get pods -n {ns_name} --no-headers")
-            running = 0
-            failed = 0
-            pending = 0
-            for pod in pods:
-                status = pod.split()[2]
-                if status == "Running":
-                    running += 1
-                elif status in ["Failed", "Error", "CrashLoopBackOff"]:
-                    failed += 1
-                elif status == "Pending":
-                    pending += 1
-
-            data["pod_status"][ns_name] = {
-                "total": len(pods),
-                "running": running,
-                "failed": failed,
-                "pending": pending
-            }
-
-        for node in data["node_status"]:
-            try:
-                usage = get_data(f"kubectl {KUBECTL_OPTIONS} top node {node['name']}")
-                if len(usage) > 1:
-                    usage_info = usage[1].split()
-                    if len(usage_info) >= 5:
-                        data["resource_usage"][node["name"]] = {
-                            "cpu": usage_info[2],
-                            "memory": usage_info[4]
-                        }
-            except:
-                continue
-
-        events = get_data(f"kubectl {KUBECTL_OPTIONS} get events --sort-by=.metadata.creationTimestamp")
-        if events:
-            data["events"] = [event.strip() for event in events[-5:]]
-
-        if not KI_AI_KEY:
-            raise Exception("请设置 KI_AI_KEY 环境变量")
-
-        prompt = f"""请作为 Kubernetes 专家分析以下集群数据并生成简明扼要的健康状态报告:
-
-集群信息:
-- 时间戳: {data['timestamp']}
-- 节点数量: {len(data['node_status'])}
-- 命名空间数量: {len(data['pod_status'])}
-
-节点状态:
-{json.dumps(data['node_status'], indent=2, ensure_ascii=False)}
-
-Pod 状态 (按命名空间):
-{json.dumps(data['pod_status'], indent=2, ensure_ascii=False)}
-
-资源使用情况:
-{json.dumps(data['resource_usage'], indent=2, ensure_ascii=False)}
-
-最近事件:
-{json.dumps(data['events'], indent=2, ensure_ascii=False)}
-
-请提供:
-1. 集群整体健康状况评估
-2. 发现的潜在问题
-3. 资源使用建议
-4. 优化建议
-"""
-
-        response = requests.post(
-            f"{KI_AI_URL}",
-            headers={
-                "Authorization": f"Bearer {KI_AI_KEY}",
-                "Content-Type": "application/json"
-            },
-            json={
-                "model": KI_AI_MODEL,
-                "messages": [{
-                    "role": "system",
-                    "content": "你是一个经验丰富的 Kubernetes 集群分析专家。请基于提供的数据生成专业的分析报告。"
-                }, {
-                    "role": "user",
-                    "content": prompt
-                }],
-                "temperature": 0.3
-            }
-        )
-
-        if response.status_code == 200:
-            result = response.json()
-            print("\n\033[1;32m集群健康状态报告:\033[0m")
-            print(result["choices"][0]["message"]["content"])
-        else:
-            print(f"\033[1;31mAI API 调用失败: {response.status_code}\033[0m")
-            print(response.text)
-
-    except Exception as e:
-        print(f"\033[1;31m分析过程中出错: {str(e)}\033[0m")
-
-def analyze_cluster_stream():
+def analyze_cluster(stream=True):
     """分析集群状态并生成报告"""
     import json
     import requests
@@ -1006,23 +910,27 @@ Pod 状态 (按命名空间,不含 Completed):
                     "content": prompt
                 }],
                 "temperature": 0.3,
-                "stream": True
+                "stream": stream
             },
-            stream=True
+            stream=stream
         )
 
         if response.status_code == 200:
-            for line in response.iter_lines():
-                if line:
-                    try:
-                        json_response = json.loads(line.decode('utf-8').split('data: ')[1])
-                        if 'choices' in json_response and len(json_response['choices']) > 0:
-                            content = json_response['choices'][0].get('delta', {}).get('content', '')
-                            if content:
-                                print(content, end='', flush=True)
-                    except:
-                        continue
-            print()
+            if stream:
+                for line in response.iter_lines():
+                    if line:
+                        try:
+                            json_response = json.loads(line.decode('utf-8').split('data: ')[1])
+                            if 'choices' in json_response and len(json_response['choices']) > 0:
+                                content = json_response['choices'][0].get('delta', {}).get('content', '')
+                                if content:
+                                    print(content, end='', flush=True)
+                        except:
+                            continue
+                print()
+            else:
+                result = response.json()
+                print(result["choices"][0]["message"]["content"])
         else:
             print(f"\033[1;31mAI API 调用失败: {response.status_code}\033[0m")
             print(response.text)
@@ -1215,17 +1123,26 @@ def chat_with_ai(question):
         print(f"\033[1;31m错误: {str(e)}\033[0m")
 
 def ki():
-    ( len(sys.argv) == 1 or sys.argv[1] not in ('-n','-t','-t4','-t3','-t2','--ai','-r','-i','-e','-es','-ei','-o','-os','-oi','-restart','-s','--s','-l','--l','--lock','--u','--unlock','--w','--watch','--h','--help','--c','--cache','--k','-a','--a') ) and sys.argv.insert(1,'-n')
-    len(sys.argv) == 2 and sys.argv[1] in ('-i','-e','-es','-ei','-o','-os','-oi') and sys.argv.insert(1,'-n')
-    len(sys.argv) == 2 and sys.argv[1] in ('-a','--a') and sys.argv.extend(['kube','Pod'])
-    len(sys.argv) == 3 and sys.argv[1] in ('-a','--a') and sys.argv.insert(2,'kube')
+    valid_options = ('-n','-t','-t4','-t3','-t2','--ai','-r','-i','-e','-es','-ei','-o','-os','-oi','-restart','-s','--s','-l','--l','--lock','--u','--unlock','--w','--watch','--h','--help','--c','--cache','--k','-a','--a')
+
+    if len(sys.argv) == 1 or sys.argv[1] not in valid_options:
+        sys.argv.insert(1, '-n')
+
+    if len(sys.argv) == 2 and sys.argv[1] in ('-i','-e','-es','-ei','-o','-os','-oi'):
+        sys.argv.insert(1, '-n')
+
+    if len(sys.argv) == 2 and sys.argv[1] in ('-a','--a'):
+        sys.argv.extend(['kube','Pod'])
+
+    if len(sys.argv) == 3 and sys.argv[1] in ('-a','--a'):
+        sys.argv.insert(2, 'kube')
     config_struct = find_config()
 
     current_config = session_config if session_config and os.path.exists(session_config) else default_config
     os.environ['KUBECONFIG'] = os.path.realpath(current_config)
 
     if len(sys.argv) == 2 and sys.argv[1] == '--ai':
-        analyze_cluster_stream()
+        analyze_cluster()
     elif len(sys.argv) == 2 and sys.argv[1] in ('--w','--watch'):
         info_w(os.environ["PWD"],config_struct[1])
     elif len(sys.argv) == 2 and sys.argv[1] in ('--l','--lock'):
@@ -1247,7 +1164,7 @@ def ki():
         if os.path.exists(ki_latest_ns_dict):
             with open(ki_latest_ns_dict,'r') as f:
                 try:
-                    d = eval(f.read())
+                    d = literal_eval(f.read())
                     latest_ns = d[os.environ['KUBECONFIG']]
                     flag = ( latest_ns == l[-1].split()[0] )
                 except:
@@ -1271,12 +1188,8 @@ def ki():
             if len(sys.argv) == 3:
                 config = get_config(config_struct[1], sys.argv[2])
                 if config and os.path.exists(session_config) and config not in {session_config,os.path.realpath(session_config)}:
-                    os.unlink(session_config)
-                    os.symlink(config,session_config)
-                    if os.path.exists(default_config):
-                        os.unlink(default_config)
-                    os.symlink(config,default_config)
-                    find_history(config,72)
+                    switch_kubeconfig(config)
+                    find_history(config,HISTORY_SCORE_HIGH)
                     print("\033[1;93m{}\033[0m".format("[ SWITCH ---> "+config.split("/")[-1]+" ] "))
             else:
                 lr = set()
@@ -1302,22 +1215,22 @@ def ki():
                                     print("\033[1;32m{}\033[0m {}".format(n,e.strip().split('/')[-1]))
                             try:
                                 pattern = input("\033[1;95m%s\033[0m\033[5;95m%s\033[0m" % ("select",":")).strip()
-                            except:
+                            except KeyboardInterrupt:
+                                print("\n\033[1;32mBye!\033[0m")
+                                sys.exit()
+                            except EOFError:
+                                print("\n\033[1;32mBye!\033[0m")
                                 sys.exit()
                             if pattern.isdigit() and 0 <= int(pattern) < len(config_struct[1]) or len(config_struct[1]) == 1:
                                 index = int(pattern) if pattern.isdigit() else 0
                                 res = (config_struct[1][index]).split()[0]
                             if res:
                                 if res not in {session_config,os.path.realpath(session_config)}:
-                                    find_history(os.path.realpath(session_config),-24)
-                                    os.unlink(session_config)
-                                    os.symlink(res,session_config)
-                                    if os.path.exists(default_config):
-                                        os.unlink(default_config)
-                                    os.symlink(res,default_config)
+                                    find_history(os.path.realpath(session_config),HISTORY_SCORE_LOW)
+                                    switch_kubeconfig(res)
                                     print('\033[{}C\033[1A'.format(10),end = '')
                                     print("\033[1;32m{}\033[0m".format(res.split('/')[-1]))
-                                    find_history(res,24)
+                                    find_history(res,HISTORY_SCORE_MID)
                                     os.path.exists(ki_unlock) or open(ki_lock,"a").close()
                                 break
                         else:
@@ -1335,7 +1248,7 @@ def ki():
             ext = " -o wide"
             os.environ['KUBECONFIG'] = l[1]
             if len(sys.argv) == 4:
-                d = {'d':['Deployment'," -o wide"],'s':['Service'," -o wide"],'i':['Ingress'," -o wide"],'c':['ConfigMap'," -o wide"],'t':['Secret'," -o wide"],'n':['Node'," -o wide"],'p':['PersistentVolumeClaim'," -o wide"],'v':['PersistentVolume'," -o wide"],'f':['StatefulSet'," -o wide"],'j':['CronJob'," -o wide"],'b':['Job'," -o wide"],'P':['Pod'," -o wide"],'e':['Event',''],'r':['ReplicaSet',''],'a':['DaemonSet',''],'q':['ResourceQuota',''],'V':['VirtualService',""],'g':['Gateway',''],'h':['HTTPRoute',''],'A':['all',''],'E':['EnvoyFilter',''],'D':['DestinationRule','']}
+                d = RESOURCE_TYPE_FULL
                 obj = d[sys.argv[3][0]][0] if sys.argv[3][0] in d else "Pod"
                 ext = d[sys.argv[3][0]][1] if sys.argv[3][0] in d else ""
                 if sys.argv[1] in ('-i','-l','-e','-es','-ei','-o','-os','-oi'):
@@ -1455,7 +1368,11 @@ def ki():
                             else:
                                 result_lines = get_data(cmd)
                                 time.sleep(3)
-                        except:
+                        except KeyboardInterrupt:
+                            print("\n\033[1;32mBye!\033[0m")
+                            sys.exit()
+                        except EOFError:
+                            print("\n\033[1;32mBye!\033[0m")
                             sys.exit()
                         result_len = len(result_lines)
                         search_term = pod
@@ -1470,7 +1387,7 @@ def ki():
                                 pass
                             elif os.path.exists(ki_pod_dict):
                                 with open(ki_pod_dict,'r') as f:
-                                    dc = eval(f.read())
+                                    dc = literal_eval(f.read())
                                     key = k8s+'/'+ns+'/'+obj
                                     last_res = ( dc[key][0] if pod in ('!','~') else dc[key][1][0][0] ) if key in dc else ""
                                     for n,e in enumerate(result_lines[::-1]):
@@ -1506,12 +1423,12 @@ def ki():
                         pod = ""
                 else:
                     print("No resources found.")
-                    if not os.path.exists(ki_cache) or (os.path.exists(ki_cache) and int(time.time()-os.stat(ki_cache).st_mtime) > 86400):
+                    if not os.path.exists(ki_cache) or (os.path.exists(ki_cache) and int(time.time()-os.stat(ki_cache).st_mtime) > CACHE_EXPIRY_SECONDS):
                         subprocess.Popen("ki --c",shell=True,stdout=subprocess.PIPE,stderr=subprocess.PIPE,universal_newlines=True)
                     sys.exit()
         else:
             print("No namespace found in the kubernetes.")
-            if not os.path.exists(ki_cache) or (os.path.exists(ki_cache) and int(time.time()-os.stat(ki_cache).st_mtime) > 86400):
+            if not os.path.exists(ki_cache) or (os.path.exists(ki_cache) and int(time.time()-os.stat(ki_cache).st_mtime) > CACHE_EXPIRY_SECONDS):
                 subprocess.Popen("ki --c",shell=True,stdout=subprocess.PIPE,stderr=subprocess.PIPE,universal_newlines=True)
     elif len(sys.argv) == 2 and sys.argv[1] in ('--h','--help'):
         style = "\033[1;32m%s\033[0m"

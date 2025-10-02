@@ -6,6 +6,12 @@
 import os,re,sys,time,subprocess,atexit
 from collections import deque, Counter
 
+#-----------------CONST---------------------------
+DEFAULT_LOG_TAIL = 100
+WATCH_INTERVAL = 3
+HISTORY_SAVE_FREQUENCY = 10
+HISTORY_MAX_SIZE = 128
+
 #-----------------FUN-----------------------------
 def get_feature(name_list: list):
     """计算每个名称的最短唯一特征子串"""
@@ -102,6 +108,14 @@ def get_data(cmd: str):
     except:
         return []
 
+def container_matches(container, pattern):
+    """检查容器是否匹配模式"""
+    if not pattern:
+        return True
+    return (pattern.lower() in container['name'].lower() or
+            pattern.lower() in container['image'].lower() or
+            pattern in container['id'])
+
 def get_containers(pattern=""):
     """获取容器列表"""
     cmd = "docker ps --format 'table {{.ID}}\t{{.Image}}\t{{.Status}}\t{{.Names}}'"
@@ -110,34 +124,18 @@ def get_containers(pattern=""):
     if not lines or len(lines) < 2:
         return []
 
-    # 跳过标题行
     containers = []
     for line in lines[1:]:
         parts = line.strip().split()
         if len(parts) >= 4:
-            container_id = parts[0]
-            image = parts[1]
-            status = ' '.join(parts[2:-1])
-            name = parts[-1]
-
-            # 如果有模式匹配
-            if pattern:
-                if (pattern.lower() in name.lower() or
-                    pattern.lower() in image.lower() or
-                    pattern in container_id):
-                    containers.append({
-                        'id': container_id,
-                        'image': image,
-                        'status': status,
-                        'name': name
-                    })
-            else:
-                containers.append({
-                    'id': container_id,
-                    'image': image,
-                    'status': status,
-                    'name': name
-                })
+            container = {
+                'id': parts[0],
+                'image': parts[1],
+                'status': ' '.join(parts[2:-1]),
+                'name': parts[-1]
+            }
+            if container_matches(container, pattern):
+                containers.append(container)
 
     return containers
 
@@ -145,15 +143,7 @@ def filter_containers(containers: list, pattern: str):
     """过滤容器列表"""
     if not pattern:
         return containers
-
-    filtered = []
-    for container in containers:
-        if (pattern.lower() in container['name'].lower() or
-            pattern.lower() in container['image'].lower() or
-            pattern in container['id']):
-            filtered.append(container)
-
-    return filtered
+    return [c for c in containers if container_matches(c, pattern)]
 
 def format_container_line(index, container, feature_dict=None, last_used=None, most_used=None):
     """格式化容器显示行，高亮显示特征字符串和特殊标记"""
@@ -181,80 +171,91 @@ def format_container_line(index, container, feature_dict=None, last_used=None, m
 
     return f"\033[1;32m{index:<3}\033[0m {container['id']:<12} {container['image']:<40} {status_color}{container['status']:<20}\033[0m {name_display}{marks}"
 
+def find_container_index(containers, container_name):
+    """查找容器在列表中的索引（使用字典优化）"""
+    name_to_index = {c['name']: i for i, c in enumerate(containers)}
+    return name_to_index.get(container_name)
+
+def enter_single_container(container):
+    """进入单个容器（快捷操作）"""
+    history.record(container['name'])
+    cmd = execute_container_action(container, "exec")
+    if cmd:
+        print('\033[1A\033[2K', end='')
+        print(f"\033[1;38;5;208m{cmd}\033[0m")
+        os.system(cmd)
+        print()
+
 def execute_container_action(container, action, args=""):
     """执行容器操作"""
     if action == "exec":
         cmd = f"docker exec -it {container['name']} sh"
     elif action == "logs":
-        tail = args if args and args.isdigit() else "100"
+        tail = args if args and args.isdigit() else str(DEFAULT_LOG_TAIL)
         cmd = f"docker logs -f --tail {tail} {container['name']}"
     else:
         return None
 
     return cmd
 
-# 历史记录相关
-history_file = os.path.expanduser("~/.di_history")
-history_maxsize = 50
-history = deque(maxlen=history_maxsize)
-history_modified = False  # 标记历史是否被修改
+class History:
+    """容器操作历史记录管理"""
+    def __init__(self, filepath=None, maxsize=HISTORY_MAX_SIZE):
+        self.filepath = filepath or os.path.expanduser("~/.di_history")
+        self.data = deque(maxlen=maxsize)
+        self.modified = False
 
-def load_history():
-    """加载历史记录"""
-    global history_modified
-    if os.path.exists(history_file):
+    def load(self):
+        """加载历史记录"""
+        if os.path.exists(self.filepath):
+            try:
+                with open(self.filepath, 'r') as f:
+                    for line in f:
+                        container_name = line.strip()
+                        if container_name:
+                            self.data.append(container_name)
+                self.modified = False
+            except:
+                pass
+
+    def save(self):
+        """保存历史记录（仅在有修改时）"""
+        if not self.modified:
+            return
         try:
-            with open(history_file, 'r') as f:
-                for line in f:
-                    container_name = line.strip()
-                    if container_name:
-                        history.append(container_name)
-            history_modified = False
+            temp_file = self.filepath + '.tmp'
+            with open(temp_file, 'w') as f:
+                for container_name in self.data:
+                    f.write(f"{container_name}\n")
+            os.replace(temp_file, self.filepath)
+            self.modified = False
         except:
             pass
 
-def save_history():
-    """保存历史记录（仅在有修改时）"""
-    global history_modified
-    if not history_modified:
-        return
+    def record(self, container_name):
+        """记录操作历史"""
+        self.data.append(container_name)
+        self.modified = True
 
-    try:
-        # 写入临时文件，然后原子性替换
-        temp_file = history_file + '.tmp'
-        with open(temp_file, 'w') as f:
-            for container_name in history:
-                f.write(f"{container_name}\n")
-        os.replace(temp_file, history_file)
-        history_modified = False
-    except:
-        pass
+    def get_last_used(self):
+        """获取上一次操作的容器"""
+        return self.data[-1] if self.data else None
 
-def record_history(container_name):
-    """记录操作历史"""
-    global history_modified
-    history.append(container_name)
-    history_modified = True
+    def get_most_used(self):
+        """获取最常操作的容器"""
+        if not self.data:
+            return None
+        counter = Counter(self.data)
+        return counter.most_common(1)[0][0]
 
-def get_last_used():
-    """获取上一次操作的容器"""
-    return history[-1] if history else None
-
-def get_most_used():
-    """获取最常操作的容器"""
-    if not history:
-        return None
-    counter = Counter(history)
-    return counter.most_common(1)[0][0]
-
-# 注册退出时保存历史
-atexit.register(save_history)
+history = History()
+atexit.register(history.save)
 
 def main():
     pattern = ""
 
     # 加载历史记录
-    load_history()
+    history.load()
 
     # 解析命令行参数
     if len(sys.argv) > 1:
@@ -321,8 +322,8 @@ def main():
             feature_dict = get_feature(container_names) if len(container_names) > 1 else {}
 
             # 获取历史信息
-            last_used = get_last_used()
-            most_used = get_most_used()
+            last_used = history.get_last_used()
+            most_used = history.get_most_used()
 
             # 清屏（仅在 watch 模式下）
             if watch_mode:
@@ -339,22 +340,19 @@ def main():
 
             # 显示状态栏
             if len(containers) > 3 or active_filter:
-                now = time.strftime("%T", time.localtime())
                 status_parts = [f"Containers: {len(containers)}"]
                 if active_filter:
-                    status_parts.append(f"Filter: '{active_filter}'")
-                    status_parts.append(f"Total: {len(all_containers)}")
-                status_parts.append(now)
-                status = " ] [ ".join(status_parts)
-                status = f"[ {status} ]"
+                    status_parts.extend([f"Filter: '{active_filter}'", f"Total: {len(all_containers)}"])
+                status_parts.append(time.strftime("%T", time.localtime()))
                 if watch_mode:
-                    status += " [ Watching... ]"
-                print(f"\033[1;93m{status}\033[0m")
+                    status_parts.append("Watching...")
+                status = " ] [ ".join(status_parts)
+                print(f"\033[1;93m[ {status} ]\033[0m")
 
             try:
                 # 获取用户输入
                 if watch_mode:
-                    time.sleep(3)
+                    time.sleep(WATCH_INTERVAL)
                     all_containers = get_containers(pattern)
                     continue
 
@@ -373,34 +371,13 @@ def main():
                     continue
                 elif user_input == '':
                     # 空输入的智能处理
-                    if active_filter:
-                        # 有过滤条件时
-                        if len(containers) == 1:
-                            # 只有一个结果，直接进入
-                            container = containers[0]
-                            record_history(container['name'])
-                            cmd = execute_container_action(container, "exec")
-                            if cmd:
-                                print('\033[1A\033[2K', end='')
-                                print(f"\033[1;38;5;208m{cmd}\033[0m")
-                                os.system(cmd)
-                                print()
-                        else:
-                            # 多个结果，清除过滤
-                            active_filter = ""
-                            filtered_containers = []
-                    else:
-                        # 没有过滤条件时
-                        if len(containers) == 1:
-                            # 只有一个容器，直接进入
-                            container = containers[0]
-                            record_history(container['name'])
-                            cmd = execute_container_action(container, "exec")
-                            if cmd:
-                                print('\033[1A\033[2K', end='')
-                                print(f"\033[1;38;5;208m{cmd}\033[0m")
-                                os.system(cmd)
-                                print()
+                    if len(containers) == 1:
+                        # 只有一个结果，直接进入
+                        enter_single_container(containers[0])
+                    elif active_filter:
+                        # 多个结果且有过滤条件，清除过滤
+                        active_filter = ""
+                        filtered_containers = []
                     continue
 
                 # 解析选择和命令
@@ -422,12 +399,10 @@ def main():
                 elif first_part == '^':
                     # 上一次操作的容器
                     if last_used:
-                        for i, container in enumerate(containers):
-                            if container['name'] == last_used:
-                                selected_index = i
-                                is_index = True
-                                break
-                        if not is_index:
+                        selected_index = find_container_index(containers, last_used)
+                        if selected_index is not None:
+                            is_index = True
+                        else:
                             print(f"\033[1;31mLast used container '{last_used}' not found in current list.\033[0m")
                             continue
                     else:
@@ -436,12 +411,10 @@ def main():
                 elif len(first_part) == 1 and not first_part.isalnum() and first_part not in ('<', '^', '/'):
                     # 任意特殊标点符号，默认匹配最常操作的容器
                     if most_used:
-                        for i, container in enumerate(containers):
-                            if container['name'] == most_used:
-                                selected_index = i
-                                is_index = True
-                                break
-                        if not is_index:
+                        selected_index = find_container_index(containers, most_used)
+                        if selected_index is not None:
+                            is_index = True
+                        else:
                             print(f"\033[1;31mMost used container '{most_used}' not found in current list.\033[0m")
                             continue
                     else:
@@ -466,11 +439,11 @@ def main():
                     container = containers[selected_index]
 
                     # 记录历史
-                    record_history(container['name'])
+                    history.record(container['name'])
 
-                    # 定期保存（每10次操作保存一次）
-                    if len(history) % 10 == 0:
-                        save_history()
+                    # 定期保存（每N次操作保存一次）
+                    if len(history.data) % HISTORY_SAVE_FREQUENCY == 0:
+                        history.save()
 
                     # 检查是否有附加命令
                     command = parts[1] if len(parts) > 1 else ""
@@ -503,7 +476,7 @@ def main():
                 continue
     finally:
         # 确保退出时保存历史
-        save_history()
+        history.save()
 
 if __name__ == '__main__':
     main()

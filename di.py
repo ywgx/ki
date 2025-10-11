@@ -274,7 +274,9 @@ def main():
             print("                    If multiple containers: clear filter")
             print("  <               - Clear filter and show all containers")
             print("  ^               - Select last used container (marked with \033[1;93m^\033[0m)")
-            print("  ~,@,#,$,%,etc   - Select most used container (marked with \033[1;91m~\033[0m)")
+            print("  [               - Show logs of most used container (marked with \033[1;91m~\033[0m)")
+            print("  [ <n>           - Show logs of most used container (tail n lines)")
+            print("  ~,@,#,$,%,etc   - Select most used container and enter it")
             print("  *               - Watch mode (refresh every 3s)")
             print("  :               - Select last container in list")
             print("  q or Ctrl+C     - Quit\n")
@@ -408,8 +410,23 @@ def main():
                     else:
                         print("\033[1;31mNo history found.\033[0m")
                         continue
-                elif len(first_part) == 1 and not first_part.isalnum() and first_part not in ('<', '^', '/'):
-                    # 任意特殊标点符号，默认匹配最常操作的容器
+                elif first_part == '[':
+                    # [ 符号默认查看最常操作容器的日志
+                    if most_used:
+                        selected_index = find_container_index(containers, most_used)
+                        if selected_index is not None:
+                            is_index = True
+                            # 如果没有指定命令，默认为日志
+                            if len(parts) == 1:
+                                parts.append('l')
+                        else:
+                            print(f"\033[1;31mMost used container '{most_used}' not found in current list.\033[0m")
+                            continue
+                    else:
+                        print("\033[1;31mNo history found.\033[0m")
+                        continue
+                elif len(first_part) == 1 and not first_part.isalnum() and first_part not in ('<', '^', '/', '['):
+                    # 任意其他特殊标点符号，默认匹配最常操作的容器（进入容器）
                     if most_used:
                         selected_index = find_container_index(containers, most_used)
                         if selected_index is not None:

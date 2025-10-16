@@ -276,6 +276,7 @@ def main():
             print("  ^               - Select last used container (marked with \033[1;93m^\033[0m)")
             print("  [               - Show logs of most used container (marked with \033[1;91m~\033[0m)")
             print("  [ <n>           - Show logs of most used container (tail n lines)")
+            print("  ]               - Enter most used container (marked with \033[1;91m~\033[0m)")
             print("  ~,@,#,$,%,etc   - Select most used container and enter it")
             print("  *               - Watch mode (refresh every 3s)")
             print("  :               - Select last container in list")
@@ -284,7 +285,8 @@ def main():
             print("  - The \033[1;95mpurple\033[0m characters are unique features for quick selection")
             print("  - Use / prefix to select by feature (e.g., /api)")
             print("  - Without / prefix, text will filter the list")
-            print("  - Any special character (except ^ and <) selects the most used container")
+            print("  - [ shows logs of most used container, ] enters most used container")
+            print("  - Any other special character (except ^ and <) selects the most used container")
             print("  - You can continuously filter results by typing search patterns\n")
             return
         else:
@@ -425,7 +427,20 @@ def main():
                     else:
                         print("\033[1;31mNo history found.\033[0m")
                         continue
-                elif len(first_part) == 1 and not first_part.isalnum() and first_part not in ('<', '^', '/', '['):
+                elif first_part == ']':
+                    # ] 符号默认进入最常操作容器
+                    if most_used:
+                        selected_index = find_container_index(containers, most_used)
+                        if selected_index is not None:
+                            is_index = True
+                            # 不添加额外命令，默认进入容器
+                        else:
+                            print(f"\033[1;31mMost used container '{most_used}' not found in current list.\033[0m")
+                            continue
+                    else:
+                        print("\033[1;31mNo history found.\033[0m")
+                        continue
+                elif len(first_part) == 1 and not first_part.isalnum() and first_part not in ('<', '^', '/', '[', ']'):
                     # 任意其他特殊标点符号，默认匹配最常操作的容器（进入容器）
                     if most_used:
                         selected_index = find_container_index(containers, most_used)

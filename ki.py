@@ -1381,6 +1381,7 @@ def ki():
 
                         special_chars_pattern = re.compile(r'[^\w]')
                         is_bracket = False
+                        is_right_bracket = False
                         if special_chars_pattern.match(pod):
                             if pod == ':':
                                 pod = str(result_len-1)
@@ -1388,6 +1389,17 @@ def ki():
                                 pass
                             elif pod == '[':
                                 is_bracket = True
+                                if os.path.exists(ki_pod_dict):
+                                    with open(ki_pod_dict,'r') as f:
+                                        dc = literal_eval(f.read())
+                                        key = k8s+'/'+ns+'/'+obj
+                                        last_res = ( dc[key][0] if pod in ('!','~') else dc[key][1][0][0] ) if key in dc else ""
+                                        for n,e in enumerate(result_lines[::-1]):
+                                            if last_res in e:
+                                                pod = str(result_len-n-1)
+                                                break
+                            elif pod == ']':
+                                is_right_bracket = True
                                 if os.path.exists(ki_pod_dict):
                                     with open(ki_pod_dict,'r') as f:
                                         dc = literal_eval(f.read())
@@ -1415,7 +1427,12 @@ def ki():
                             else:
                                 args = ''.join(podList[1:])
                         else:
-                            args = "l" if is_bracket else "p"
+                            if is_bracket:
+                                args = "l"
+                            elif is_right_bracket:
+                                args = "p"
+                            else:
+                                args = "p"
                         if pod.isdigit() and int(pod) < result_len or ( result_len == 1 and pod != '*'):
                             filtered_count = len(result_lines)
                             index = int(pod) if pod.isdigit() and int(pod) < result_len else 0
@@ -1470,7 +1487,7 @@ def ki():
          "22. ki --s":"Select the kubernetes to be connected ( if there are multiple ~/.kube/kubeconfig*,the kubeconfig storage can be kubeconfig-hz,kubeconfig-sh,etc. ",
          "23. ki --c":"Enable write caching of namespace ( ~/.history/.ns_dict ",
          "24. ki --a":"List all pods in the kubernetes",
-         "Tips:": "Within the selection process of Pod filtering, where ' represents the most recent Pod, while '~' and '!' denote the Pod from the previous operation, '[' shows logs of the most used Pod, and the remaining symbols indicate the Pod that has been operated on the most."}
+         "Tips:": "Within the selection process of Pod filtering, where ' represents the most recent Pod, while '~' and '!' denote the Pod from the previous operation, '[' shows logs of the most used Pod, ']' enters the most used Pod, and the remaining symbols indicate the Pod that has been operated on the most."}
         for k,v in doc_dict.items():
             print(style % k,v)
 def main():

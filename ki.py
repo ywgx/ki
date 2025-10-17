@@ -25,6 +25,7 @@ session_config = None
 KI_AI_URL = os.getenv("KI_AI_URL", "https://api.xaixapi.com/v1/chat/completions")
 KI_AI_KEY = os.getenv("KI_AI_KEY", "sk-XvskBeymPs0X6HSju25MQ9WU8jtITF5GKG7GmV9TCvYVlk1B")
 KI_AI_MODEL = os.getenv("KI_AI_MODEL", "gemini-2.5-pro")
+KI_AUTO_SWITCH = os.getenv("KI_AUTO_SWITCH", "true").lower() not in ("false", "0", "no")
 KUBECTL_OPTIONS = "--insecure-skip-tls-verify"
 CACHE_DURATION = 8 * 60 * 60
 NS_CACHE_DURATION = 300
@@ -552,6 +553,14 @@ def find_ns(config_struct: list):
         ns = find_optimal(ns_list,ns_pattern)
         if ns:
             kubeconfig = config
+            break
+        if not KI_AUTO_SWITCH and n == 0:
+            if not ns and ns_dict == ki_ns_dict:
+                cmd = f"kubectl {KUBECTL_OPTIONS} get ns --no-headers --kubeconfig "+config
+                realtime_ns_list = [ e.split()[0] for e in get_data(cmd) ]
+                ns = find_optimal(realtime_ns_list,ns_pattern)
+                if ns:
+                    kubeconfig = config
             break
     return ns,kubeconfig,switch,result_num
 
@@ -1259,18 +1268,22 @@ def ki():
                             pods = [ e.split()[0] for e in get_data(cmd) ]
                             pod = find_optimal(pods,sys.argv[3]) if pods else None
                             if not (pods and pod):
-                                kn = re.split("[./]",sys.argv[2])
-                                ns_pattern = kn[-1] if len(kn) > 1 and len(kn[-1].strip()) > 0 else kn[0]
-                                os.environ['KUBECONFIG'] in config_struct[1] and config_struct[1].remove(os.environ['KUBECONFIG'])
-                                if config_struct[1]:
-                                    for n,config in enumerate(config_struct[1]):
-                                        cmd = f"kubectl {KUBECTL_OPTIONS} get ns --no-headers --kubeconfig "+config
-                                        ns_list = [ e.split()[0] for e in get_data(cmd) ]
-                                        ns = find_optimal(ns_list,ns_pattern)
-                                        if ns:
-                                            os.environ['KUBECONFIG'] = config
-                                            switch_num += 1
-                                            break
+                                if KI_AUTO_SWITCH:
+                                    kn = re.split("[./]",sys.argv[2])
+                                    ns_pattern = kn[-1] if len(kn) > 1 and len(kn[-1].strip()) > 0 else kn[0]
+                                    os.environ['KUBECONFIG'] in config_struct[1] and config_struct[1].remove(os.environ['KUBECONFIG'])
+                                    if config_struct[1]:
+                                        for n,config in enumerate(config_struct[1]):
+                                            cmd = f"kubectl {KUBECTL_OPTIONS} get ns --no-headers --kubeconfig "+config
+                                            ns_list = [ e.split()[0] for e in get_data(cmd) ]
+                                            ns = find_optimal(ns_list,ns_pattern)
+                                            if ns:
+                                                os.environ['KUBECONFIG'] = config
+                                                switch_num += 1
+                                                break
+                                    else:
+                                        print("NotFound")
+                                        break
                                 else:
                                     print("NotFound")
                                     break
@@ -1322,18 +1335,22 @@ def ki():
                                 cmd = f"kubectl top "+obj.lower()+" -n "+ ns +f"  --no-headers {KUBECTL_OPTIONS}|sort --key "+key+" --numeric"
                         result_lines = get_data(cmd)
                         if not result_lines:
-                            kn = re.split("[./]",sys.argv[2])
-                            ns_pattern = kn[-1] if len(kn) > 1 and len(kn[-1].strip()) > 0 else kn[0]
-                            os.environ['KUBECONFIG'] in config_struct[1] and config_struct[1].remove(os.environ['KUBECONFIG'])
-                            if config_struct[1]:
-                                for n,config in enumerate(config_struct[1]):
-                                    cmd = f"kubectl {KUBECTL_OPTIONS} get ns --no-headers --kubeconfig "+config
-                                    ns_list = [ e.split()[0] for e in get_data(cmd) ]
-                                    ns = find_optimal(ns_list,ns_pattern)
-                                    if ns:
-                                        os.environ['KUBECONFIG'] = config
-                                        switch_num += 1
-                                        break
+                            if KI_AUTO_SWITCH:
+                                kn = re.split("[./]",sys.argv[2])
+                                ns_pattern = kn[-1] if len(kn) > 1 and len(kn[-1].strip()) > 0 else kn[0]
+                                os.environ['KUBECONFIG'] in config_struct[1] and config_struct[1].remove(os.environ['KUBECONFIG'])
+                                if config_struct[1]:
+                                    for n,config in enumerate(config_struct[1]):
+                                        cmd = f"kubectl {KUBECTL_OPTIONS} get ns --no-headers --kubeconfig "+config
+                                        ns_list = [ e.split()[0] for e in get_data(cmd) ]
+                                        ns = find_optimal(ns_list,ns_pattern)
+                                        if ns:
+                                            os.environ['KUBECONFIG'] = config
+                                            switch_num += 1
+                                            break
+                                else:
+                                    print("No resources found.")
+                                    break
                             else:
                                 print("No resources found.")
                                 break

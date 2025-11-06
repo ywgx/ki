@@ -3,7 +3,7 @@
 # Description : Kubectl Pro
 # Version     : 7.0
 #*************************************************
-from collections import deque
+from collections import deque, Counter
 from ast import literal_eval
 import os,re,sys,time,readline,subprocess,hashlib
 #-----------------VAR-----------------------------
@@ -760,11 +760,31 @@ def info_k():
             dc1 = literal_eval(f1.read())
             dc2 = literal_eval(f2.read())
             for k in sorted(dc1):
-                most_recent = dc1[k][0] if len(dc1[k]) > 0 else ""
-                second_recent = dc1[k][1] if len(dc1[k]) > 1 else ""
+                most_used, second_most_used = get_most_used_pods(dc1[k])
+                most_recent = most_used if most_used else ""
+                second_recent = second_most_used if second_most_used else ""
                 print("{:<56}{:<32}{}".format(k, most_recent, second_recent))
             for k in sorted(dc2.items(),key=lambda d:d[1]):
                 print("{:<56}{}".format(k[0].split('/')[-1],k[1]))
+
+def get_most_used_pods(pod_history: list):
+    """从最近32条记录中获取使用频率最高的2个pod"""
+    if not pod_history:
+        return None, None
+
+    # 只统计最近32条记录
+    recent_history = pod_history[-32:]
+
+    # 统计每个pod的使用次数
+    counter = Counter(recent_history)
+    most_common = counter.most_common(2)
+
+    # 返回使用次数最多的前2个pod
+    most_used = most_common[0][0] if len(most_common) >= 1 else None
+    # 如果只有1个pod，次常用也是它
+    second_most_used = most_common[1][0] if len(most_common) >= 2 else most_used
+
+    return most_used, second_most_used
 
 def record(res: str,name: str,obj: str,cmd: str,kubeconfig: str,ns: str,config_struct: list):
     l = os.environ['SSH_CONNECTION'].split() if 'SSH_CONNECTION' in os.environ else ['NULL','NULL','NULL']
@@ -785,20 +805,21 @@ def record(res: str,name: str,obj: str,cmd: str,kubeconfig: str,ns: str,config_s
                     for j in dc.keys():
                         if i == j.split('/')[0]:
                             dc.pop(j,None)
-                # 获取最近使用的2个不同pod
+                # 将pod添加到历史记录（保存最多128个历史记录）
                 if key in dc:
-                    most_recent = dc[key][0]
-                    second_recent = dc[key][1] if len(dc[key]) > 1 else most_recent
-                    if name != most_recent:
-                        dc[key] = [name, most_recent]
-                    else:
-                        dc[key] = [name, second_recent]
+                    # 如果dc[key]是旧格式（只有2个元素的列表），转换为新格式
+                    if isinstance(dc[key], list) and len(dc[key]) <= 2:
+                        dc[key] = list(dc[key])  # 保留旧数据
+                    dc[key].append(name)
+                    # 限制历史记录长度为128
+                    if len(dc[key]) > 128:
+                        dc[key] = dc[key][-128:]
                 else:
-                    dc[key] = [name, name]
+                    dc[key] = [name]
             except:
                 os.unlink(ki_pod_dict)
     else:
-        dc[key] = [name, name]
+        dc[key] = [name]
     with open(ki_pod_dict,'w') as f: f.write(str(dc))
 
 def analyze_cluster(stream=True):
@@ -1417,7 +1438,11 @@ def ki():
                                     with open(ki_pod_dict,'r') as f:
                                         dc = literal_eval(f.read())
                                         key = k8s+'/'+ns+'/'+obj
-                                        last_res = dc[key][0] if key in dc else ""
+                                        if key in dc:
+                                            most_used, _ = get_most_used_pods(dc[key])
+                                            last_res = most_used if most_used else ""
+                                        else:
+                                            last_res = ""
                                         for n,e in enumerate(result_lines[::-1]):
                                             if last_res in e:
                                                 pod = str(result_len-n-1)
@@ -1428,7 +1453,11 @@ def ki():
                                     with open(ki_pod_dict,'r') as f:
                                         dc = literal_eval(f.read())
                                         key = k8s+'/'+ns+'/'+obj
-                                        last_res = dc[key][1] if key in dc and len(dc[key]) > 1 else ""
+                                        if key in dc:
+                                            _, second_most_used = get_most_used_pods(dc[key])
+                                            last_res = second_most_used if second_most_used else ""
+                                        else:
+                                            last_res = ""
                                         for n,e in enumerate(result_lines[::-1]):
                                             if last_res in e:
                                                 pod = str(result_len-n-1)
@@ -1437,7 +1466,11 @@ def ki():
                                 with open(ki_pod_dict,'r') as f:
                                     dc = literal_eval(f.read())
                                     key = k8s+'/'+ns+'/'+obj
-                                    last_res = dc[key][0] if key in dc else ""
+                                    if key in dc:
+                                        most_used, _ = get_most_used_pods(dc[key])
+                                        last_res = most_used if most_used else ""
+                                    else:
+                                        last_res = ""
                                     for n,e in enumerate(result_lines[::-1]):
                                         if last_res in e:
                                             pod = str(result_len-n-1)

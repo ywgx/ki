@@ -244,22 +244,23 @@ class History:
         return self.data[-1] if self.data else None
 
     def get_recent_containers(self):
-        """获取最近使用的2个不同容器，返回 (最近, 次近)"""
+        """从最近32条记录中获取使用频率最高的2个容器，返回 (最常用, 次常用)"""
         if not self.data:
             return None, None
 
-        # 从后往前找，找到最近的2个不同容器
-        seen = []
-        for container_name in reversed(self.data):
-            if container_name not in seen:
-                seen.append(container_name)
-            if len(seen) >= 2:
-                break
+        # 只统计最近32条记录
+        recent_data = list(self.data)[-32:]
 
-        most_recent = seen[0] if len(seen) >= 1 else None
-        second_recent = seen[1] if len(seen) >= 2 else most_recent
+        # 统计每个容器的使用次数
+        counter = Counter(recent_data)
+        most_common = counter.most_common(2)
 
-        return most_recent, second_recent
+        # 返回使用次数最多的前2个容器
+        most_used = most_common[0][0] if len(most_common) >= 1 else None
+        # 如果只有1个容器，次常用也是它
+        second_most_used = most_common[1][0] if len(most_common) >= 2 else most_used
+
+        return most_used, second_most_used
 
 history = History()
 atexit.register(history.save)

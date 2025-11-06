@@ -1,7 +1,7 @@
 #!/usr/bin/python3
 #*************************************************
 # Description : Kubectl Pro
-# Version     : 6.9
+# Version     : 7.0
 #*************************************************
 from collections import deque
 from ast import literal_eval
@@ -760,7 +760,9 @@ def info_k():
             dc1 = literal_eval(f1.read())
             dc2 = literal_eval(f2.read())
             for k in sorted(dc1):
-                print("{:<56}{:<32}{}".format(k,dc1[k][0],dc1[k][1]))
+                most_recent = dc1[k][0] if len(dc1[k]) > 0 else ""
+                second_recent = dc1[k][1] if len(dc1[k]) > 1 else ""
+                print("{:<56}{:<32}{}".format(k, most_recent, second_recent))
             for k in sorted(dc2.items(),key=lambda d:d[1]):
                 print("{:<56}{}".format(k[0].split('/')[-1],k[1]))
 
@@ -783,15 +785,20 @@ def record(res: str,name: str,obj: str,cmd: str,kubeconfig: str,ns: str,config_s
                     for j in dc.keys():
                         if i == j.split('/')[0]:
                             dc.pop(j,None)
-                name_dc = dict(dc[key][1]) if key in dc else {}
-                name_dc[name] = name_dc[name] + 1 if name in name_dc else 1
-                name_dc = sorted(name_dc.items(),key = lambda name_dc:(name_dc[1], name_dc[0]),reverse=True)
-                if len(name_dc) > 5: del name_dc[5:]
-                dc[key] = [name,name_dc]
+                # 获取最近使用的2个不同pod
+                if key in dc:
+                    most_recent = dc[key][0]
+                    second_recent = dc[key][1] if len(dc[key]) > 1 else most_recent
+                    if name != most_recent:
+                        dc[key] = [name, most_recent]
+                    else:
+                        dc[key] = [name, second_recent]
+                else:
+                    dc[key] = [name, name]
             except:
                 os.unlink(ki_pod_dict)
     else:
-        dc[key] = [name,[(name,1)]]
+        dc[key] = [name, name]
     with open(ki_pod_dict,'w') as f: f.write(str(dc))
 
 def analyze_cluster(stream=True):
@@ -1410,7 +1417,7 @@ def ki():
                                     with open(ki_pod_dict,'r') as f:
                                         dc = literal_eval(f.read())
                                         key = k8s+'/'+ns+'/'+obj
-                                        last_res = ( dc[key][0] if pod in ('!','~') else dc[key][1][0][0] ) if key in dc else ""
+                                        last_res = dc[key][0] if key in dc else ""
                                         for n,e in enumerate(result_lines[::-1]):
                                             if last_res in e:
                                                 pod = str(result_len-n-1)
@@ -1421,7 +1428,7 @@ def ki():
                                     with open(ki_pod_dict,'r') as f:
                                         dc = literal_eval(f.read())
                                         key = k8s+'/'+ns+'/'+obj
-                                        last_res = ( dc[key][0] if pod in ('!','~') else dc[key][1][0][0] ) if key in dc else ""
+                                        last_res = dc[key][1] if key in dc and len(dc[key]) > 1 else ""
                                         for n,e in enumerate(result_lines[::-1]):
                                             if last_res in e:
                                                 pod = str(result_len-n-1)
@@ -1430,7 +1437,7 @@ def ki():
                                 with open(ki_pod_dict,'r') as f:
                                     dc = literal_eval(f.read())
                                     key = k8s+'/'+ns+'/'+obj
-                                    last_res = ( dc[key][0] if pod in ('!','~') else dc[key][1][0][0] ) if key in dc else ""
+                                    last_res = dc[key][0] if key in dc else ""
                                     for n,e in enumerate(result_lines[::-1]):
                                         if last_res in e:
                                             pod = str(result_len-n-1)
@@ -1444,10 +1451,8 @@ def ki():
                             else:
                                 args = ''.join(podList[1:])
                         else:
-                            if is_bracket:
+                            if is_bracket or is_right_bracket:
                                 args = "l"
-                            elif is_right_bracket:
-                                args = "p"
                             else:
                                 args = "p"
                         if pod.isdigit() and int(pod) < result_len or ( result_len == 1 and pod != '*'):
@@ -1504,7 +1509,7 @@ def ki():
          "22. ki --s":"Select the kubernetes to be connected ( if there are multiple ~/.kube/kubeconfig*,the kubeconfig storage can be kubeconfig-hz,kubeconfig-sh,etc. ",
          "23. ki --c":"Enable write caching of namespace ( ~/.history/.ns_dict ",
          "24. ki --a":"List all pods in the kubernetes",
-         "Tips:": "Within the selection process of Pod filtering, where ' represents the most recent Pod, while '~' and '!' denote the Pod from the previous operation, '[' shows logs of the most used Pod, ']' enters the most used Pod, and the remaining symbols indicate the Pod that has been operated on the most."}
+         "Tips:": "Within the selection process of Pod filtering, '[' shows logs of the most recent Pod, ']' shows logs of the 2nd recent Pod, and other symbols (~, !, etc.) enter the most recent Pod."}
         for k,v in doc_dict.items():
             print(style % k,v)
 def main():

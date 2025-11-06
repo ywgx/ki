@@ -1,7 +1,7 @@
 #!/usr/bin/python3
 #*************************************************
 # Description : Docker Pro - Simplified Docker Management
-# Version     : 1.5
+# Version     : 1.6
 #*************************************************
 import os,re,sys,time,subprocess,atexit
 from collections import deque, Counter
@@ -145,7 +145,7 @@ def filter_containers(containers: list, pattern: str):
         return containers
     return [c for c in containers if container_matches(c, pattern)]
 
-def format_container_line(index, container, feature_dict=None, last_used=None, most_used=None):
+def format_container_line(index, container, feature_dict=None, last_used=None, most_used=None, second_most_used=None):
     """格式化容器显示行，高亮显示特征字符串和特殊标记"""
     status_color = "\033[1;32m" if "Up" in container['status'] else "\033[1;31m"
 
@@ -167,7 +167,9 @@ def format_container_line(index, container, feature_dict=None, last_used=None, m
     if container['name'] == last_used:
         marks += " \033[1;93m^\033[0m"  # 黄色的 ^ 表示上一次操作
     if container['name'] == most_used:
-        marks += " \033[1;91m~\033[0m"  # 红色的 ~ 表示最常操作
+        marks += " \033[1;91m[\033[0m"  # 红色的 [ 表示最近使用
+    if container['name'] == second_most_used:
+        marks += " \033[1;94m]\033[0m"  # 蓝色的 ] 表示次近使用
 
     return f"\033[1;32m{index:<3}\033[0m {container['id']:<12} {container['image']:<40} {status_color}{container['status']:<20}\033[0m {name_display}{marks}"
 
@@ -241,12 +243,23 @@ class History:
         """获取上一次操作的容器"""
         return self.data[-1] if self.data else None
 
-    def get_most_used(self):
-        """获取最常操作的容器"""
+    def get_recent_containers(self):
+        """获取最近使用的2个不同容器，返回 (最近, 次近)"""
         if not self.data:
-            return None
-        counter = Counter(self.data)
-        return counter.most_common(1)[0][0]
+            return None, None
+
+        # 从后往前找，找到最近的2个不同容器
+        seen = []
+        for container_name in reversed(self.data):
+            if container_name not in seen:
+                seen.append(container_name)
+            if len(seen) >= 2:
+                break
+
+        most_recent = seen[0] if len(seen) >= 1 else None
+        second_recent = seen[1] if len(seen) >= 2 else most_recent
+
+        return most_recent, second_recent
 
 history = History()
 atexit.register(history.save)
@@ -274,10 +287,12 @@ def main():
             print("                    If multiple containers: clear filter")
             print("  <               - Clear filter and show all containers")
             print("  ^               - Select last used container (marked with \033[1;93m^\033[0m)")
-            print("  [               - Show logs of most used container (marked with \033[1;91m~\033[0m)")
-            print("  [ <n>           - Show logs of most used container (tail n lines)")
-            print("  ]               - Enter most used container (marked with \033[1;91m~\033[0m)")
-            print("  ~,@,#,$,%,etc   - Select most used container and enter it")
+            print("  [               - Show logs of most recent container (marked with \033[1;91m[\033[0m)")
+            print("  [ <n>           - Show logs of most recent container (tail n lines)")
+            print("  ]               - Show logs of 2nd recent container (marked with \033[1;94m]\033[0m)")
+            print("  ] <n>           - Show logs of 2nd recent container (tail n lines)")
+            print("  ;               - Enter most recent container (marked with \033[1;91m[\033[0m)")
+            print("  ~,@,#,$,%,etc   - Select most recent container and enter it")
             print("  *               - Watch mode (refresh every 3s)")
             print("  :               - Select last container in list")
             print("  q or Ctrl+C     - Quit\n")
@@ -285,8 +300,8 @@ def main():
             print("  - The \033[1;95mpurple\033[0m characters are unique features for quick selection")
             print("  - Use / prefix to select by feature (e.g., /api)")
             print("  - Without / prefix, text will filter the list")
-            print("  - [ shows logs of most used container, ] enters most used container")
-            print("  - Any other special character (except ^ and <) selects the most used container")
+            print("  - [ and ] show logs of recent containers, ; enters most recent container")
+            print("  - Any other special character (except ^, <, [, ;, ]) selects most recent container")
             print("  - You can continuously filter results by typing search patterns\n")
             return
         else:
@@ -327,7 +342,7 @@ def main():
 
             # 获取历史信息
             last_used = history.get_last_used()
-            most_used = history.get_most_used()
+            most_used, second_most_used = history.get_recent_containers()
 
             # 清屏（仅在 watch 模式下）
             if watch_mode:
@@ -340,7 +355,7 @@ def main():
             print(f"\033[1;38;5;208m{cmd_display}\033[0m")
 
             for i, container in enumerate(containers):
-                print(format_container_line(i, container, feature_dict, last_used, most_used))
+                print(format_container_line(i, container, feature_dict, last_used, most_used, second_most_used))
 
             # 显示状态栏
             if len(containers) > 3 or active_filter:
@@ -413,7 +428,7 @@ def main():
                         print("\033[1;31mNo history found.\033[0m")
                         continue
                 elif first_part == '[':
-                    # [ 符号默认查看最常操作容器的日志
+                    # [ 符号默认查看最近使用容器的日志
                     if most_used:
                         selected_index = find_container_index(containers, most_used)
                         if selected_index is not None:
@@ -422,13 +437,13 @@ def main():
                             if len(parts) == 1:
                                 parts.append('l')
                         else:
-                            print(f"\033[1;31mMost used container '{most_used}' not found in current list.\033[0m")
+                            print(f"\033[1;31mMost recent container '{most_used}' not found in current list.\033[0m")
                             continue
                     else:
                         print("\033[1;31mNo history found.\033[0m")
                         continue
-                elif first_part == ']':
-                    # ] 符号默认进入最常操作容器
+                elif first_part == ';':
+                    # ; 符号默认进入最近使用容器
                     if most_used:
                         selected_index = find_container_index(containers, most_used)
                         if selected_index is not None:
@@ -440,8 +455,23 @@ def main():
                     else:
                         print("\033[1;31mNo history found.\033[0m")
                         continue
-                elif len(first_part) == 1 and not first_part.isalnum() and first_part not in ('<', '^', '/', '[', ']'):
-                    # 任意其他特殊标点符号，默认匹配最常操作的容器（进入容器）
+                elif first_part == ']':
+                    # ] 符号默认查看次近使用容器的日志
+                    if second_most_used:
+                        selected_index = find_container_index(containers, second_most_used)
+                        if selected_index is not None:
+                            is_index = True
+                            # 如果没有指定命令，默认为日志
+                            if len(parts) == 1:
+                                parts.append('l')
+                        else:
+                            print(f"\033[1;31mSecond recent container '{second_most_used}' not found in current list.\033[0m")
+                            continue
+                    else:
+                        print("\033[1;31mNo second container in history.\033[0m")
+                        continue
+                elif len(first_part) == 1 and not first_part.isalnum() and first_part not in ('<', '^', '/', '[', ';', ']'):
+                    # 任意其他特殊标点符号，默认匹配最近使用的容器（进入容器）
                     if most_used:
                         selected_index = find_container_index(containers, most_used)
                         if selected_index is not None:

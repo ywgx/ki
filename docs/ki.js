@@ -27,7 +27,7 @@ window.$docsify = {
         },
         plugins: [function (hook) {
                 var footer = [
-                        '<footer>', '<hr><small> © Ki Authors 2021-2025 | Documentation Distributed under CC-BY-4.0</small>', '</footer>'
+                        '<footer>', '<hr><small> © Ki Authors 2021-2026 | Documentation Distributed under CC-BY-4.0</small>', '</footer>'
                 ].join('')
                 hook.afterEach(function (html) { return html + footer })
         }]

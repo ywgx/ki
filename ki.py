@@ -26,6 +26,7 @@ KI_AI_URL = os.getenv("KI_AI_URL", "https://api.xairouter.com/v1/chat/completion
 KI_AI_KEY = os.getenv("KI_AI_KEY", "sk-XvsJhNdiXcDYA3e5hzD1AJP5ploMAaFuMTUxp3bHRfCiZRNt")
 KI_AI_MODEL = os.getenv("KI_AI_MODEL", "MiniMax-M2.1")
 KI_AUTO_SWITCH = os.getenv("KI_AUTO_SWITCH", "true").lower() not in ("false", "0", "no")
+KI_AUTO_CACHE = os.getenv("KI_AUTO_CACHE", "true").lower() not in ("false", "0", "no")
 KUBECTL_OPTIONS = "--insecure-skip-tls-verify"
 CACHE_DURATION = 8 * 60 * 60
 NS_CACHE_DURATION = 300
@@ -545,8 +546,12 @@ def find_ns(config_struct: list):
                     ns_list = d.get(config, [])
                 except:
                     os.path.exists(ki_cache) and os.unlink(ki_cache)
-                    cache_data = cache_ns(config_struct)
-                    ns_list = cache_data.get(config, [])
+                    if KI_AUTO_CACHE:
+                        cache_data = cache_ns(config_struct)
+                        ns_list = cache_data.get(config, [])
+                    else:
+                        cmd = f"kubectl {KUBECTL_OPTIONS} get ns --no-headers --kubeconfig "+config
+                        ns_list = [ e.split()[0] for e in get_data(cmd) ]
         else:
             cmd = f"kubectl {KUBECTL_OPTIONS} get ns --no-headers --kubeconfig "+config
             ns_list = [ e.split()[0] for e in get_data(cmd) ]
@@ -650,7 +655,7 @@ def switch_config(switch_num: int,k8s: str,ns: str,time: str):
 
         print("\033[1;93m{}\033[0m".format("[ "+time+"  "+str(switch_num+1)+"-SWITCH ---> "+k8s+" / "+ns+" ] "))
         find_history(os.environ['KUBECONFIG'],HISTORY_SCORE_DEFAULT)
-        switch_num > 0 and subprocess.Popen("ki --c",shell=True,stdout=subprocess.PIPE,stderr=subprocess.PIPE,universal_newlines=True)
+        switch_num > 0 and maybe_auto_cache()
         switch = True
     return switch
 
@@ -660,6 +665,10 @@ def get_data(cmd: str):
         return p.stdout.readlines()
     except:
         sys.exit()
+
+def maybe_auto_cache():
+    if KI_AUTO_CACHE:
+        subprocess.Popen("ki --c",shell=True,stdout=subprocess.PIPE,stderr=subprocess.PIPE,universal_newlines=True)
 
 def get_obj(ns: str,res: str,args='x'):
     d = RESOURCE_TYPE_MAPPING
@@ -1208,7 +1217,8 @@ def ki():
                     flag = False
         else:
             flag = False
-        flag or subprocess.Popen("ki --c",shell=True,stdout=subprocess.PIPE,stderr=subprocess.PIPE,universal_newlines=True)
+        if not flag:
+            maybe_auto_cache()
     elif len(sys.argv) == 2 and sys.argv[1] in ('--k'):
         info_k()
     elif len(sys.argv) == 2 and sys.argv[1] in ('--c','--cache'):
@@ -1508,12 +1518,12 @@ def ki():
                 else:
                     print("No resources found.")
                     if not os.path.exists(ki_cache) or (os.path.exists(ki_cache) and int(time.time()-os.stat(ki_cache).st_mtime) > CACHE_EXPIRY_SECONDS):
-                        subprocess.Popen("ki --c",shell=True,stdout=subprocess.PIPE,stderr=subprocess.PIPE,universal_newlines=True)
+                        maybe_auto_cache()
                     sys.exit()
         else:
             print("No namespace found in the kubernetes.")
             if not os.path.exists(ki_cache) or (os.path.exists(ki_cache) and int(time.time()-os.stat(ki_cache).st_mtime) > CACHE_EXPIRY_SECONDS):
-                subprocess.Popen("ki --c",shell=True,stdout=subprocess.PIPE,stderr=subprocess.PIPE,universal_newlines=True)
+                maybe_auto_cache()
     elif len(sys.argv) == 2 and sys.argv[1] in ('--h','--help'):
         style = "\033[1;32m%s\033[0m"
         print(style % "Kubectl pro controls the Kubernetes cluster manager,find more information at: https://ki.xabc.io\n")
@@ -1542,6 +1552,7 @@ def ki():
          "22. ki --s":"Select the kubernetes to be connected ( if there are multiple ~/.kube/kubeconfig*,the kubeconfig storage can be kubeconfig-hz,kubeconfig-sh,etc. ",
          "23. ki --c":"Enable write caching of namespace ( ~/.history/.ns_dict ",
          "24. ki --a":"List all pods in the kubernetes",
+         "Env:":"KI_AUTO_CACHE=false Disable auto cache build (manual ki --c still works)",
          "Tips:": "Within the selection process of Pod filtering, '[' shows logs of the most recent Pod, ']' shows logs of the 2nd recent Pod, and other symbols (~, !, etc.) enter the most recent Pod."}
         for k,v in doc_dict.items():
             print(style % k,v)

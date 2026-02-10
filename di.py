@@ -108,6 +108,19 @@ def get_data(cmd: str):
     except:
         return []
 
+def container_exists(container_name: str) -> bool:
+    """检查容器是否存在（包含已停止的容器）"""
+    try:
+        subprocess.run(
+            ["docker", "container", "inspect", container_name],
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
+            check=True,
+        )
+        return True
+    except Exception:
+        return False
+
 def container_matches(container, pattern):
     """检查容器是否匹配模式"""
     if not pattern:
@@ -182,11 +195,16 @@ def enter_single_container(container):
     """进入单个容器（快捷操作）"""
     history.record(container['name'])
     cmd = execute_container_action(container, "exec")
-    if cmd:
-        print('\033[1A\033[2K', end='')
-        print(f"\033[1;38;5;208m{cmd}\033[0m")
-        os.system(cmd)
-        print()
+    run_cmd(cmd)
+
+def run_cmd(cmd: str):
+    """显示并执行命令（用于交互模式）"""
+    if not cmd:
+        return
+    print('\033[1A\033[2K', end='')
+    print(f"\033[1;38;5;208m{cmd}\033[0m")
+    os.system(cmd)
+    print()
 
 def execute_container_action(container, action, args=""):
     """执行容器操作"""
@@ -239,6 +257,20 @@ class History:
         self.data.append(container_name)
         self.modified = True
 
+    def prune(self, container_name):
+        """从历史记录中移除指定容器（例如容器已被删除）"""
+        if not self.data:
+            return False
+
+        original = list(self.data)
+        filtered = [name for name in original if name != container_name]
+        if len(filtered) == len(original):
+            return False
+
+        self.data = deque(filtered, maxlen=self.data.maxlen)
+        self.modified = True
+        return True
+
     def get_last_used(self):
         """获取上一次操作的容器"""
         return self.data[-1] if self.data else None
@@ -261,6 +293,44 @@ class History:
         second_most_used = most_common[1][0] if len(most_common) >= 2 else most_used
 
         return most_used, second_most_used
+
+
+def prune_history_entry(history, container_name: str):
+    """从历史记录中移除指定容器并保存"""
+    if history.prune(container_name):
+        history.save()
+
+
+def find_existing_history_container(history, excluded=None):
+    """查找历史里仍存在的容器（包含已停止），并清理已删除条目"""
+    excluded_set = set(excluded or [])
+    seen = set()
+    for name in reversed(list(history.data)):
+        if name in seen or name in excluded_set:
+            continue
+        seen.add(name)
+
+        if container_exists(name):
+            return name
+        prune_history_entry(history, name)
+    return None
+
+
+def find_running_history_container(history, running_names: set, excluded=None):
+    """查找历史里仍在运行的容器，并清理已删除条目"""
+    excluded_set = set(excluded or [])
+    seen = set()
+    for name in reversed(list(history.data)):
+        if name in seen or name in excluded_set:
+            continue
+        seen.add(name)
+
+        if name in running_names:
+            return name
+        # 不在 docker ps 列表里：可能已停止或已删除；删除则清理
+        if not container_exists(name):
+            prune_history_entry(history, name)
+    return None
 
 history = History()
 atexit.register(history.save)
@@ -345,6 +415,9 @@ def main():
             last_used = history.get_last_used()
             most_used, second_most_used = history.get_recent_containers()
 
+            # 运行中容器名字集合（用于快速回退）
+            running_names = {c['name'] for c in all_containers}
+
             # 清屏（仅在 watch 模式下）
             if watch_mode:
                 print("\033[2J\033[H", end='')
@@ -420,25 +493,69 @@ def main():
                     # 上一次操作的容器
                     if last_used:
                         selected_index = find_container_index(containers, last_used)
+                        # 过滤条件可能隐藏了历史容器，尝试在全量列表里查找
+                        if selected_index is None and active_filter:
+                            selected_index = find_container_index(all_containers, last_used)
+                            if selected_index is not None:
+                                containers = all_containers
+                                active_filter = ""
+                                filtered_containers = []
                         if selected_index is not None:
                             is_index = True
                         else:
-                            print(f"\033[1;31mLast used container '{last_used}' not found in current list.\033[0m")
-                            continue
+                            if container_exists(last_used):
+                                print(f"\033[1;31mLast used container '{last_used}' is not running.\033[0m")
+                                continue
+
+                            prune_history_entry(history, last_used)
+                            target = find_running_history_container(history, running_names)
+                            if target:
+                                selected_index = find_container_index(all_containers, target)
+                                if selected_index is None:
+                                    print("\033[1;31mNo running history container found.\033[0m")
+                                    continue
+                                containers = all_containers
+                                active_filter = ""
+                                filtered_containers = []
+                                is_index = True
+                            else:
+                                print("\033[1;31mNo running history container found.\033[0m")
+                                continue
                     else:
                         print("\033[1;31mNo history found.\033[0m")
                         continue
                 elif first_part == '[':
                     # [ 符号默认查看最近使用容器的日志
                     if most_used:
+                        # 支持: "[" / "[ <n>" / "[ l <n>"
+                        if len(parts) == 1:
+                            parts.append('l')
+                        elif len(parts) == 2 and parts[1].isdigit():
+                            parts.insert(1, 'l')
+
                         selected_index = find_container_index(containers, most_used)
+                        # 过滤条件可能隐藏了历史容器，尝试在全量列表里查找
+                        if selected_index is None and active_filter:
+                            selected_index = find_container_index(all_containers, most_used)
+                            if selected_index is not None:
+                                containers = all_containers
+                                active_filter = ""
+                                filtered_containers = []
                         if selected_index is not None:
                             is_index = True
-                            # 如果没有指定命令，默认为日志
-                            if len(parts) == 1:
-                                parts.append('l')
                         else:
-                            print(f"\033[1;31mMost recent container '{most_used}' not found in current list.\033[0m")
+                            # 可能已停止/被过滤/被删除：存在则直接 logs；被删除则清理并回退
+                            target = most_used
+                            if not container_exists(target):
+                                prune_history_entry(history, target)
+                                target = find_existing_history_container(history, excluded=[target])
+                            if target:
+                                history.record(target)
+                                args = parts[2] if len(parts) > 2 else ""
+                                cmd = execute_container_action({'name': target}, "logs", args)
+                                run_cmd(cmd)
+                            else:
+                                print("\033[1;31mNo valid history container found.\033[0m")
                             continue
                     else:
                         print("\033[1;31mNo history found.\033[0m")
@@ -447,26 +564,68 @@ def main():
                     # ; 符号默认进入最近使用容器
                     if most_used:
                         selected_index = find_container_index(containers, most_used)
+                        # 过滤条件可能隐藏了历史容器，尝试在全量列表里查找
+                        if selected_index is None and active_filter:
+                            selected_index = find_container_index(all_containers, most_used)
+                            if selected_index is not None:
+                                containers = all_containers
+                                active_filter = ""
+                                filtered_containers = []
                         if selected_index is not None:
                             is_index = True
                             # 不添加额外命令，默认进入容器
                         else:
-                            print(f"\033[1;31mMost used container '{most_used}' not found in current list.\033[0m")
-                            continue
+                            # 进入容器必须是运行态；若 most_used 被删除/停止，回退到历史里仍在运行的
+                            target = most_used
+                            if not container_exists(target):
+                                prune_history_entry(history, target)
+                            target = find_running_history_container(history, running_names, excluded=[most_used])
+                            if target:
+                                selected_index = find_container_index(all_containers, target)
+                                if selected_index is None:
+                                    print("\033[1;31mNo running history container found.\033[0m")
+                                    continue
+                                containers = all_containers
+                                active_filter = ""
+                                filtered_containers = []
+                                is_index = True
+                            else:
+                                print("\033[1;31mNo running history container found.\033[0m")
+                                continue
                     else:
                         print("\033[1;31mNo history found.\033[0m")
                         continue
                 elif first_part == ']':
                     # ] 符号默认查看次近使用容器的日志
                     if second_most_used:
+                        # 支持: "]" / "] <n>" / "] l <n>"
+                        if len(parts) == 1:
+                            parts.append('l')
+                        elif len(parts) == 2 and parts[1].isdigit():
+                            parts.insert(1, 'l')
+
                         selected_index = find_container_index(containers, second_most_used)
+                        # 过滤条件可能隐藏了历史容器，尝试在全量列表里查找
+                        if selected_index is None and active_filter:
+                            selected_index = find_container_index(all_containers, second_most_used)
+                            if selected_index is not None:
+                                containers = all_containers
+                                active_filter = ""
+                                filtered_containers = []
                         if selected_index is not None:
                             is_index = True
-                            # 如果没有指定命令，默认为日志
-                            if len(parts) == 1:
-                                parts.append('l')
                         else:
-                            print(f"\033[1;31mSecond recent container '{second_most_used}' not found in current list.\033[0m")
+                            target = second_most_used
+                            if not container_exists(target):
+                                prune_history_entry(history, target)
+                                target = find_existing_history_container(history, excluded=[most_used, target])
+                            if target:
+                                history.record(target)
+                                args = parts[2] if len(parts) > 2 else ""
+                                cmd = execute_container_action({'name': target}, "logs", args)
+                                run_cmd(cmd)
+                            else:
+                                print("\033[1;31mNo valid history container found.\033[0m")
                             continue
                     else:
                         print("\033[1;31mNo second container in history.\033[0m")
@@ -475,11 +634,32 @@ def main():
                     # 任意其他特殊标点符号，默认匹配最近使用的容器（进入容器）
                     if most_used:
                         selected_index = find_container_index(containers, most_used)
+                        # 过滤条件可能隐藏了历史容器，尝试在全量列表里查找
+                        if selected_index is None and active_filter:
+                            selected_index = find_container_index(all_containers, most_used)
+                            if selected_index is not None:
+                                containers = all_containers
+                                active_filter = ""
+                                filtered_containers = []
                         if selected_index is not None:
                             is_index = True
                         else:
-                            print(f"\033[1;31mMost used container '{most_used}' not found in current list.\033[0m")
-                            continue
+                            target = most_used
+                            if not container_exists(target):
+                                prune_history_entry(history, target)
+                            target = find_running_history_container(history, running_names, excluded=[most_used])
+                            if target:
+                                selected_index = find_container_index(all_containers, target)
+                                if selected_index is None:
+                                    print("\033[1;31mNo running history container found.\033[0m")
+                                    continue
+                                containers = all_containers
+                                active_filter = ""
+                                filtered_containers = []
+                                is_index = True
+                            else:
+                                print("\033[1;31mNo running history container found.\033[0m")
+                                continue
                     else:
                         print("\033[1;31mNo history found.\033[0m")
                         continue
@@ -519,11 +699,7 @@ def main():
                         cmd = execute_container_action(container, "exec")
 
                     if cmd:
-                        # 移动光标到输入行并清除
-                        print('\033[1A\033[2K', end='')
-                        print(f"\033[1;38;5;208m{cmd}\033[0m")
-                        os.system(cmd)
-                        print()
+                        run_cmd(cmd)
                 else:
                     # 不是有效的索引，将整个输入作为过滤条件
                     active_filter = user_input

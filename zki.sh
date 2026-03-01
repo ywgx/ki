@@ -73,7 +73,7 @@ alias vi=vim
 alias ls='ls --color'
 alias ll='ls -l'
 alias kn='cd ~/.kube;for file in $(find . -name "kubeconfig-*-NULL"); do mv "$file" "${file%-NULL}"; done'
-alias dw='watch -n 2 docker stats --no-stream'
+alias kk='watch -n 2 docker stats --no-stream'
 alias kubectl="kubectl --insecure-skip-tls-verify "
 [ $USER = root ] && STYLE="\033c\033[5;32m%s\033[1;m\n" || STYLE="\033[5;32m%s\033[1;m\n"
 [[ $- == *i* ]] && [ -e "$KUBECONFIG" ] && printf $STYLE "$(/usr/local/bin/ki --w)"

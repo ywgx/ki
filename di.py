@@ -1,275 +1,353 @@
 #!/usr/bin/python3
 #*************************************************
 # Description : Docker Pro - Simplified Docker Management
-# Version     : 1.6
+# Version     : 2.0
 #*************************************************
-import os,re,sys,time,subprocess,atexit
+import os,re,sys,time,shlex,shutil,atexit,threading,subprocess
 from collections import deque, Counter
+
+try:
+    import readline
+except ImportError:
+    readline = None
 
 #-----------------CONST---------------------------
 DEFAULT_LOG_TAIL = 100
-WATCH_INTERVAL = 3
-HISTORY_SAVE_FREQUENCY = 10
+GREP_LOG_TAIL = 1024
+MAX_LOG_TAIL = 100000
+WATCH_INTERVAL = 2
 HISTORY_MAX_SIZE = 128
+HISTORY_RECENT_SIZE = 32
+INPUT_HISTORY_SIZE = 500
+HISTORY_FILE = os.path.expanduser("~/.di_history")
+INPUT_HISTORY_FILE = os.path.expanduser("~/.di_input")
+LOG_TAIL_FILE = os.path.expanduser("~/.di_line")
+COMPOSE_FILES_LABEL = "com.docker.compose.project.config_files"
+
+RESET = "\033[0m"
+GREEN = "\033[1;32m"
+RED = "\033[1;31m"
+LIGHT_RED = "\033[1;91m"
+YELLOW = "\033[1;93m"
+BLUE = "\033[1;94m"
+CYAN = "\033[1;36m"
+PURPLE = "\033[1;95m"
+ORANGE = "\033[1;38;5;208m"
+GRAY = "\033[90m"
+ANSI_RE = re.compile(r'\033\[[0-9;?]*[A-Za-z]')
+
+# 输入的动作（含别名） => 内部动作
+ACTIONS = {
+    'p': 'shell', 'sh': 'shell', 'bash': 'shell', 'exec': 'shell',
+    'l': 'logs', 'log': 'logs', 'logs': 'logs',
+    'g': 'grep', 'grep': 'grep',
+    'c': 'context',
+    'r': 'restart', 'restart': 'restart',
+    'start': 'start',
+    'stop': 'stop',
+    'del': 'rm', 'rm': 'rm', 'delete': 'rm',
+    'd': 'inspect', 'inspect': 'inspect',
+    'o': 'dump',
+    't': 'top', 'top': 'top',
+    'x': 'run',
+    'e': 'edit', 'edit': 'edit',
+    'dbg': 'debug', 'debug': 'debug',
+}
+# 历史快捷符号 => (历史类型, 默认动作)；其他单个标点符号等同于 ;
+HISTORY_TARGETS = {'^': ('last', 'auto'), '[': ('most', 'logs'), ']': ('second', 'logs'), ';': ('most', 'auto')}
+NON_HISTORY_SYMBOLS = set('</*?:')
+# 这些输入有特殊含义，不能作为特征串
+RESERVED_INPUTS = {'q', 'a'}
+
+class DockerError(Exception):
+    """docker 命令执行失败"""
+
+class Notice(Exception):
+    """需要提示给用户的错误信息"""
+
+class Quit(Exception):
+    """退出交互模式"""
 
 #-----------------FUN-----------------------------
-def get_feature(name_list: list):
-    """计算每个名称的最短唯一特征子串"""
-    P = 177
-    MOD = 192073433
-
-    string_hashes = []
-    max_string_length = 0
-    for string in name_list:
-        hashes = [0]
-        for i in range(len(string)):
-             hashes.append((hashes[-1] * P + ord(string[i])) % MOD)
-        string_hashes.append(hashes)
-        max_string_length = max(max_string_length, len(string))
-
-    pows = [1]
-    for i in range(max_string_length + 1):
-        pows.append(pows[-1] * P % MOD)
-
-    sorted_indices = list(range(len(name_list)))
-    sorted_indices = sorted(sorted_indices, key=lambda i: len(name_list[i]))
-
-    disabled_hashes = set()
-    answers = [None for _ in name_list]
-    for i in sorted_indices:
-        string = name_list[i]
-        hashes = string_hashes[i]
-
-        hash_to_be_disabled = []
-        min_length = len(string) + 1
-        for x in range(len(string)):
-            for y in range(x, len(string)):
-                substr_hash = (hashes[y + 1] - hashes[x] * pows[y + 1 - x]) % MOD
-                substr_hash = (substr_hash + MOD) % MOD
-                hash_to_be_disabled.append(substr_hash)
-                if substr_hash not in disabled_hashes and min_length > (y - x + 1):
-                    min_length = y - x + 1
-                    answers[i] = (x, y)
-
-        disabled_hashes.update(hash_to_be_disabled)
-
-    d = {}
-    for i, (x, y) in enumerate(answers):
-        if answers[i]:
-            d[name_list[i]] = name_list[i][x: y + 1]
-        else:
-            d[name_list[i]] = name_list[i]
-    return d
-
-def find_optimal(container_list: list, pattern: str):
-    """查找最佳匹配的容器"""
-    if not pattern:
-        return None
-
-    container_list.sort()
-    has_pattern = [pattern.lower() in row.lower() for row in container_list]
-
-    # 优先完全匹配
-    for i, container in enumerate(container_list):
-        if pattern.lower() == container.lower():
-            return container
-
-    # 然后是包含匹配
-    matches = [container for i, container in enumerate(container_list) if has_pattern[i]]
-    if matches:
-        # 返回匹配度最高的（名称最短的）
-        return min(matches, key=len)
-
-    return None
-
-def find_by_feature(containers: list, feature_dict: dict, input_str: str):
-    """通过特征字符串查找容器"""
-    # 先尝试特征字符串完全匹配
-    for name, feature in feature_dict.items():
-        if input_str == feature:
-            for i, container in enumerate(containers):
-                if container['name'] == name:
-                    return i
-
-    # 再尝试特征字符串部分匹配
-    for name, feature in feature_dict.items():
-        if input_str in feature or feature in input_str:
-            for i, container in enumerate(containers):
-                if container['name'] == name:
-                    return i
-
-    return None
-
-def get_data(cmd: str):
-    """执行命令并返回输出行"""
+def docker(args, timeout=30):
+    """执行 docker 命令，返回 (returncode, stdout, stderr)"""
     try:
-        p = subprocess.Popen(cmd, shell=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE, universal_newlines=True)
-        return p.stdout.readlines()
-    except:
-        return []
+        p = subprocess.run(['docker'] + args, stdout=subprocess.PIPE, stderr=subprocess.PIPE,
+                           universal_newlines=True, timeout=timeout)
+        return p.returncode, p.stdout, p.stderr
+    except (OSError, subprocess.TimeoutExpired) as e:
+        return 1, '', str(e)
 
-def container_exists(container_name: str) -> bool:
-    """检查容器是否存在（包含已停止的容器）"""
-    try:
-        subprocess.run(
-            ["docker", "container", "inspect", container_name],
-            stdout=subprocess.DEVNULL,
-            stderr=subprocess.DEVNULL,
-            check=True,
-        )
-        return True
-    except Exception:
-        return False
+def parse_state(status: str):
+    """从 docker ps 的 STATUS 推断容器状态"""
+    s = status.lower()
+    if s.startswith('up'):
+        return 'paused' if '(paused)' in s else 'running'
+    for state in ('restarting', 'exited', 'created', 'removing', 'dead'):
+        if s.startswith(state):
+            return state
+    return 'unknown'
 
-def container_matches(container, pattern):
-    """检查容器是否匹配模式"""
-    if not pattern:
-        return True
-    return (pattern.lower() in container['name'].lower() or
-            pattern.lower() in container['image'].lower() or
-            pattern in container['id'])
+def compact_ports(ports: str):
+    """只保留宿主机端口：0.0.0.0:7793->8080/tcp, :::7793->8080/tcp => :7793"""
+    host_ports = []
+    for port in re.findall(r':(\d+(?:-\d+)?)->', ports):
+        if port not in host_ports:
+            host_ports.append(port)
+    return ','.join(':' + p for p in host_ports)
 
-def get_containers(pattern=""):
-    """获取容器列表"""
-    cmd = "docker ps --format 'table {{.ID}}\t{{.Image}}\t{{.Status}}\t{{.Names}}'"
-    lines = get_data(cmd)
-
-    if not lines or len(lines) < 2:
-        return []
+def get_containers(show_all=False):
+    """获取容器列表（按名称排序，序号稳定）"""
+    fmt = '{{.ID}}\t{{.Image}}\t{{.Status}}\t{{.Names}}\t{{.Ports}}'
+    rc, out, err = docker(['ps', '--format', fmt] + (['-a'] if show_all else []))
+    if rc != 0:
+        raise DockerError(err.strip() or "docker ps failed")
 
     containers = []
-    for line in lines[1:]:
-        parts = line.strip().split()
-        if len(parts) >= 4:
-            container = {
-                'id': parts[0],
-                'image': parts[1],
-                'status': ' '.join(parts[2:-1]),
-                'name': parts[-1]
-            }
-            if container_matches(container, pattern):
-                containers.append(container)
-
+    for line in out.splitlines():
+        parts = line.split('\t')
+        if len(parts) < 5:
+            continue
+        cid, image, status, names, ports = parts[:5]
+        # 旧式 --link 会产生 "a,b/alias" 这样的多个名称
+        name = next((n for n in names.split(',') if '/' not in n), names)
+        containers.append({'id': cid, 'image': image, 'status': status, 'name': name,
+                           'ports': compact_ports(ports), 'state': parse_state(status)})
+    containers.sort(key=lambda c: c['name'])
     return containers
 
+def inspect_container(name: str):
+    """获取单个容器信息（包含未列出的已停止容器），不存在返回 None"""
+    fmt = '{{.Id}}\t{{.Config.Image}}\t{{.State.Status}}\t{{.Name}}'
+    rc, out, _ = docker(['container', 'inspect', '--format', fmt, '--', name], timeout=10)
+    parts = out.strip().split('\t')
+    if rc != 0 or len(parts) < 4:
+        return None
+    cid, image, state, cname = parts[:4]
+    return {'id': cid[:12], 'image': image, 'status': state.capitalize(), 'name': cname.lstrip('/'),
+            'ports': '', 'state': state}
+
 def filter_containers(containers: list, pattern: str):
-    """过滤容器列表"""
+    """过滤容器：优先匹配名称，名称都不匹配时再匹配镜像和 ID 前缀"""
     if not pattern:
         return containers
-    return [c for c in containers if container_matches(c, pattern)]
+    p = pattern.lower()
+    by_name = [c for c in containers if p in c['name'].lower()]
+    return by_name or [c for c in containers if p in c['image'].lower() or c['id'].startswith(p)]
 
-def format_container_line(index, container, feature_dict=None, last_used=None, most_used=None, second_most_used=None):
-    """格式化容器显示行，高亮显示特征字符串和特殊标记"""
-    status_color = "\033[1;32m" if "Up" in container['status'] else "\033[1;31m"
+def get_feature(name_list: list):
+    """计算每个名称的最短特征子串：只出现在这一个名称里，优先纯字母数字、单词开头
+    名称是其他名称的子串时（如 news / news-mail）没有特征串，需要输入完整名称"""
+    lowered = [name.lower() for name in name_list]
+    counter = Counter()
+    for s in lowered:
+        counter.update({s[i:j] for i in range(len(s)) for j in range(i + 1, len(s) + 1)})
 
-    # 如果有特征字典，高亮显示特征字符串
-    name_display = container['name']
-    if feature_dict and container['name'] in feature_dict:
-        feature = feature_dict[container['name']]
-        pos = container['name'].find(feature)
-        if pos >= 0:
-            name_display = (container['name'][:pos] +
-                          "\033[1;95m" + feature + "\033[0m" +
-                          container['name'][pos+len(feature):])
+    features = {}
+    for name, s in zip(name_list, lowered):
+        best = None
+        for i in range(len(s)):
+            for j in range(i + 1, len(s) + 1):
+                sub = s[i:j]
+                if counter[sub] != 1:
+                    continue
+                if sub.isdigit() or sub in RESERVED_INPUTS or not any(ch.isalnum() for ch in sub):
+                    continue
+                # 含 - _ . 的特征串不好输入，按多一位计算；长度相同时优先单词开头、靠前
+                score = (len(sub) + (0 if sub.isalnum() else 1), i > 0 and s[i - 1].isalnum(), i)
+                if best is None or score < best[0]:
+                    best = (score, i, j)
+                break
+        if best:
+            features[name] = name[best[1]:best[2]]
+    return features
 
-    # 在名称后面添加序号
-    name_display += f" \033[1;36m[{index}]\033[0m"  # 青色显示序号
+def is_history_symbol(token: str):
+    """是否是历史快捷符号（^ [ ] ; 及其他单个标点）"""
+    return token in HISTORY_TARGETS or (len(token) == 1 and not token.isalnum() and token not in NON_HISTORY_SYMBOLS)
 
-    # 添加特殊标记
-    marks = ""
-    if container['name'] == last_used:
-        marks += " \033[1;93m^\033[0m"  # 黄色的 ^ 表示上一次操作
-    if container['name'] == most_used:
-        marks += " \033[1;91m[\033[0m"  # 红色的 [ 表示最近使用
-    if container['name'] == second_most_used:
-        marks += " \033[1;94m]\033[0m"  # 蓝色的 ] 表示次近使用
+def parse_action(tokens: list, default: str):
+    """解析动作，返回 (动作, 参数)；支持 l200 这种紧凑写法，单独的数字等同于 l <n>"""
+    if not tokens:
+        return default, []
+    word = tokens[0]
+    if word.isdigit():
+        return 'logs', tokens
+    if word in ACTIONS:
+        return ACTIONS[word], tokens[1:]
+    if word[0] in 'lgc' and word[1:].isdigit():
+        return ACTIONS[word[0]], [word[1:]] + tokens[1:]
+    raise Notice(f"Unknown action '{word}'. Actions: l g c r start stop del d o t x e dbg (? for help)")
 
-    return f"\033[1;32m{index:<3}\033[0m {container['id']:<12} {container['image']:<40} {status_color}{container['status']:<20}\033[0m {name_display}{marks}"
+def load_log_tail():
+    """读取上一次使用的日志行数"""
+    try:
+        with open(LOG_TAIL_FILE) as f:
+            value = f.read().strip()
+        if value.isdigit() and 0 < int(value) <= MAX_LOG_TAIL:
+            return int(value)
+    except OSError:
+        pass
+    return DEFAULT_LOG_TAIL
 
-def find_container_index(containers, container_name):
-    """查找容器在列表中的索引（使用字典优化）"""
-    name_to_index = {c['name']: i for i, c in enumerate(containers)}
-    return name_to_index.get(container_name)
+def save_log_tail(tail: int):
+    try:
+        with open(LOG_TAIL_FILE, 'w') as f:
+            f.write(str(tail))
+    except OSError:
+        pass
 
-def enter_single_container(container):
-    """进入单个容器（快捷操作）"""
-    history.record(container['name'])
-    cmd = execute_container_action(container, "exec")
-    run_cmd(cmd)
+def logs_command(name: str, action: str, args: list):
+    """l [n|keyword] / g keyword / c keyword"""
+    if args and args[0].isdigit():
+        tail = min(max(int(args[0]), 1), MAX_LOG_TAIL)
+        save_log_tail(tail)
+        return f"docker logs -f --tail {tail} {name}"
+    if args:
+        keyword = shlex.quote(' '.join(args))
+        if action == 'logs':
+            return f"docker logs -f --tail {GREP_LOG_TAIL} {name} 2>&1 | grep -a --color=auto -e {keyword}"
+        context = " -C 10" if action == 'context' else ""
+        return f"docker logs -f {name} 2>&1 | grep -a --color=auto{context} -e {keyword}"
+    return f"docker logs -f --tail {load_log_tail()} {name}"
 
-def run_cmd(cmd: str):
-    """显示并执行命令（用于交互模式）"""
-    if not cmd:
-        return
-    print('\033[1A\033[2K', end='')
-    print(f"\033[1;38;5;208m{cmd}\033[0m")
-    os.system(cmd)
-    print()
+def confirm_action(caution: str):
+    """高危操作二次确认"""
+    length = readline.get_current_history_length() if readline else 0
+    try:
+        answer = input(f"{RED}{caution}{RESET}, confirm? (yes/no): ").strip().lower()
+    except (EOFError, KeyboardInterrupt):
+        print()
+        answer = ""
+    # 确认输入不进入输入历史
+    if readline and readline.get_current_history_length() > length:
+        readline.remove_history_item(readline.get_current_history_length() - 1)
+    if answer in ('yes', 'y'):
+        return True
+    print("Operation canceled.")
+    return False
 
-def execute_container_action(container, action, args=""):
-    """执行容器操作"""
-    if action == "exec":
-        cmd = f"docker exec -it {container['name']} sh"
-    elif action == "logs":
-        tail = args if args and args.isdigit() else str(DEFAULT_LOG_TAIL)
-        cmd = f"docker logs -f --tail {tail} {container['name']}"
-    else:
-        return None
+def run_cmd(cmd: str, note=None, erase=True):
+    """显示并执行命令；交互模式下覆盖掉输入行；输出被重定向时提示信息写到 stderr"""
+    out = sys.stdout if sys.stdout.isatty() else sys.stderr
+    if erase:
+        print('\033[1A\033[2K', end='', file=out)
+    print(f"{ORANGE}{cmd}{RESET}", file=out)
+    if note:
+        print(f"{YELLOW}{note}{RESET}", file=out)
+    out.flush()
+    status = os.system(cmd)
+    if erase:
+        print()
+    return status >> 8 if status > 255 else status
 
-    return cmd
+def status_color(c):
+    """状态颜色：运行绿色，unhealthy / 重启中 / 异常退出红色，启动中 / 暂停黄色，正常退出灰色"""
+    status = c['status'].lower()
+    if c['state'] == 'running':
+        if '(unhealthy)' in status:
+            return RED
+        return YELLOW if 'starting' in status else GREEN
+    if c['state'] == 'paused':
+        return YELLOW
+    if c['state'] == 'created' or status.startswith('exited (0)'):
+        return GRAY
+    return RED
+
+def truncate(text: str, width: int):
+    return text if len(text) <= width else '..' + text[-(width - 2):]
+
+def format_rows(containers, features, marks, stats=None):
+    """格式化容器列表；列宽按内容自适应，终端不够宽时截断镜像名、隐藏 ID"""
+    if not containers:
+        return []
+    width = shutil.get_terminal_size((240, 50)).columns - 1
+    usage = {c['name']: stats.get(c['name'], ('', '')) for c in containers} if stats is not None else {}
+
+    w_idx = len(str(len(containers) - 1))
+    w_name = max(len(c['name']) + 2 * len(marks.get(c['name'], [])) for c in containers)
+    w_status = max(len(c['status']) for c in containers)
+    w_image = max(len(c['image']) for c in containers)
+    w_ports = max(len(c['ports']) for c in containers)
+    widths = [w_idx, w_name, w_status]
+    if stats is not None:
+        w_cpu = max([len(cpu) for cpu, _ in usage.values()] + [4])
+        w_mem = max([len(mem) for _, mem in usage.values()] + [4])
+        widths += [w_cpu, w_mem]
+    used = sum(widths) + 2 * len(widths) + (w_ports + 2 if w_ports else 0)
+    show_id = width - used - w_image >= 14
+    # 镜像名按剩余宽度截断，太窄时不显示
+    show_image = width - used >= 10
+    w_image = min(w_image, width - used)
+
+    rows = []
+    for i, c in enumerate(containers):
+        name = c['name']
+        name_display = name
+        feature = features.get(name)
+        if feature:
+            pos = name.find(feature)
+            name_display = name[:pos] + PURPLE + feature + RESET + name[pos + len(feature):]
+        mk = marks.get(name, [])
+        for symbol, color in mk:
+            name_display += f" {color}{symbol}{RESET}"
+        name_display += ' ' * (w_name - len(name) - 2 * len(mk))
+
+        row = f"{GREEN}{i:<{w_idx}}{RESET}  {name_display}  {status_color(c)}{c['status']:<{w_status}}{RESET}"
+        if stats is not None:
+            cpu, mem = usage[name]
+            row += f"  {cpu:>{w_cpu}}  {mem:>{w_mem}}"
+        if show_image:
+            row += f"  {truncate(c['image'], w_image):<{w_image}}"
+        if w_ports:
+            row += f"  {CYAN}{c['ports']:<{w_ports}}{RESET}"
+        if show_id:
+            row += f"  {GRAY}{c['id']}{RESET}"
+        rows.append(row.rstrip())
+    return rows
 
 class History:
-    """容器操作历史记录管理"""
-    def __init__(self, filepath=None, maxsize=HISTORY_MAX_SIZE):
-        self.filepath = filepath or os.path.expanduser("~/.di_history")
+    """容器操作历史；每次操作追加写入文件，多个终端同时使用不会互相覆盖"""
+    def __init__(self, filepath=HISTORY_FILE, maxsize=HISTORY_MAX_SIZE):
+        self.filepath = filepath
         self.data = deque(maxlen=maxsize)
-        self.modified = False
 
-    def load(self):
-        """加载历史记录"""
-        if os.path.exists(self.filepath):
-            try:
-                with open(self.filepath, 'r') as f:
-                    for line in f:
-                        container_name = line.strip()
-                        if container_name:
-                            self.data.append(container_name)
-                self.modified = False
-            except:
-                pass
+    def _read(self):
+        try:
+            with open(self.filepath) as f:
+                return [line.strip() for line in f if line.strip()]
+        except OSError:
+            return []
 
-    def save(self):
-        """保存历史记录（仅在有修改时）"""
-        if not self.modified:
-            return
+    def _write(self, names):
         try:
             temp_file = self.filepath + '.tmp'
             with open(temp_file, 'w') as f:
-                for container_name in self.data:
-                    f.write(f"{container_name}\n")
+                f.writelines(f"{name}\n" for name in names)
             os.replace(temp_file, self.filepath)
-            self.modified = False
-        except:
+        except OSError:
             pass
+
+    def load(self):
+        """加载历史记录，文件过长时压缩"""
+        names = self._read()
+        self.data = deque(names, maxlen=self.data.maxlen)
+        if len(names) > self.data.maxlen * 2:
+            self._write(self.data)
 
     def record(self, container_name):
         """记录操作历史"""
         self.data.append(container_name)
-        self.modified = True
+        try:
+            with open(self.filepath, 'a') as f:
+                f.write(f"{container_name}\n")
+        except OSError:
+            pass
 
     def prune(self, container_name):
         """从历史记录中移除指定容器（例如容器已被删除）"""
-        if not self.data:
-            return False
-
-        original = list(self.data)
-        filtered = [name for name in original if name != container_name]
-        if len(filtered) == len(original):
-            return False
-
-        self.data = deque(filtered, maxlen=self.data.maxlen)
-        self.modified = True
-        return True
+        self.data = deque((n for n in self.data if n != container_name), maxlen=self.data.maxlen)
+        self._write([n for n in self._read() if n != container_name][-self.data.maxlen:])
 
     def get_last_used(self):
         """获取上一次操作的容器"""
@@ -277,445 +355,482 @@ class History:
 
     def get_recent_containers(self):
         """从最近32条记录中获取使用频率最高的2个容器，返回 (最常用, 次常用)"""
-        if not self.data:
-            return None, None
-
-        # 只统计最近32条记录
-        recent_data = list(self.data)[-32:]
-
-        # 统计每个容器的使用次数
-        counter = Counter(recent_data)
-        most_common = counter.most_common(2)
-
-        # 返回使用次数最多的前2个容器
-        most_used = most_common[0][0] if len(most_common) >= 1 else None
+        most_common = Counter(list(self.data)[-HISTORY_RECENT_SIZE:]).most_common(2)
+        most_used = most_common[0][0] if most_common else None
         # 如果只有1个容器，次常用也是它
         second_most_used = most_common[1][0] if len(most_common) >= 2 else most_used
-
         return most_used, second_most_used
 
+class StatsStream:
+    """后台持续读取 docker stats，供 watch 模式显示 CPU / 内存"""
+    def __init__(self):
+        self.data = {}
+        self.proc = None
 
-def prune_history_entry(history, container_name: str):
-    """从历史记录中移除指定容器并保存"""
-    if history.prune(container_name):
-        history.save()
+    def start(self):
+        try:
+            self.proc = subprocess.Popen(
+                ['docker', 'stats', '--format', '{{.Name}}\t{{.CPUPerc}}\t{{.MemUsage}}'],
+                stdout=subprocess.PIPE, stderr=subprocess.DEVNULL, universal_newlines=True)
+        except OSError:
+            return
+        threading.Thread(target=self._read, daemon=True).start()
 
+    def _read(self):
+        for line in self.proc.stdout:
+            parts = ANSI_RE.sub('', line).strip().split('\t')
+            if len(parts) >= 3:
+                self.data[parts[0]] = (parts[1], parts[2].split(' / ')[0])
 
-def find_existing_history_container(history, excluded=None):
-    """查找历史里仍存在的容器（包含已停止），并清理已删除条目"""
-    excluded_set = set(excluded or [])
-    seen = set()
-    for name in reversed(list(history.data)):
-        if name in seen or name in excluded_set:
-            continue
-        seen.add(name)
-
-        if container_exists(name):
-            return name
-        prune_history_entry(history, name)
-    return None
-
-
-def find_running_history_container(history, running_names: set, excluded=None):
-    """查找历史里仍在运行的容器，并清理已删除条目"""
-    excluded_set = set(excluded or [])
-    seen = set()
-    for name in reversed(list(history.data)):
-        if name in seen or name in excluded_set:
-            continue
-        seen.add(name)
-
-        if name in running_names:
-            return name
-        # 不在 docker ps 列表里：可能已停止或已删除；删除则清理
-        if not container_exists(name):
-            prune_history_entry(history, name)
-    return None
+    def stop(self):
+        if self.proc and self.proc.poll() is None:
+            self.proc.terminate()
+            try:
+                self.proc.wait(timeout=2)
+            except subprocess.TimeoutExpired:
+                self.proc.kill()
 
 history = History()
-atexit.register(history.save)
 
-def main():
-    pattern = ""
+class DockerPro:
+    """交互式容器管理"""
+    def __init__(self, show_all=False):
+        self.show_all = show_all
+        self.interactive = False
+        self.filter = ""
+        self.all = []
+        self.features = {}
+        self.shell_cache = {}
+        self.debug_image = None
 
-    # 加载历史记录
-    history.load()
+    def refresh(self):
+        self.all = get_containers(self.show_all)
 
-    # 解析命令行参数
-    if len(sys.argv) > 1:
-        if sys.argv[1] in ('--h', '--help', '-h'):
-            print("\033[1;32mDocker Pro - Simplified Docker Management\033[0m\n")
-            print("Usage:")
-            print("  di              - List all containers")
-            print("  di <pattern>    - List containers matching pattern")
-            print("\nIn selection mode:")
-            print("  <index>         - Enter the container")
-            print("  <index> l       - Show container logs (tail 100)")
-            print("  <index> l <n>   - Show container logs (tail n lines)")
-            print("  /<feature>      - Select by unique feature string (prefix with /)")
-            print("  <pattern>       - Filter containers (type any text to filter)")
-            print("  <Enter>         - If filtered to 1 container: enter it")
-            print("                    If multiple containers: clear filter")
-            print("  <               - Clear filter and show all containers")
-            print("  ^               - Select last used container (marked with \033[1;93m^\033[0m)")
-            print("  [               - Show logs of most recent container (marked with \033[1;91m[\033[0m)")
-            print("  [ <n>           - Show logs of most recent container (tail n lines)")
-            print("  ]               - Show logs of 2nd recent container (marked with \033[1;94m]\033[0m)")
-            print("  ] <n>           - Show logs of 2nd recent container (tail n lines)")
-            print("  ;               - Enter most recent container (marked with \033[1;91m[\033[0m)")
-            print("  ~,@,#,$,%,etc   - Select most recent container and enter it")
-            print("  *               - Watch mode (refresh every 3s)")
-            print("  :               - Select last container in list")
-            print("  q or Ctrl+C     - Quit\n")
-            print("Tips:")
-            print("  - The \033[1;95mpurple\033[0m characters are unique features for quick selection")
-            print("  - Use / prefix to select by feature (e.g., /api)")
-            print("  - Without / prefix, text will filter the list")
-            print("  - [ and ] show logs of recent containers, ; enters most recent container")
-            print("  - Any other special character (except ^, <, [, ;, ]) selects most recent container")
-            print("  - You can continuously filter results by typing search patterns\n")
-            return
-        else:
-            pattern = ' '.join(sys.argv[1:])
+    def displayed(self):
+        return filter_containers(self.all, self.filter)
 
-    # 主循环
-    watch_mode = False
-    all_containers = []  # 保存所有容器
-    filtered_containers = []  # 保存过滤后的容器
-    active_filter = ""  # 当前激活的过滤条件
+    def list_lines(self, containers, stats=None):
+        """生成列表（标题、容器行、状态栏）"""
+        self.features = get_feature([c['name'] for c in containers]) if len(containers) > 1 else {}
+        last_used = history.get_last_used()
+        most_used, second_most_used = history.get_recent_containers()
+        marks = {}
+        for c in containers:
+            mk = []
+            if c['name'] == last_used:
+                mk.append(('^', YELLOW))         # 上一次操作
+            if c['name'] == most_used:
+                mk.append(('[', LIGHT_RED))      # 最常用
+            if c['name'] == second_most_used:
+                mk.append((']', BLUE))           # 次常用
+            marks[c['name']] = mk
 
-    try:
+        cmd_display = "docker ps" + (" -a" if self.show_all else "")
+        if self.filter:
+            cmd_display += f" | grep '{self.filter}'"
+        lines = [f"{ORANGE}{cmd_display}{RESET}"] + format_rows(containers, self.features, marks, stats)
+
+        if len(containers) > 3 or self.filter or self.show_all or stats is not None:
+            status_parts = [f"Containers: {len(containers)}"]
+            if self.filter:
+                status_parts.extend([f"Filter: '{self.filter}'", f"Total: {len(self.all)}"])
+            if self.show_all:
+                status_parts.append("All")
+            status_parts.append(time.strftime("%T", time.localtime()))
+            if stats is not None:
+                status_parts.append("Watching... Ctrl+C to return")
+            lines.append(f"{YELLOW}[ {' ] [ '.join(status_parts)} ]{RESET}")
+        return lines
+
+    def loop(self):
+        """交互主循环"""
+        self.interactive = True
+        prompt = make_prompt()
         while True:
-            # 获取所有容器
-            if not watch_mode or not all_containers:
-                all_containers = get_containers(pattern)
+            self.refresh()
+            if not self.all:
+                if self.show_all or not docker(['ps', '-aq'])[1].strip():
+                    print(f"{RED}No containers found.{RESET}")
+                    return
+                print(f"{YELLOW}No running containers, showing all.{RESET}")
+                self.show_all = True
+                continue
 
-            if not all_containers:
-                print("\033[1;31mNo containers found.\033[0m")
-                if pattern:
-                    print(f"Pattern: '{pattern}'")
-                return
-
-            # 应用过滤
-            if active_filter:
-                filtered_containers = filter_containers(all_containers, active_filter)
-                containers = filtered_containers
-                # 如果过滤无结果，直接清除过滤
-                if not containers:
-                    active_filter = ""
-                    containers = all_containers
-            else:
-                containers = all_containers
-
-            # 计算特征字符串
-            container_names = [c['name'] for c in containers]
-            feature_dict = get_feature(container_names) if len(container_names) > 1 else {}
-
-            # 获取历史信息
-            last_used = history.get_last_used()
-            most_used, second_most_used = history.get_recent_containers()
-
-            # 运行中容器名字集合（用于快速回退）
-            running_names = {c['name'] for c in all_containers}
-
-            # 清屏（仅在 watch 模式下）
-            if watch_mode:
-                print("\033[2J\033[H", end='')
-
-            # 显示容器列表
-            cmd_display = "docker ps"
-            if active_filter:
-                cmd_display += f" | grep '{active_filter}'"
-            print(f"\033[1;38;5;208m{cmd_display}\033[0m")
-
-            for i, container in enumerate(containers):
-                print(format_container_line(i, container, feature_dict, last_used, most_used, second_most_used))
-
-            # 显示状态栏
-            if len(containers) > 3 or active_filter:
-                status_parts = [f"Containers: {len(containers)}"]
-                if active_filter:
-                    status_parts.extend([f"Filter: '{active_filter}'", f"Total: {len(all_containers)}"])
-                status_parts.append(time.strftime("%T", time.localtime()))
-                if watch_mode:
-                    status_parts.append("Watching...")
-                status = " ] [ ".join(status_parts)
-                print(f"\033[1;93m[ {status} ]\033[0m")
+            containers = self.displayed()
+            if not containers:
+                print(f"{RED}No containers match '{self.filter}', filter cleared.{RESET}")
+                self.filter = ""
+                containers = self.all
+            print('\n'.join(self.list_lines(containers)))
 
             try:
-                # 获取用户输入
-                if watch_mode:
-                    time.sleep(WATCH_INTERVAL)
-                    all_containers = get_containers(pattern)
-                    continue
-
-                user_input = input("\033[1;95mselect\033[0m\033[5;95m:\033[0m").strip()
-
-                # 解析用户输入
-                if user_input.lower() == 'q':
-                    break
-                elif user_input == '*':
-                    watch_mode = True
-                    continue
-                elif user_input == '<':
-                    # 清除过滤条件
-                    active_filter = ""
-                    filtered_containers = []
-                    continue
-                elif user_input == '':
-                    # 空输入的智能处理
-                    if len(containers) == 1:
-                        # 只有一个结果，直接进入
-                        enter_single_container(containers[0])
-                    elif active_filter:
-                        # 多个结果且有过滤条件，清除过滤
-                        active_filter = ""
-                        filtered_containers = []
-                    continue
-
-                # 解析选择和命令
-                parts = user_input.split(None, 2)
-                if not parts:
-                    continue
-
-                first_part = parts[0]
-
-                # 检查是否是索引或特殊命令
-                is_index = False
-                selected_index = -1
-
-                # 处理特殊索引
-                if first_part == ':':
-                    if containers:
-                        selected_index = len(containers) - 1
-                        is_index = True
-                elif first_part == '^':
-                    # 上一次操作的容器
-                    if last_used:
-                        selected_index = find_container_index(containers, last_used)
-                        # 过滤条件可能隐藏了历史容器，尝试在全量列表里查找
-                        if selected_index is None and active_filter:
-                            selected_index = find_container_index(all_containers, last_used)
-                            if selected_index is not None:
-                                containers = all_containers
-                                active_filter = ""
-                                filtered_containers = []
-                        if selected_index is not None:
-                            is_index = True
-                        else:
-                            if container_exists(last_used):
-                                print(f"\033[1;31mLast used container '{last_used}' is not running.\033[0m")
-                                continue
-
-                            prune_history_entry(history, last_used)
-                            target = find_running_history_container(history, running_names)
-                            if target:
-                                selected_index = find_container_index(all_containers, target)
-                                if selected_index is None:
-                                    print("\033[1;31mNo running history container found.\033[0m")
-                                    continue
-                                containers = all_containers
-                                active_filter = ""
-                                filtered_containers = []
-                                is_index = True
-                            else:
-                                print("\033[1;31mNo running history container found.\033[0m")
-                                continue
-                    else:
-                        print("\033[1;31mNo history found.\033[0m")
-                        continue
-                elif first_part == '[':
-                    # [ 符号默认查看最近使用容器的日志
-                    if most_used:
-                        # 支持: "[" / "[ <n>" / "[ l <n>"
-                        if len(parts) == 1:
-                            parts.append('l')
-                        elif len(parts) == 2 and parts[1].isdigit():
-                            parts.insert(1, 'l')
-
-                        selected_index = find_container_index(containers, most_used)
-                        # 过滤条件可能隐藏了历史容器，尝试在全量列表里查找
-                        if selected_index is None and active_filter:
-                            selected_index = find_container_index(all_containers, most_used)
-                            if selected_index is not None:
-                                containers = all_containers
-                                active_filter = ""
-                                filtered_containers = []
-                        if selected_index is not None:
-                            is_index = True
-                        else:
-                            # 可能已停止/被过滤/被删除：存在则直接 logs；被删除则清理并回退
-                            target = most_used
-                            if not container_exists(target):
-                                prune_history_entry(history, target)
-                                target = find_existing_history_container(history, excluded=[target])
-                            if target:
-                                history.record(target)
-                                args = parts[2] if len(parts) > 2 else ""
-                                cmd = execute_container_action({'name': target}, "logs", args)
-                                run_cmd(cmd)
-                            else:
-                                print("\033[1;31mNo valid history container found.\033[0m")
-                            continue
-                    else:
-                        print("\033[1;31mNo history found.\033[0m")
-                        continue
-                elif first_part == ';':
-                    # ; 符号默认进入最近使用容器
-                    if most_used:
-                        selected_index = find_container_index(containers, most_used)
-                        # 过滤条件可能隐藏了历史容器，尝试在全量列表里查找
-                        if selected_index is None and active_filter:
-                            selected_index = find_container_index(all_containers, most_used)
-                            if selected_index is not None:
-                                containers = all_containers
-                                active_filter = ""
-                                filtered_containers = []
-                        if selected_index is not None:
-                            is_index = True
-                            # 不添加额外命令，默认进入容器
-                        else:
-                            # 进入容器必须是运行态；若 most_used 被删除/停止，回退到历史里仍在运行的
-                            target = most_used
-                            if not container_exists(target):
-                                prune_history_entry(history, target)
-                            target = find_running_history_container(history, running_names, excluded=[most_used])
-                            if target:
-                                selected_index = find_container_index(all_containers, target)
-                                if selected_index is None:
-                                    print("\033[1;31mNo running history container found.\033[0m")
-                                    continue
-                                containers = all_containers
-                                active_filter = ""
-                                filtered_containers = []
-                                is_index = True
-                            else:
-                                print("\033[1;31mNo running history container found.\033[0m")
-                                continue
-                    else:
-                        print("\033[1;31mNo history found.\033[0m")
-                        continue
-                elif first_part == ']':
-                    # ] 符号默认查看次近使用容器的日志
-                    if second_most_used:
-                        # 支持: "]" / "] <n>" / "] l <n>"
-                        if len(parts) == 1:
-                            parts.append('l')
-                        elif len(parts) == 2 and parts[1].isdigit():
-                            parts.insert(1, 'l')
-
-                        selected_index = find_container_index(containers, second_most_used)
-                        # 过滤条件可能隐藏了历史容器，尝试在全量列表里查找
-                        if selected_index is None and active_filter:
-                            selected_index = find_container_index(all_containers, second_most_used)
-                            if selected_index is not None:
-                                containers = all_containers
-                                active_filter = ""
-                                filtered_containers = []
-                        if selected_index is not None:
-                            is_index = True
-                        else:
-                            target = second_most_used
-                            if not container_exists(target):
-                                prune_history_entry(history, target)
-                                target = find_existing_history_container(history, excluded=[most_used, target])
-                            if target:
-                                history.record(target)
-                                args = parts[2] if len(parts) > 2 else ""
-                                cmd = execute_container_action({'name': target}, "logs", args)
-                                run_cmd(cmd)
-                            else:
-                                print("\033[1;31mNo valid history container found.\033[0m")
-                            continue
-                    else:
-                        print("\033[1;31mNo second container in history.\033[0m")
-                        continue
-                elif len(first_part) == 1 and not first_part.isalnum() and first_part not in ('<', '^', '/', '[', ';', ']'):
-                    # 任意其他特殊标点符号，默认匹配最近使用的容器（进入容器）
-                    if most_used:
-                        selected_index = find_container_index(containers, most_used)
-                        # 过滤条件可能隐藏了历史容器，尝试在全量列表里查找
-                        if selected_index is None and active_filter:
-                            selected_index = find_container_index(all_containers, most_used)
-                            if selected_index is not None:
-                                containers = all_containers
-                                active_filter = ""
-                                filtered_containers = []
-                        if selected_index is not None:
-                            is_index = True
-                        else:
-                            target = most_used
-                            if not container_exists(target):
-                                prune_history_entry(history, target)
-                            target = find_running_history_container(history, running_names, excluded=[most_used])
-                            if target:
-                                selected_index = find_container_index(all_containers, target)
-                                if selected_index is None:
-                                    print("\033[1;31mNo running history container found.\033[0m")
-                                    continue
-                                containers = all_containers
-                                active_filter = ""
-                                filtered_containers = []
-                                is_index = True
-                            else:
-                                print("\033[1;31mNo running history container found.\033[0m")
-                                continue
-                    else:
-                        print("\033[1;31mNo history found.\033[0m")
-                        continue
-                elif first_part.isdigit():
-                    selected_index = int(first_part)
-                    is_index = True
-                elif first_part.startswith('/') and len(first_part) > 1:
-                    # 使用 / 前缀进行特征匹配选择
-                    feature_str = first_part[1:]
-                    feature_index = find_by_feature(containers, feature_dict, feature_str)
-                    if feature_index is not None:
-                        selected_index = feature_index
-                        is_index = True
-                    else:
-                        print(f"\033[1;31mNo container matches feature: {feature_str}\033[0m")
-                        continue
-
-                # 如果找到了有效的索引，执行操作
-                if is_index and 0 <= selected_index < len(containers):
-                    container = containers[selected_index]
-
-                    # 记录历史
-                    history.record(container['name'])
-
-                    # 定期保存（每N次操作保存一次）
-                    if len(history.data) % HISTORY_SAVE_FREQUENCY == 0:
-                        history.save()
-
-                    # 检查是否有附加命令
-                    command = parts[1] if len(parts) > 1 else ""
-                    args = parts[2] if len(parts) > 2 else ""
-
-                    # 执行操作
-                    if command.startswith('l'):
-                        cmd = execute_container_action(container, "logs", args)
-                    else:
-                        cmd = execute_container_action(container, "exec")
-
-                    if cmd:
-                        run_cmd(cmd)
-                else:
-                    # 不是有效的索引，将整个输入作为过滤条件
-                    active_filter = user_input
-                    continue
-
+                user_input = input(prompt).strip()
             except KeyboardInterrupt:
-                print("\n\033[1;32mBye!\033[0m")
-                break
+                print(f"\n{GREEN}Bye!{RESET}")
+                return
             except EOFError:
-                break
-            except Exception as e:
-                print(f"\033[1;31mError: {e}\033[0m")
-                continue
-    finally:
-        # 确保退出时保存历史
-        history.save()
+                print()
+                return
+
+            try:
+                self.handle(user_input, containers)
+            except Quit:
+                return
+            except (Notice, DockerError) as e:
+                print(f"{RED}{e}{RESET}")
+            except KeyboardInterrupt:
+                print()
+
+    def handle(self, user_input, containers):
+        """解析交互输入：<目标> [动作] [参数]"""
+        tokens = user_input.split()
+        if not tokens:
+            # 只有一个结果直接进入；多个结果清除过滤
+            if len(containers) == 1:
+                self.act(containers[0], [])
+            elif self.filter:
+                self.filter = ""
+            return
+
+        head, rest = tokens[0], tokens[1:]
+        if not rest:
+            if head.lower() == 'q':
+                raise Quit()
+            if head == '*':
+                return self.watch()
+            if head == '<':
+                self.filter = ""
+                return
+            if head == 'a':
+                self.show_all = not self.show_all
+                return
+            if head == '?':
+                print_help()
+                return
+
+        target, default = self.resolve_symbol(head, containers)
+        if target is None:
+            selecting = head.startswith('/') and len(head) > 1
+            pattern = head[1:] if selecting else head
+            if not rest and not selecting:
+                # 单独的文本作为过滤条件
+                if not filter_containers(self.all, pattern):
+                    raise Notice(f"No match: '{pattern}'")
+                self.filter = pattern
+                return
+            target, default = self.pick(pattern, containers), 'auto'
+            if not target:
+                return
+        self.act(target, rest, default)
+
+    def oneshot(self, args):
+        """di <目标> [动作] [参数]：直接执行并返回退出码；匹配到多个容器时返回 None 进入交互选择"""
+        head, rest = args[0], args[1:]
+        self.features = get_feature([c['name'] for c in self.all])
+        target, default = self.resolve_symbol(head, self.all)
+        if target is None:
+            pattern = head[1:] if head.startswith('/') and len(head) > 1 else head
+            target, default = self.pick(pattern, self.all), 'auto'
+            if not target:
+                return None
+        return self.act(target, rest, default)
+
+    def resolve_symbol(self, head, containers):
+        """解析序号、: 、历史符号、/特征串，返回 (容器, 默认动作)；不是这些返回 (None, None)"""
+        if head.isdigit() and int(head) < len(containers):
+            return containers[int(head)], 'auto'
+        if head == ':' and containers:
+            return containers[-1], 'auto'
+        if is_history_symbol(head):
+            kind, default = HISTORY_TARGETS.get(head, ('most', 'auto'))
+            return self.history_container(kind), default
+        if head.startswith('/') and len(head) > 1:
+            for c in containers:
+                if self.features.get(c['name'], '').lower() == head[1:].lower():
+                    return c, 'auto'
+        return None, None
+
+    def pick(self, pattern, containers):
+        """按名称 / 模式选择唯一容器；匹配到多个时设为过滤条件并返回 None"""
+        matches = self.find(pattern, containers)
+        if not matches:
+            raise Notice(f"No container matches '{pattern}'")
+        if len(matches) > 1:
+            self.filter = pattern
+            print(f"{YELLOW}{len(matches)} containers match '{pattern}', select by index.{RESET}")
+            return None
+        return matches[0]
+
+    def find(self, pattern, containers):
+        """名称完全匹配优先，其次过滤匹配；先在当前列表找，再到全部容器找，最后尝试未列出的容器"""
+        p = pattern.lower()
+        pools = [containers] if containers is self.all else [containers, self.all]
+        for pool in pools:
+            exact = [c for c in pool if c['name'].lower() == p]
+            if exact:
+                return exact
+            matched = filter_containers(pool, pattern)
+            if matched:
+                return matched
+        c = inspect_container(pattern)
+        return [c] if c else []
+
+    def history_container(self, kind):
+        """按历史取容器（包含已停止的）；已被删除的容器从历史中清理后重新计算"""
+        while True:
+            if kind == 'last':
+                name = history.get_last_used()
+            else:
+                most_used, second_most_used = history.get_recent_containers()
+                name = most_used if kind == 'most' else second_most_used
+            if not name:
+                raise Notice("No second container in history." if kind == 'second' else "No history found.")
+            c = next((c for c in self.all if c['name'] == name), None) or inspect_container(name)
+            if c and c['name'] == name:
+                return c
+            history.prune(name)
+
+    def act(self, c, tokens, default='auto'):
+        """对容器执行动作"""
+        action, args = parse_action(tokens, default)
+        note = None
+        if action == 'auto':
+            if c['state'] == 'running':
+                action = 'shell'
+            else:
+                action = 'logs'
+                note = f"{c['name']} is {c['state']}, showing logs"
+        cmd, build_note = self.build_command(c, action, args)
+        if not cmd:
+            return 1
+        if action == 'rm':
+            history.prune(c['name'])
+        else:
+            history.record(c['name'])
+        return run_cmd(cmd, build_note or note, erase=self.interactive)
+
+    def build_command(self, c, action, args):
+        """生成动作对应的命令，返回 (命令, 提示)；取消时命令为 None"""
+        name = c['name']
+        if action in ('shell', 'debug'):
+            if c['state'] != 'running':
+                raise Notice(f"{name} is {c['state']}. Try: l (logs) / start")
+            shell = self.detect_shell(c) if action == 'shell' else None
+            if shell:
+                return f"docker exec -it {name} {shell}", None
+            return self.debug_command(c, no_shell=(action == 'shell'))
+        if action in ('logs', 'grep', 'context'):
+            return logs_command(name, action, args), None
+        if action == 'restart':
+            return f"docker restart {name}", None
+        if action == 'start':
+            return f"docker start {name}", None
+        if action == 'stop':
+            return (f"docker stop {name}", None) if confirm_action(f"This will stop {name}") else (None, None)
+        if action == 'rm':
+            return (f"docker rm -f {name}", None) if confirm_action(f"This will remove {name}") else (None, None)
+        if action == 'inspect':
+            pager = " | less -FRX" if sys.stdout.isatty() and shutil.which('less') else ""
+            return f"docker container inspect {name}{pager}", None
+        if action == 'dump':
+            return f"docker container inspect {name} > {name}.inspect.json", None
+        if action == 'top':
+            return f"docker top {name}", None
+        if action == 'run':
+            if not args:
+                raise Notice("Usage: <target> x <command>, e.g. 0 x redis-cli info")
+            # 输出被管道 / 重定向时不分配 TTY，避免 \r\n
+            flags = "-it" if sys.stdin.isatty() and sys.stdout.isatty() else "-i"
+            # 命令行参数已被 shell 拆分，需要重新转义；交互输入保留原样（可以使用引号）
+            command = ' '.join(args) if self.interactive else ' '.join(shlex.quote(a) for a in args)
+            return f"docker exec {flags} {name} {command}", None
+        if action == 'edit':
+            fmt = '{{index .Config.Labels "%s"}}' % COMPOSE_FILES_LABEL
+            _, out, _ = docker(['container', 'inspect', '--format', fmt, name], timeout=10)
+            files = [f for f in out.strip().split(',') if f and f != '<no value>']
+            if not files:
+                raise Notice(f"{name} is not managed by docker compose.")
+            editor = os.environ.get('EDITOR') or ('vim' if shutil.which('vim') else 'vi')
+            return f"{editor} {' '.join(shlex.quote(f) for f in files)}", None
+        raise Notice(f"Unknown action '{action}'")
+
+    def detect_shell(self, c):
+        """检测容器内可用的 shell：bash 优先，其次 sh；都没有返回 None"""
+        if c['id'] not in self.shell_cache:
+            shell = None
+            rc, out, _ = docker(['exec', c['name'], 'sh', '-c',
+                                 'command -v bash >/dev/null 2>&1 && echo bash || echo sh'], timeout=10)
+            if rc == 0 and out.strip() in ('bash', 'sh'):
+                shell = out.strip()
+            elif docker(['exec', c['name'], 'bash', '-c', 'echo bash'], timeout=10)[1].strip() == 'bash':
+                shell = 'bash'
+            self.shell_cache[c['id']] = shell
+        return self.shell_cache[c['id']]
+
+    def pick_debug_image(self):
+        """调试镜像：DI_DEBUG_IMAGE > 本地 busybox > 本地 alpine > 本地 *alpine* 镜像 > busybox（自动拉取）"""
+        if not self.debug_image:
+            image = os.environ.get('DI_DEBUG_IMAGE', '')
+            if not image:
+                _, out, _ = docker(['images', '--format', '{{.Repository}}:{{.Tag}}'], timeout=10)
+                local = [i for i in out.split() if not i.endswith(':<none>')]
+                checks = (lambda i: i.split('/')[-1].startswith('busybox:'),
+                          lambda i: i.split('/')[-1].startswith('alpine:'),
+                          lambda i: 'alpine' in i.split(':')[-1])
+                image = next((i for check in checks for i in local if check(i)), 'busybox')
+            self.debug_image = image
+        return self.debug_image
+
+    def debug_command(self, c, no_shell):
+        """调试容器：共享目标容器的 PID / 网络命名空间，目标文件系统在 /proc/1/root"""
+        name = c['name']
+        image = self.pick_debug_image()
+        ps1 = shlex.quote(f"PS1=[debug:{name}] \\w # ")
+        cmd = (f"docker run --rm -it --pid container:{name} --network container:{name} --cap-add SYS_PTRACE "
+               f"-e {ps1} --entrypoint sh {image} -c 'cd /proc/1/root 2>/dev/null; exec sh'")
+        reason = f"{name} has no shell, " if no_shell else ""
+        return cmd, f"{reason}debug shell via {image}: shares PID / network with {name}, its filesystem is /proc/1/root"
+
+    def watch(self):
+        """watch 模式：定时刷新列表并显示 CPU / 内存，Ctrl+C 返回"""
+        stats = StatsStream()
+        stats.start()
+        print("\033[2J", end='')
+        try:
+            while True:
+                self.refresh()
+                lines = self.list_lines(self.displayed() or self.all, stats.data)
+                sys.stdout.write("\033[H" + ''.join(f"{line}\033[K\n" for line in lines) + "\033[J")
+                sys.stdout.flush()
+                time.sleep(WATCH_INTERVAL)
+        except KeyboardInterrupt:
+            print()
+        finally:
+            stats.stop()
+
+    def complete(self, text, state):
+        """Tab 补全：第一个词补全容器名，之后补全动作"""
+        first_word = not readline.get_line_buffer()[:readline.get_begidx()].strip()
+        words = [c['name'] for c in self.all] if first_word else sorted(ACTIONS)
+        matches = [w for w in words if w.startswith(text)]
+        return matches[state] if state < len(matches) else None
+
+def make_prompt():
+    """GNU readline 需要用 \\001 \\002 包住颜色码，否则光标位置计算错误"""
+    s, e = ('\001', '\002') if readline and 'libedit' not in (readline.__doc__ or '') else ('', '')
+    return f"{s}{PURPLE}{e}select{s}{RESET}\033[5;95m{e}:{s}{RESET}{e}"
+
+def setup_readline(app):
+    """方向键编辑、输入历史、Tab 补全"""
+    if not readline:
+        return
+    try:
+        readline.read_history_file(INPUT_HISTORY_FILE)
+    except OSError:
+        pass
+    readline.set_history_length(INPUT_HISTORY_SIZE)
+
+    def save_input_history():
+        try:
+            readline.write_history_file(INPUT_HISTORY_FILE)
+        except OSError:
+            pass
+    atexit.register(save_input_history)
+
+    readline.set_completer_delims(' \t\n')
+    readline.set_completer(app.complete)
+    if 'libedit' in (readline.__doc__ or ''):
+        readline.parse_and_bind("bind ^I rl_complete")
+    else:
+        readline.parse_and_bind("tab: complete")
+
+def print_help():
+    print(f"""{GREEN}Docker Pro - Simplified Docker Management{RESET}
+
+Usage:
+  di                      - List running containers
+  di -a                   - List all containers (including stopped)
+  di <pattern>            - List containers matching pattern
+  di <target> <action>    - Run action directly, e.g. di news l 200 / di tmpfile r / di [
+
+In selection mode: <target> [action] [args]
+  Targets:
+  <index>                 - Container by index (sorted by name, stable)
+  <name>                  - Exact name or unique match, e.g. news l / pages r
+  /<feature>              - Select by feature (the {PURPLE}purple{RESET} characters) or name
+  :                       - Last container in list
+  ^                       - Last used container (marked with {YELLOW}^{RESET})
+  [  ]                    - Most / 2nd most used container (marked with {LIGHT_RED}[{RESET} {BLUE}]{RESET}), default action: logs
+  ;  ~ @ # $ % etc        - Most used container, default action: enter
+
+  Actions:
+  (none)                  - Enter container: bash > sh > debug shell; show logs if not running
+  l [n]                   - Logs, tail n lines (n is remembered, default {DEFAULT_LOG_TAIL}); same as <n> or l<n>
+  l <keyword>             - Logs, tail {GREP_LOG_TAIL} | grep keyword
+  g <keyword>             - Logs, all | grep keyword
+  c <keyword>             - Logs, all | grep -C 10 keyword
+  r                       - Restart
+  stop / start            - Stop (confirm) / start
+  del                     - Remove (confirm)
+  d                       - Inspect
+  o                       - Inspect > <name>.inspect.json
+  t                       - Top (processes)
+  x <cmd>                 - Run a command, e.g. 0 x redis-cli info
+  e                       - Edit docker compose file
+  dbg                     - Debug shell: busybox sidecar sharing PID / network namespaces
+
+  Others:
+  <pattern>               - Filter by name (image / ID prefix if no name matches)
+  <Enter>                 - If filtered to 1 container: enter it, else clear filter
+  <                       - Clear filter
+  a                       - Toggle all / running containers
+  *                       - Watch mode with CPU / memory (Ctrl+C to return)
+  ?                       - Show this help
+  q or Ctrl+C             - Quit
+
+Tips:
+  - Arrow keys edit input, Up / Down recall previous input, Tab completes names and actions
+  - Containers without a shell open a debug shell, image: $DI_DEBUG_IMAGE > local busybox / alpine
+""")
+
+def main():
+    args = sys.argv[1:]
+    if args and args[0] in ('--h', '--help', '-h'):
+        print_help()
+        return 0
+    show_all = bool(args) and args[0] in ('-a', '--a', '--all')
+    if show_all:
+        args = args[1:]
+
+    history.load()
+    app = DockerPro(show_all)
+    try:
+        app.refresh()
+        if args:
+            if len(args) > 1 or is_history_symbol(args[0]) or args[0].startswith('/'):
+                status = app.oneshot(args)
+                if status is not None:
+                    return status
+            else:
+                app.filter = args[0]
+                if not app.displayed():
+                    print(f"{RED}No containers found.{RESET}")
+                    print(f"Pattern: '{args[0]}'")
+                    return 1
+        setup_readline(app)
+        app.loop()
+    except (Notice, DockerError) as e:
+        print(f"{RED}{e}{RESET}")
+        return 1
+    except KeyboardInterrupt:
+        print()
+        return 130
+    return 0
 
 if __name__ == '__main__':
-    main()
+    try:
+        sys.exit(main())
+    except BrokenPipeError:
+        # 输出被 head 等提前关闭
+        os.dup2(os.open(os.devnull, os.O_WRONLY), sys.stdout.fileno())
+        sys.exit(1)

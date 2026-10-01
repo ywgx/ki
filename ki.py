@@ -1,11 +1,11 @@
 #!/usr/bin/python3
 #*************************************************
 # Description : Kubectl Pro
-# Version     : 7.0
+# Version     : 7.1
 #*************************************************
 from collections import deque, Counter
 from ast import literal_eval
-import os,re,sys,time,readline,subprocess,hashlib
+import os,re,sys,time,shlex,readline,threading,subprocess
 #-----------------VAR-----------------------------
 home = os.environ["HOME"]
 history = home + "/.history"
@@ -22,12 +22,18 @@ ki_lock = history + "/.lock"
 ki_unlock = history + "/.unlock"
 default_config = home + "/.kube/config"
 session_config = None
+# 本次找到的全部 kubeconfig（config_struct[1] 在匹配过程中会被缩减，不能用来判断 kubeconfig 是否还存在）
+all_configs = set()
 KI_AI_URL = os.getenv("KI_AI_URL", "https://api.xairouter.com/v1/chat/completions")
 KI_AI_KEY = os.getenv("KI_AI_KEY", "sk-XvsJhNdiXcDYA3e5hzD1AJP5ploMAaFuMTUxp3bHRfCiZRNt")
 KI_AI_MODEL = os.getenv("KI_AI_MODEL", "MiniMax-M2.1")
+AI_TIMEOUT = (10, 300)
 KI_AUTO_SWITCH = os.getenv("KI_AUTO_SWITCH", "true").lower() not in ("false", "0", "no")
 KI_AUTO_CACHE = os.getenv("KI_AUTO_CACHE", "true").lower() not in ("false", "0", "no")
+KI_DEBUG_IMAGE = os.getenv("KI_DEBUG_IMAGE", "busybox")
 KUBECTL_OPTIONS = "--insecure-skip-tls-verify"
+# 优先使用 bash，没有时使用 sh
+SHELL_CMD = "sh -c 'command -v bash >/dev/null && exec bash || exec sh'"
 CACHE_DURATION = 8 * 60 * 60
 NS_CACHE_DURATION = 300
 LOCK_TIMEOUT = 3600
@@ -161,7 +167,7 @@ def confirm_action(caution):
 
 def cmd_obj(ns, obj, res, args, iip="x"):
     name = res
-    if obj in ("Node"):
+    if obj in ("Node",):
         if args[0] in ('c','u'):
             action = "cordon" if args[0] == 'c' else "uncordon"
             cmd = f"kubectl {KUBECTL_OPTIONS} "+action+" "+res
@@ -179,7 +185,7 @@ def cmd_obj(ns, obj, res, args, iip="x"):
                 cmd = action +" root@"+node_ip
             else:
                 cmd = action +" root@"+iip
-    elif obj in ("Event"):
+    elif obj in ("Event",):
         action = "get"
         cmd = f"kubectl {KUBECTL_OPTIONS} -n "+ns+" "+action+" "+obj+"  --sort-by=.metadata.creationTimestamp"
     elif obj in ("Deployment","DaemonSet","Service","StatefulSet","Ingress","ConfigMap","Secret","PersistentVolume","PersistentVolumeClaim","CronJob","Job","VirtualService","Gateway","HTTPRoute","DestinationRule","EnvoyFilter", "all"):
@@ -213,9 +219,9 @@ def cmd_obj(ns, obj, res, args, iip="x"):
         if obj == "all" and args[0] in ('e', 'd', 'o'):
             cmd = f"kubectl {KUBECTL_OPTIONS} -n {ns} {action} {actual_obj.lower()} {actual_res}{action2}"
         else:
-            cmd = f"kubectl {KUBECTL_OPTIONS} -n {ns} {action} {actual_obj.lower()} {actual_res}{action2}" if actual_obj not in ("PersistentVolume") else f"kubectl {KUBECTL_OPTIONS} {action} {actual_obj.lower()} {actual_res}{action2}"
+            cmd = f"kubectl {KUBECTL_OPTIONS} -n {ns} {action} {actual_obj.lower()} {actual_res}{action2}" if actual_obj not in ("PersistentVolume",) else f"kubectl {KUBECTL_OPTIONS} {action} {actual_obj.lower()} {actual_res}{action2}"
 
-    elif obj in ("ResourceQuota"):
+    elif obj in ("ResourceQuota",):
         action2 = ""
         if args[0] == "e":
             action = "edit"
@@ -234,12 +240,19 @@ def cmd_obj(ns, obj, res, args, iip="x"):
             action = "get"
         cmd = f"kubectl {KUBECTL_OPTIONS} -n "+ns+" "+action+" "+obj.lower()+" "+res+action2
     else:
-        l = get_obj(ns,res)
-        obj = l[0]
-        name = l[1]
+        # 登录 / 日志 / ssh / 调试不需要所属资源对象，由调用方在命令执行期间后台查询（用于历史记录），省去一次 API 请求
+        if args not in ("cle","delete","destroy","destory") and (args in ("p","dbg") or args[0] in ('l','c','g','n')):
+            obj, name = None, None
+        else:
+            obj, name = get_obj(ns,res)
         d = RESOURCE_TYPE_SHORT
         if args == "p":
-            cmd = f"kubectl {KUBECTL_OPTIONS} -n "+ns+" exec -it "+res+" -- sh"
+            cmd = f"kubectl {KUBECTL_OPTIONS} -n "+ns+" exec -it "+res+" -- "+SHELL_CMD
+        elif args == "dbg":
+            # 无 shell 的镜像（distroless 等）：注入临时调试容器，共享目标容器的进程命名空间
+            target = get_data(f"kubectl {KUBECTL_OPTIONS} -n {ns} get pod {res} -o jsonpath='{{.spec.containers[0].name}}'")
+            target = f" --target={target[0].strip()}" if target and target[0].strip() else ""
+            cmd = f"kubectl {KUBECTL_OPTIONS} -n {ns} debug -it {res} --image={KI_DEBUG_IMAGE}{target} -- sh"
         elif args == "del":
             cmd = f"kubectl {KUBECTL_OPTIONS} -n "+ns+" delete pod "+res+" --wait=false"
         elif args == "delf":
@@ -261,10 +274,6 @@ def cmd_obj(ns, obj, res, args, iip="x"):
                 return
         elif args[0] in ('l', 'c', 'g'):
             search_term = args[1:].strip()
-            try:
-                result_list = get_data(f"kubectl {KUBECTL_OPTIONS} -n "+ns+" get pod "+res+" -o jsonpath='{.spec.containers[:].name}'")[0].split()
-            except:
-                sys.exit()
             container = "--all-containers --max-log-requests=28"
             if search_term:
                 if search_term.isdigit():
@@ -275,18 +284,19 @@ def cmd_obj(ns, obj, res, args, iip="x"):
                 if search_term.isdigit() and len(search_term) < 12:
                     cmd = f"kubectl {KUBECTL_OPTIONS} -n {ns} logs -f {res} {container} --tail {search_term}"
                 else:
+                    keyword = shlex.quote(search_term)
                     if args[0] == 'l':
-                        cmd = f"kubectl {KUBECTL_OPTIONS} -n {ns} logs -f --tail 1024 {res} {container} | grep -a --color=auto '{search_term}'"
+                        cmd = f"kubectl {KUBECTL_OPTIONS} -n {ns} logs -f --tail 1024 {res} {container} | grep -a --color=auto {keyword}"
                     else:
-                        grep_option = "" if args[0] == 'g' else "-C 10"
-                        cmd = f"kubectl {KUBECTL_OPTIONS} -n {ns} logs -f {res} {container} | grep -a --color=auto {grep_option} '{search_term}'"
+                        grep_option = "" if args[0] == 'g' else "-C 10 "
+                        cmd = f"kubectl {KUBECTL_OPTIONS} -n {ns} logs -f {res} {container} | grep -a --color=auto {grep_option}{keyword}"
             else:
                 if 'KI_LINE' in os.environ:
                     line = os.environ['KI_LINE']
                 elif os.path.exists(ki_line):
                     with open(ki_line,'r') as f:
                         line_file = str(f.read())
-                        os.environ['KI_LINE'] = line_file if line_file.isdigit() and int(line_file) < 4096 else str(200)
+                        os.environ['KI_LINE'] = line_file if line_file.isdigit() and 0 < int(line_file) < 10000 else str(200)
                         line = os.environ['KI_LINE']
                 else:
                     line = str(200)
@@ -332,7 +342,8 @@ def cmd_obj(ns, obj, res, args, iip="x"):
                 sys.exit()
             cmd = action +" root@"+hostIP
         else:
-            cmd = "kubectl {KUBECTL_OPTIONS} -n "+ns+" exec -it "+res+" -- sh"
+            print(f"\033[1;31mUnknown action '{args}'\033[0m, available: p l c g v r u o d e s n del delf cle destroy dbg")
+            return
     return cmd,obj,name
 
 def find_ip(res: str):
@@ -352,7 +363,7 @@ def find_optimal(namespace_list: list, namespace: str):
         return None
 
 def find_config():
-    global header_config
+    global header_config, all_configs
     os.path.exists(history) or os.mkdir(history)
 
     init_session_config()
@@ -361,6 +372,7 @@ def find_config():
 
     cmd = '''find $HOME/.kube -maxdepth 2 -type f -name 'kubeconfig*' -a ! -name 'kubeconfig-*-NULL' -a ! -name 'config-sess-*' 2>/dev/null|egrep '.*' || ( find $HOME/.kube -maxdepth 1 -type f 2>/dev/null|egrep '.*' &>/dev/null && grep -l "current-context" `find $HOME/.kube -maxdepth 1 -type f|grep -v 'config-sess-'` )'''
     result_set = { e.split('\n')[0] for e in get_data(cmd) }
+    all_configs = set(result_set)
     result_num = len(result_set)
     result_lines = list(result_set)
     kubeconfig = None
@@ -458,16 +470,14 @@ def compress_list(l: list):
 
 def find_history(config,num=3):
     if config != header_config:
-        dc = {}
-        if os.path.exists(ki_kube_dict) and os.path.getsize(ki_kube_dict) > 5:
-            with open(ki_kube_dict,'r') as f:
-                dc = literal_eval(f.read())
-                dc[config] = dc[config] + num if config in dc else 1
-                dc.pop(default_config,None)
-                dc.pop(session_config,None)
-                for config in list(dc.keys()):
-                    if not os.path.exists(config) or 'config-sess-' in config:
-                        del dc[config]
+        dc = load_dict(ki_kube_dict)
+        if dc:
+            dc[config] = dc[config] + num if config in dc else 1
+            dc.pop(default_config,None)
+            dc.pop(session_config,None)
+            for k in list(dc.keys()):
+                if not os.path.exists(k) or 'config-sess-' in k:
+                    del dc[k]
         else:
             dc[config] = 1
         result_dict = sorted(dc.items(),key = lambda dc:dc[1])
@@ -476,14 +486,10 @@ def find_history(config,num=3):
         with open(ki_kube_dict,'w') as f: f.write(str(dc))
 
 def get_config(config_lines: list, ns: str):
-    history_lines = []
-    dc = {}
-    if os.path.exists(ki_kube_dict):
-        with open(ki_kube_dict, 'r') as f:
-            dc = literal_eval(f.read())
-            dc.pop(os.path.realpath(default_config), None)
-            dc.pop(os.path.realpath(session_config), None) if session_config else None
-            history_lines = [k[0] for k in sorted(dc.items(), key=lambda d: d[1], reverse=True)]
+    dc = load_dict(ki_kube_dict)
+    dc.pop(os.path.realpath(default_config), None)
+    dc.pop(os.path.realpath(session_config), None) if session_config else None
+    history_lines = [k[0] for k in sorted(dc.items(), key=lambda d: d[1], reverse=True)]
 
     current_config = session_config if session_config and os.path.exists(session_config) else default_config
     real_current = os.path.realpath(current_config) if os.path.exists(current_config) else None
@@ -517,7 +523,8 @@ def find_ns(config_struct: list):
 
     current_config = session_config if session_config and os.path.exists(session_config) else default_config
 
-    if os.path.exists(ki_current_ns_dict) and int(time.time()-os.stat(ki_current_ns_dict).st_mtime) < NS_CACHE_DURATION:
+    # 指定了 k8s（ki $k8s.$ns）时不走当前集群的快捷匹配，否则候选列表只剩当前集群，指定的集群永远匹配不到
+    if len(kn) == 1 and os.path.exists(ki_current_ns_dict) and int(time.time()-os.stat(ki_current_ns_dict).st_mtime) < NS_CACHE_DURATION:
         with open(ki_current_ns_dict) as f:
             try:
                 d = literal_eval(f.read())
@@ -625,7 +632,7 @@ def cache_ns(config_struct: list):
             return config, [], ""
 
         valid_configs = [cfg for cfg in config_struct[1] if os.path.exists(cfg) and 'config-sess-' not in cfg]
-        with ThreadPoolExecutor(max_workers=min(10, len(valid_configs))) as executor:
+        with ThreadPoolExecutor(max_workers=max(1, min(10, len(valid_configs)))) as executor:
             futures = [executor.submit(process_config, config) for config in valid_configs]
             for future in as_completed(futures):
                 config, s, latest = future.result()
@@ -637,6 +644,8 @@ def cache_ns(config_struct: list):
         with open(ki_latest_ns_dict,'w') as f: f.write(str(d_latest))
         os.path.exists(ki_cache) and os.unlink(ki_cache)
         return d
+    # 其他进程正在构建缓存，先使用已有缓存
+    return load_dict(ki_ns_dict)
 
 def switch_config(switch_num: int,k8s: str,ns: str,time: str):
     switch = False
@@ -661,14 +670,35 @@ def switch_config(switch_num: int,k8s: str,ns: str,time: str):
 
 def get_data(cmd: str):
     try:
-        p = subprocess.Popen(cmd, shell=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE, universal_newlines=True)
-        return p.stdout.readlines()
+        # stderr 不读取会在输出过多时阻塞，直接丢弃；stdin 不继承，避免后台查询抢占终端
+        p = subprocess.run(cmd, shell=True, stdin=subprocess.DEVNULL, stdout=subprocess.PIPE, stderr=subprocess.DEVNULL, universal_newlines=True)
+        return p.stdout.splitlines(True)
     except:
         sys.exit()
 
+def load_dict(path: str):
+    """读取 ~/.history 下的字典文件，不存在或损坏时返回 {}"""
+    try:
+        with open(path,'r') as f:
+            d = literal_eval(f.read())
+        return d if isinstance(d, dict) else {}
+    except Exception:
+        return {}
+
 def maybe_auto_cache():
     if KI_AUTO_CACHE:
-        subprocess.Popen("ki --c",shell=True,stdout=subprocess.PIPE,stderr=subprocess.PIPE,universal_newlines=True)
+        # 后台独立会话构建缓存：不受当前终端 Ctrl+C 影响，输出丢弃
+        subprocess.Popen([sys.executable, os.path.realpath(__file__), "--c"], stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, start_new_session=True)
+
+def get_obj_async(ns: str, res: str):
+    """后台查询 Pod 所属资源对象，返回等待结果的函数"""
+    result = []
+    t = threading.Thread(target=lambda: result.append(get_obj(ns, res)), daemon=True)
+    t.start()
+    def wait():
+        t.join()
+        return result[0] if result else ("Pod", res)
+    return wait
 
 def get_obj(ns: str,res: str,args='x'):
     d = RESOURCE_TYPE_MAPPING
@@ -684,7 +714,7 @@ def get_obj(ns: str,res: str,args='x'):
         obj = "Deployment"
     elif obj in ("StatefulSet","DaemonSet"):
         del l1[-1:]
-    elif obj in ("Job"):
+    elif obj in ("Job",):
         if '--' in res:
             del l1[-3:]
         else:
@@ -765,16 +795,15 @@ def info_w(k8s_path: str,result_lines: list):
 
 def info_k():
     if os.path.exists(ki_pod_dict) and os.path.exists(ki_kube_dict):
-        with open(ki_pod_dict,'r') as f1, open(ki_kube_dict,'r') as f2:
-            dc1 = literal_eval(f1.read())
-            dc2 = literal_eval(f2.read())
-            for k in sorted(dc1):
-                most_used, second_most_used = get_most_used_pods(dc1[k])
-                most_recent = most_used if most_used else ""
-                second_recent = second_most_used if second_most_used else ""
-                print("{:<56}{:<32}{}".format(k, most_recent, second_recent))
-            for k in sorted(dc2.items(),key=lambda d:d[1]):
-                print("{:<56}{}".format(k[0].split('/')[-1],k[1]))
+        dc1 = load_dict(ki_pod_dict)
+        dc2 = load_dict(ki_kube_dict)
+        for k in sorted(dc1):
+            most_used, second_most_used = get_most_used_pods(dc1[k])
+            most_recent = most_used if most_used else ""
+            second_recent = second_most_used if second_most_used else ""
+            print("{:<56}{:<32}{}".format(k, most_recent, second_recent))
+        for k in sorted(dc2.items(),key=lambda d:d[1]):
+            print("{:<56}{}".format(k[0].split('/')[-1],k[1]))
 
 def get_most_used_pods(pod_history: list):
     """从最近32条记录中获取使用频率最高的2个pod"""
@@ -795,23 +824,53 @@ def get_most_used_pods(pod_history: list):
 
     return most_used, second_most_used
 
+def get_recent_res(k8s: str, ns: str, obj: str):
+    """历史中最常用、次常用的资源名"""
+    res_history = load_dict(ki_pod_dict).get(k8s+'/'+ns+'/'+obj)
+    return get_most_used_pods(res_history) if res_history else (None, None)
+
+def find_res_index(result_lines: list, res_name, col=0):
+    """从最新的一行往前定位历史资源：优先同名资源或同名工作负载的 Pod，其次包含匹配；没有历史时取最后一行"""
+    if not res_name:
+        return len(result_lines) - 1 if result_lines else None
+    for n in range(len(result_lines) - 1, -1, -1):
+        columns = result_lines[n].split()
+        if len(columns) > col:
+            parts = columns[col].split('-')
+            # api-7d9f8b6c5-x2x4z（Deployment）/ redis-0（StatefulSet）都属于 api / redis，但 api-gateway-xxx 不属于 api
+            if res_name in (columns[col], '-'.join(parts[:-1]), '-'.join(parts[:-2])):
+                return n
+    for n in range(len(result_lines) - 1, -1, -1):
+        if res_name in result_lines[n]:
+            return n
+    return None
+
 def record(res: str,name: str,obj: str,cmd: str,kubeconfig: str,ns: str,config_struct: list):
+    record_cmd(cmd,kubeconfig)
+    record_res(name,obj,kubeconfig,ns)
+
+def record_cmd(cmd: str,kubeconfig: str):
+    """操作审计日志 ~/.history/YYYY-MM-DD，在执行命令之前写入"""
     l = os.environ['SSH_CONNECTION'].split() if 'SSH_CONNECTION' in os.environ else ['NULL','NULL','NULL']
     USER = os.environ['USER'] if 'USER' in os.environ else "NULL"
     HOST = l[2]
     FROM = l[0]
-    key = kubeconfig+"/"+ns+"/"+("Pod" if obj in ('Deployment','StatefulSet','DaemonSet','ReplicaSet') else obj)
     ki_file = time.strftime("%F",time.localtime())
     with open(history+"/"+ki_file,'a+') as f: f.write( time.strftime("%F %T ",time.localtime())+"[ "+USER+"@"+HOST+" from "+FROM+" ---> "+kubeconfig+" ]  " + cmd + "\n" )
+
+def record_res(name: str,obj: str,kubeconfig: str,ns: str):
+    """资源操作历史（用于 [ ] 等快捷选择）"""
+    key = kubeconfig+"/"+ns+"/"+("Pod" if obj in ('Deployment','StatefulSet','DaemonSet','ReplicaSet') else obj)
     dc = {}
     if os.path.exists(ki_pod_dict) and os.path.getsize(ki_pod_dict) > 5:
         with open(ki_pod_dict,'r') as f:
             try:
                 dc = literal_eval(f.read())
+                # 清理已不存在的 kubeconfig 的历史（遍历副本，边遍历边删除会抛异常导致整个历史文件被删）
                 dc_key_set = set(i.split('/')[0] for i in list(dc.keys()))
-                kubeconfig_set = set(i.split('/')[-1] for i in config_struct[1])
-                for i in dc_key_set - kubeconfig_set:
-                    for j in dc.keys():
+                kubeconfig_set = set(i.split('/')[-1] for i in all_configs)
+                for i in (dc_key_set - kubeconfig_set) if kubeconfig_set else ():
+                    for j in list(dc.keys()):
                         if i == j.split('/')[0]:
                             dc.pop(j,None)
                 # 将pod添加到历史记录（保存最多128个历史记录）
@@ -831,11 +890,22 @@ def record(res: str,name: str,obj: str,cmd: str,kubeconfig: str,ns: str,config_s
         dc[key] = [name]
     with open(ki_pod_dict,'w') as f: f.write(str(dc))
 
+def import_requests():
+    """AI 功能依赖 requests，未安装时给出提示"""
+    try:
+        import requests
+        return requests
+    except ImportError:
+        print("\033[1;31m需要安装 requests: pip3 install requests\033[0m")
+        return None
+
 def analyze_cluster(stream=True):
     """分析集群状态并生成报告"""
     import json
-    import requests
     from datetime import datetime
+    requests = import_requests()
+    if not requests:
+        return
 
     print("\033[1;93m正在分析集群状态...\033[0m")
 
@@ -851,62 +921,53 @@ def analyze_cluster(stream=True):
     try:
         try:
             version_output = get_data(f"kubectl {KUBECTL_OPTIONS} version -o json")
-            if version_output:
-                version_json = version_output[0].strip()
-                data["cluster_info"]["version"] = json.loads(version_json)
+            data["cluster_info"]["version"] = json.loads(''.join(version_output)).get("serverVersion", {}).get("gitVersion", "unknown")
         except:
             data["cluster_info"]["version"] = "无法获取版本信息"
 
-        nodes = get_data(f"kubectl {KUBECTL_OPTIONS} get nodes -o wide")
-        if len(nodes) > 1:
-            for node in nodes[1:]:
-                node_info = node.split()
-                if len(node_info) >= 5:
-                    data["node_status"].append({
-                        "name": node_info[0],
-                        "status": node_info[1],
-                        "roles": node_info[2] if len(node_info) > 2 else "unknown",
-                        "version": node_info[3] if len(node_info) > 3 else "unknown",
-                        "internal_ip": node_info[5] if len(node_info) > 5 else "unknown"
-                    })
+        # NAME STATUS ROLES AGE VERSION INTERNAL-IP ...
+        nodes = get_data(f"kubectl {KUBECTL_OPTIONS} get nodes -o wide --no-headers")
+        for node in nodes:
+            node_info = node.split()
+            if len(node_info) >= 5:
+                data["node_status"].append({
+                    "name": node_info[0],
+                    "status": node_info[1],
+                    "roles": node_info[2],
+                    "version": node_info[4],
+                    "internal_ip": node_info[5] if len(node_info) > 5 else "unknown"
+                })
 
-        ns_list = get_data(f"kubectl {KUBECTL_OPTIONS} get ns --no-headers")
-        for ns in ns_list:
-            ns_name = ns.split()[0]
-            pods = get_data(f"kubectl {KUBECTL_OPTIONS} get pods -n {ns_name} --no-headers")
-            running = 0
-            failed = 0
-            pending = 0
-            for pod in pods:
-                status = pod.split()[2]
-                if status == "Running":
-                    running += 1
-                elif status in ["Failed", "Error", "CrashLoopBackOff"]:
-                    failed += 1
-                elif status == "Pending":
-                    pending += 1
-
-            data["pod_status"][ns_name] = {
-                "total": len(pods),
-                "running": running,
-                "failed": failed,
-                "pending": pending
-            }
-
-        for node in data["node_status"]:
-            try:
-                usage = get_data(f"kubectl {KUBECTL_OPTIONS} top node {node['name']}")
-                if len(usage) > 1:
-                    usage_info = usage[1].split()
-                    if len(usage_info) >= 5:
-                        data["resource_usage"][node["name"]] = {
-                            "cpu": usage_info[2],
-                            "memory": usage_info[4]
-                        }
-            except:
+        # 一次查询所有命名空间的 Pod，代替逐个命名空间查询
+        for ns in get_data(f"kubectl {KUBECTL_OPTIONS} get ns --no-headers"):
+            data["pod_status"][ns.split()[0]] = {"total": 0, "running": 0, "failed": 0, "pending": 0}
+        failed_status = ("Failed", "Error", "CrashLoopBackOff", "ImagePullBackOff", "ErrImagePull", "OOMKilled", "Evicted", "CreateContainerConfigError")
+        for pod in get_data(f"kubectl {KUBECTL_OPTIONS} get pods -A --no-headers"):
+            pod_info = pod.split()
+            if len(pod_info) < 4:
                 continue
+            ns_name, status = pod_info[0], pod_info[3]
+            if status == "Completed":
+                continue
+            counts = data["pod_status"].setdefault(ns_name, {"total": 0, "running": 0, "failed": 0, "pending": 0})
+            counts["total"] += 1
+            if status == "Running":
+                counts["running"] += 1
+            elif status in failed_status:
+                counts["failed"] += 1
+            elif status == "Pending":
+                counts["pending"] += 1
 
-        events = get_data(f"kubectl {KUBECTL_OPTIONS} get events --sort-by=.metadata.creationTimestamp")
+        # NAME CPU(cores) CPU% MEMORY(bytes) MEMORY%
+        for usage in get_data(f"kubectl {KUBECTL_OPTIONS} top nodes --no-headers"):
+            usage_info = usage.split()
+            if len(usage_info) >= 5:
+                data["resource_usage"][usage_info[0]] = {
+                    "cpu": usage_info[2],
+                    "memory": usage_info[4]
+                }
+
+        events = get_data(f"kubectl {KUBECTL_OPTIONS} get events -A --sort-by=.metadata.creationTimestamp --no-headers")
         if events:
             data["events"] = [event.strip() for event in events[-7:]]
 
@@ -958,7 +1019,8 @@ Pod 状态 (按命名空间,不含 Completed):
                 "temperature": 0.3,
                 "stream": stream
             },
-            stream=stream
+            stream=stream,
+            timeout=AI_TIMEOUT
         )
 
         if response.status_code == 200:
@@ -987,10 +1049,10 @@ Pod 状态 (按命名空间,不含 Completed):
 def chat_with_ai(question):
     """与 AI 进行对话，支持各种 IT 运维、开发相关需求"""
     import json
-    import requests
-    import re
-    import os
     from datetime import datetime
+    requests = import_requests()
+    if not requests:
+        return
 
     if not question:
         print("\033[1;31m请输入问题内容\033[0m")
@@ -1025,17 +1087,23 @@ def chat_with_ai(question):
                     "content": question
                 }],
                 "temperature": 0.1,
-            }
+            },
+            timeout=AI_TIMEOUT
         )
 
         question_type = {"needs_file": False}
         if pre_check_response.status_code == 200:
             try:
-                question_type = json.loads(pre_check_response.json()['choices'][0]['message']['content'])
+                # 模型经常用 ```json 包裹返回内容
+                content = pre_check_response.json()['choices'][0]['message']['content'].strip()
+                content = re.sub(r'^```(?:json)?\s*|\s*```$', '', content)
+                question_type.update(json.loads(content))
             except:
                 pass
 
-        if question_type["needs_file"]:
+        if question_type.get("needs_file"):
+            question_type.setdefault("description", "代码")
+            question_type.setdefault("language", "")
             system_prompt = f"""你是一个专业的 IT 专家。对于{question_type["description"]}类问题：
 
 1. 首先用 JSON 格式提供文件元数据：
@@ -1085,7 +1153,8 @@ def chat_with_ai(question):
                 "temperature": 0.3,
                 "stream": True
             },
-            stream=True
+            stream=True,
+            timeout=AI_TIMEOUT
         )
 
         if response.status_code == 200:
@@ -1103,7 +1172,7 @@ def chat_with_ai(question):
                         continue
             print()
 
-            if question_type["needs_file"]:
+            if question_type.get("needs_file"):
                 json_match = re.search(r'```json\n(.*?)\n```', full_response, re.DOTALL)
                 code_matches = re.finditer(r'```(\w+)\n(.*?)\n```', full_response, re.DOTALL)
 
@@ -1125,9 +1194,10 @@ def chat_with_ai(question):
                     timestamp = datetime.now().strftime("%Y%m%d-%H%M%S")
 
                     for i, (lang, content) in enumerate(code_blocks):
-                        if i < len(file_info):
-                            base_name = file_info[i]['name']
-                            description = file_info[i]['description']
+                        # 文件名来自模型输出，只保留文件名部分，避免写到其他目录
+                        base_name = os.path.basename(str(file_info[i].get('name', ''))) if i < len(file_info) and isinstance(file_info[i], dict) else ''
+                        if base_name:
+                            description = file_info[i].get('description', '')
                         else:
                             ext = {
                                 'python': '.py',
@@ -1219,7 +1289,7 @@ def ki():
             flag = False
         if not flag:
             maybe_auto_cache()
-    elif len(sys.argv) == 2 and sys.argv[1] in ('--k'):
+    elif len(sys.argv) == 2 and sys.argv[1] == "--k":
         info_k()
     elif len(sys.argv) == 2 and sys.argv[1] in ('--c','--cache'):
         begin = time.perf_counter()
@@ -1330,11 +1400,15 @@ def ki():
                                 k8s = os.environ['KUBECONFIG'].split('/')[-1]
                                 switch_config(switch_num,k8s,ns,str(round(end-begin,3)))
                                 name = pod
-                                if sys.argv[1] in ('-i'):
-                                    cmd = f"kubectl {KUBECTL_OPTIONS} -n "+ns+" exec -it "+pod+" -- sh"
-                                elif sys.argv[1] in ('-l'):
+                                owner = None
+                                if sys.argv[1] == "-i":
+                                    cmd = f"kubectl {KUBECTL_OPTIONS} -n "+ns+" exec -it "+pod+" -- "+SHELL_CMD
+                                elif sys.argv[1] == "-l":
                                     line = os.environ['KI_LINE'] if 'KI_LINE' in os.environ else str(1000)
                                     cmd = f"kubectl {KUBECTL_OPTIONS} -n "+ns+" logs -f "+pod+" --all-containers --tail "+line
+                                if sys.argv[1] in ('-i','-l'):
+                                    # 历史按所属工作负载记录（与选择列表中的操作一致），在命令执行期间后台查询
+                                    owner = get_obj_async(ns,pod)
                                 else:
                                     l = get_obj(ns,pod,sys.argv[1])
                                     obj = l[0]
@@ -1347,8 +1421,11 @@ def ki():
                                         action2 = " -o yaml > "+name+"."+obj+".yml"
                                     cmd = f"kubectl {KUBECTL_OPTIONS} -n "+ns+" "+action+" "+obj.lower()+" "+name+action2
                                 print("\033[1;38;5;208m{}\033[0m".format(cmd))
-                                record(pod,name,obj,cmd,k8s,ns,config_struct)
+                                record_cmd(cmd,k8s)
                                 os.system(cmd)
+                                if owner:
+                                    obj, name = owner()
+                                record_res(name,obj,k8s,ns)
                                 print('\r')
                                 break
                         else:
@@ -1403,14 +1480,22 @@ def ki():
                         result_lines = list(filter(lambda x: x.find(pod) >= 0, result_lines))
                     if result_lines:
                         now = time.strftime("%T",time.localtime())
+                        name_col = 1 if sys.argv[1] in ('-a','--a') and obj != 'PersistentVolume' else 0
+                        # 标记 [ ] 将会选中的最常用、次常用资源
+                        most_used, second_most_used = get_recent_res(k8s,ns,obj)
+                        marks = {}
+                        for res_name,mark in ((most_used," \033[1;91m[\033[0m"),(second_most_used," \033[1;94m]\033[0m")):
+                            index = find_res_index(result_lines,res_name,name_col) if res_name else None
+                            if index is not None:
+                                marks[index] = marks.get(index,"") + mark
                         for n,e in enumerate(result_lines):
                             try:
-                                print("\033[1;32m{}\033[0m {}".format(n,e.strip()))
+                                print("\033[1;32m{}\033[0m {}{}".format(n,e.strip(),marks.get(n,"")))
                             except:
                                 pass
                         if n > 3:
                             style = "\033[1;93m{}\033[0m" if switch else "\033[1;32m{}\033[0m"
-                            string = "[ "+k8s+" / "+ns+" --- "+obj+" ] [ "+now+" ]" if sys.argv[1] not in ('-a','--a') and obj not in ('PersistentVolume') else "[ "+k8s+" --- "+obj+" ] [ "+now+" ]"
+                            string = "[ "+k8s+" / "+ns+" --- "+obj+" ] [ "+now+" ]" if sys.argv[1] not in ('-a','--a') and obj != "PersistentVolume" else "[ "+k8s+" --- "+obj+" ] [ "+now+" ]"
                             print(style.format(string))
                             switch = False
                             if pod == '*':
@@ -1424,6 +1509,11 @@ def ki():
                                 result_lines = get_data(cmd)
                                 time.sleep(3)
                         except KeyboardInterrupt:
+                            if pod == '*':
+                                # watch 模式下 Ctrl+C 返回选择
+                                print()
+                                pod = ""
+                                continue
                             print("\n\033[1;32mBye!\033[0m")
                             sys.exit()
                         except EOFError:
@@ -1440,51 +1530,14 @@ def ki():
                         if special_chars_pattern.match(pod):
                             if pod == ':':
                                 pod = str(result_len-1)
-                            elif pod == '*':
-                                pass
-                            elif pod == '[':
-                                is_bracket = True
-                                if os.path.exists(ki_pod_dict):
-                                    with open(ki_pod_dict,'r') as f:
-                                        dc = literal_eval(f.read())
-                                        key = k8s+'/'+ns+'/'+obj
-                                        if key in dc:
-                                            most_used, _ = get_most_used_pods(dc[key])
-                                            last_res = most_used if most_used else ""
-                                        else:
-                                            last_res = ""
-                                        for n,e in enumerate(result_lines[::-1]):
-                                            if last_res in e:
-                                                pod = str(result_len-n-1)
-                                                break
-                            elif pod == ']':
-                                is_right_bracket = True
-                                if os.path.exists(ki_pod_dict):
-                                    with open(ki_pod_dict,'r') as f:
-                                        dc = literal_eval(f.read())
-                                        key = k8s+'/'+ns+'/'+obj
-                                        if key in dc:
-                                            _, second_most_used = get_most_used_pods(dc[key])
-                                            last_res = second_most_used if second_most_used else ""
-                                        else:
-                                            last_res = ""
-                                        for n,e in enumerate(result_lines[::-1]):
-                                            if last_res in e:
-                                                pod = str(result_len-n-1)
-                                                break
-                            elif os.path.exists(ki_pod_dict):
-                                with open(ki_pod_dict,'r') as f:
-                                    dc = literal_eval(f.read())
-                                    key = k8s+'/'+ns+'/'+obj
-                                    if key in dc:
-                                        most_used, _ = get_most_used_pods(dc[key])
-                                        last_res = most_used if most_used else ""
-                                    else:
-                                        last_res = ""
-                                    for n,e in enumerate(result_lines[::-1]):
-                                        if last_res in e:
-                                            pod = str(result_len-n-1)
-                                            break
+                            elif pod != '*':
+                                # [ 最常用的日志，] 次常用的日志，其他符号登录最常用的；没有历史时选最新的一个
+                                is_bracket = pod == '['
+                                is_right_bracket = pod == ']'
+                                most_used, second_most_used = get_recent_res(k8s,ns,obj)
+                                index = find_res_index(result_lines,second_most_used if is_right_bracket else most_used,name_col)
+                                if index is not None:
+                                    pod = str(index)
                         if len(podList) > 1:
                             if podList[1][0] in ('l','g','c'):
                                 parts = search_term.split(None, 2)
@@ -1501,15 +1554,27 @@ def ki():
                         if pod.isdigit() and int(pod) < result_len or ( result_len == 1 and pod != '*'):
                             filtered_count = len(result_lines)
                             index = int(pod) if pod.isdigit() and int(pod) < result_len else 0
-                            res = result_lines[index].split()[0 if sys.argv[1] not in ('-a','--a') else (1 if obj not in ("PersistentVolume") else 0)]
+                            res = result_lines[index].split()[0 if sys.argv[1] not in ('-a','--a') else (1 if obj not in ("PersistentVolume",) else 0)]
                             iip = result_lines[index].split()[5] if len(result_lines[index].split()) > 5 else find_ip(res)
                             ns = result_lines[index].split()[0] if sys.argv[1] in ('-a','--a') else ns
                             l = cmd_obj(ns,obj,res,args,iip)
                             print('\033[{}C\033[1A'.format(num),end = '')
                             if l:
-                                print("\033[1;38;5;208m{}\033[0m".format(l[0]))
-                                record(res,l[2],l[1],l[0],k8s,ns,config_struct)
-                                os.system(l[0])
+                                action_cmd, kind, name = l
+                                print("\033[1;38;5;208m{}\033[0m".format(action_cmd))
+                                if kind is None:
+                                    # 所属资源对象在命令执行期间后台查询，命令结束后再记录历史
+                                    owner = get_obj_async(ns,res)
+                                    record_cmd(action_cmd,k8s)
+                                    start = time.time()
+                                    status = os.system(action_cmd)
+                                    if status and SHELL_CMD in action_cmd and time.time() - start < 3:
+                                        print("\033[1;93mNo shell in the container? Try action dbg ( debug via an ephemeral container )\033[0m")
+                                    kind, name = owner()
+                                    record_res(name,kind,k8s,ns)
+                                else:
+                                    record(res,name,kind,action_cmd,k8s,ns,config_struct)
+                                    os.system(action_cmd)
                                 if filtered_count == 1:
                                     pod = ""
                             print('\r')
@@ -1529,7 +1594,7 @@ def ki():
         print(style % "Kubectl pro controls the Kubernetes cluster manager,find more information at: https://ki.xabc.io\n")
         doc_dict = {
          "1. ki":"List all namespaces",
-         "2. ki xx":"List all pods in the namespace ( if there are multiple ~/.kube/kubeconfig*,the best matching kubeconfig will be found ,the namespace parameter supports fuzzy matching,after outputting the pod list, select: xxx filters the query\n         select: index l ( [ l ] Print the logs for a container in a pod or specified resource \n         select: index l 100 ( Print the logs of the latest 100 lines \n         select: index l xxx ( Print the logs and filters the specified characters \n         select: index r ( [ r ] Rollout restart the pod \n         select: index o ( [ o ] Output the [Deployment,StatefulSet,Service,Ingress,Configmap,Secret].yml file \n         select: index del ( [ del ] Delete the pod \n         select: index cle ( [ cle ] Delete the Deployment/StatefulSet \n         select: index e[sighVDE] ( [ e[sighVDE] ] Edit the Deploy/Service/Ingress/Gateway/HTTPRoute/VirtualService/DestinationRule/EnvoyFilter \n         select: index s5 ( [ s3 ] Set the Deploy/StatefulSet replicas=3 \n         select: index dp ( Describe a pod \n         select: * ( Watching... ",
+         "2. ki xx":"List all pods in the namespace ( if there are multiple ~/.kube/kubeconfig*,the best matching kubeconfig will be found ,the namespace parameter supports fuzzy matching,after outputting the pod list, select: xxx filters the query\n         select: index l ( [ l ] Print the logs for a container in a pod or specified resource \n         select: index l 100 ( Print the logs of the latest 100 lines \n         select: index l xxx ( Print the logs and filters the specified characters \n         select: index r ( [ r ] Rollout restart the pod \n         select: index o ( [ o ] Output the [Deployment,StatefulSet,Service,Ingress,Configmap,Secret].yml file \n         select: index del ( [ del ] Delete the pod \n         select: index cle ( [ cle ] Delete the Deployment/StatefulSet \n         select: index e[sighVDE] ( [ e[sighVDE] ] Edit the Deploy/Service/Ingress/Gateway/HTTPRoute/VirtualService/DestinationRule/EnvoyFilter \n         select: index s5 ( [ s3 ] Set the Deploy/StatefulSet replicas=3 \n         select: index dp ( Describe a pod \n         select: index dbg ( Debug a pod without shell ( distroless, etc. ) via an ephemeral container \n         select: * ( Watching..., Ctrl+C to return ",
          "3. ki xx d":"List the Deployment of a namespace",
          "4. ki xx f":"List the StatefulSet of a namespace",
          "5. ki xx s":"List the Service of a namespace",
@@ -1552,8 +1617,8 @@ def ki():
          "22. ki --s":"Select the kubernetes to be connected ( if there are multiple ~/.kube/kubeconfig*,the kubeconfig storage can be kubeconfig-hz,kubeconfig-sh,etc. ",
          "23. ki --c":"Enable write caching of namespace ( ~/.history/.ns_dict ",
          "24. ki --a":"List all pods in the kubernetes",
-         "Env:":"KI_AUTO_CACHE=false Disable auto cache build (manual ki --c still works)",
-         "Tips:": "Within the selection process of Pod filtering, '[' shows logs of the most recent Pod, ']' shows logs of the 2nd recent Pod, and other symbols (~, !, etc.) enter the most recent Pod."}
+         "Env:":"KI_AUTO_CACHE=false Disable auto cache build (manual ki --c still works), KI_DEBUG_IMAGE=busybox Image used by dbg",
+         "Tips:": "Within the selection process of Pod filtering, '[' shows logs of the most recent Pod, ']' shows logs of the 2nd recent Pod ( marked with [ ] in the list ), and other symbols (~, !, etc.) enter the most recent Pod, bash is preferred when entering a Pod."}
         for k,v in doc_dict.items():
             print(style % k,v)
 def main():

@@ -17,3 +17,5 @@ Ki enables simple and fast management of k8s clusters. Unlike kubectx, ki is des
 - Real-time terminal prompt showing current $KUBECONFIG
 - Multi-cluster management, search and locate target k8s across multiple clusters
 - Directory following, automatically switch $KUBECONFIG based on k8s resource directories
+- AI analysis, `ki --ai` generates a cluster health report and answers DevOps questions
+- Companion tool [di](en/di), manage Docker containers in the same interactive way

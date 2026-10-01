@@ -53,11 +53,13 @@ curl xabc.io/ki | bash
 
 ### `$index` 回车直接登录 Pod
 
+优先使用 bash,镜像中没有 bash 时使用 sh;镜像没有任何 shell(distroless 等)时 ki 会提示改用 [`$index dbg`](debug?id=index-dbg-调试没有-shell-的-pod)
+
 ![](//static.xabc.io/ki/ki-4.png)
 
 ### `$index l` 输出 Pod 实时日志
 
-默认输出最新 200 行
+默认输出最新 200 行,`l` 后指定过的行数会被记住,下次直接 `l` 沿用
 
 ![](//static.xabc.io/ki/ki-5.png)
 
@@ -69,7 +71,7 @@ l 后加一个数字,代表要输出最新多少行日志
 
 ### `$index l chunked` 输出 Pod 实时日志的过滤
 
-l 后加一个字符串,代表要输出过滤字符串的日志行
+l 后加一个字符串,代表在最新 1024 行日志中过滤该字符串;`$index g chunked` 在全部日志中过滤,`$index c chunked` 同时输出匹配行前后各 10 行
 
 ![](//static.xabc.io/ki/ki-7.png)
 
@@ -103,9 +105,27 @@ l 后加一个字符串,代表要输出过滤字符串的日志行
 
 ![](//static.xabc.io/ki/ki-14.png)
 
+### Pod 动作速查
+
+| 动作 | 说明 |
+|---|---|
+| `$index` | 登录 Pod,优先 bash,其次 sh |
+| `$index l` / `$index l 500` / `$index 500` | 实时日志,指定行数会被记住 |
+| `$index l xxx` / `g xxx` / `c xxx` | 日志过滤:最新 1024 行 / 全部日志 / 全部日志并输出前后 10 行 |
+| `$index v` / `$index v 100` | 上一次崩溃退出的容器日志(--previous) |
+| `$index e` / `es` / `ei` | 编辑所属资源对象 / 同名 Service / 同名 Ingress,同理 `eg` `eh` `eV` `eD` `eE` |
+| `$index d` / `dp` / `ds` | describe 所属资源对象 / Pod / 同名 Service |
+| `$index o` / `os` / `oi` | 输出所属资源对象 / 同名 Service / 同名 Ingress 的 yml 文件到当前目录 |
+| `$index r` / `$index u` | 重启(rollout restart) / 回滚(rollout undo)所属资源对象 |
+| `$index s3` | 设置所属 Deployment/StatefulSet 副本数为 3(需确认) |
+| `$index del` / `delf` | 删除 Pod / 强制删除 Pod |
+| `$index cle` / `destroy` | 删除所属资源对象 / 连同同名 Service、Ingress 一起删除(需确认) |
+| `$index n` | ssh 登录 Pod 所在的 Node |
+| `$index dbg` | 用临时调试容器进入没有 shell 的 Pod,详见[调试](debug?id=index-dbg-调试没有-shell-的-pod) |
+
 ## 其他资源的系列动作
 
-上面默认都是输出目标 Namespace 的 Pods 列表,然后选择进一步动作,当然我们也可以直接选择目标资源对象列表, Deployment/StatefulSet/DaemonSet/Service/Ingress/ConfigMap/Secret/PV/PVC, 然后下一步动作和 Pod 动作类似,可以过滤/编辑/删除
+上面默认都是输出目标 Namespace 的 Pods 列表,然后选择进一步动作,当然我们也可以直接选择目标资源对象列表, Deployment/StatefulSet/DaemonSet/Service/Ingress/ConfigMap/Secret/PV/PVC 等, 然后下一步动作和 Pod 动作类似,可以过滤/编辑(e)/describe(d)/输出 yml(o)/删除(cle)
 
 - ki test d (输出 Deployment 列表)
 - ki test f (输出 StatefulSet 列表)
@@ -117,11 +137,21 @@ l 后加一个字符串,代表要输出过滤字符串的日志行
 - ki test v (输出 PV 列表)
 - ki test p (输出 PVC 列表)
 - ki test e (输出 Event )
+- ki test j (输出 CronJob 列表), ki test b (输出 Job 列表), ki test r (输出 ReplicaSet 列表), ki test q (输出 ResourceQuota)
+- ki test g / h (输出 Gateway / HTTPRoute 列表), ki test V / D / E (输出 Istio VirtualService / DestinationRule / EnvoyFilter 列表)
+- ki test A (输出 all 资源)
 
-## 上次的选择和最新的选择
+## 快捷选择
 
-- `#` 符号代表上一次的选择对象,和`$index`一样后面可以继续跟随 l/e/del/cle 等动作
-- `$` 符号代表选择最新运行的 Pod 对象,和`$index`一样后面可以继续跟随 l/e/del/cle 等动作
+在选择列表中,除了 `$index` 和过滤字符串,还可以使用以下符号,后面同样可以跟随 l/e/r/del 等动作
+
+- `[` 查看当前 k8s/ns 历史操作最多的资源的日志,列表中以红色 `[` 标记
+- `]` 查看历史操作次多的资源的日志,列表中以蓝色 `]` 标记
+- `~` `!` `@` `#` `$` 等其他符号,登录历史操作最多的资源
+- `:` 选择列表中的最后一个,Pod 列表按创建时间排序,也就是最新的 Pod
+- `*` 每 3 秒刷新列表,实时查看资源变化,`Ctrl+C` 返回选择
+
+?> 历史按所属工作负载统计,Pod 重建后名字变化依然能选中同一个 Deployment/StatefulSet 的 Pod;当前 k8s/ns 还没有历史时选择最新的一个
 
 ![](//static.xabc.io/ki/ki-25.png)
 
@@ -147,17 +177,18 @@ l 后加一个字符串,代表要输出过滤字符串的日志行
 
 ### Namespace 的特征短字符串
 
-- `ki` 高亮红色为 Feature Hashing 特征短字符串
+- `ki` 高亮紫色为 Feature Hashing 特征短字符串
 
 ![](//static.xabc.io/ki/hash.png)
 
 ### 一步到位,登录/查看日志/编辑
 
-有些用户场景下,比如开发人员或者数据库管理人员日常只关注自己负责的某个或者某几个 Pod,`ki -i[le] $ns $pod` 可以一步到位匹配到目标 Pod
+有些用户场景下,比如开发人员或者数据库管理人员日常只关注自己负责的某个或者某几个 Pod,`ki -i[leo] $ns $pod` 可以一步到位匹配到目标 Pod
 
 - `ki -i d sql` -i 参数代表本次操作将一步到位登录匹配 Pod, d 参数匹配 Namespace, sql 参数匹配最相似 Pod
 - `ki -l d sql` -l 参数代表本次操作将一步到位查看匹配 Pod 的实时日志, d 参数匹配 Namespace, sql 参数匹配最相似 Pod
-- `ki -e d sql` -l 参数代表本次操作将一步到位编辑匹配 Pod 所属资源, d 参数匹配 Namespace, sql 参数匹配最相似 Pod
+- `ki -e d sql` -e 参数代表本次操作将一步到位编辑匹配 Pod 所属资源, d 参数匹配 Namespace, sql 参数匹配最相似 Pod, `-es` `-ei` 编辑同名 Service / Ingress
+- `ki -o d sql` -o 参数代表本次操作将一步到位输出匹配 Pod 所属资源的 yml 文件, `-os` `-oi` 输出同名 Service / Ingress
 
 ![](//static.xabc.io/ki/ki-21.png)
 
@@ -167,24 +198,50 @@ l 后加一个字符串,代表要输出过滤字符串的日志行
 
 ![](//static.xabc.io/ki/ki-22.png)
 
-临时锁定禁止跟随切换和解除锁定切换,比如有时候,我们期望把 A 集群目录下某个 yml 资源 apply 到 B 集群,所以我们可以通过 `ki -l` 临时禁止跟随目录自动切换,`ki -u` 解除锁定,需要提醒的是这种锁定只是针对跟随目录这种状态下,而不会禁止匹配 Namespace 自动切换,`ki -s` 主动选择切换,也被认为是临时锁定,锁定操作为1小时,1小时后自动解锁
+临时锁定禁止跟随切换和解除锁定切换,比如有时候,我们期望把 A 集群目录下某个 yml 资源 apply 到 B 集群,所以我们可以通过 `ki --l` 临时禁止跟随目录自动切换,`ki --u` 解除锁定,需要提醒的是这种锁定只是针对跟随目录这种状态下,而不会禁止匹配 Namespace 自动切换,`ki -s` 主动选择切换,也被认为是临时锁定,锁定操作为1小时,1小时后自动解锁
 
 ![](//static.xabc.io/ki/ki-23.png)
 
 ## 资源对象操作的统计分析
 
-在 $HOME/.history/ 存放每天的操作记录, .dict 是历史切换集群的统计, .last 是上一次切换操作的集群, .name_dict 是每个 k8s/ns 操作资源对象的历史操作分析
+$HOME/.history/ 目录下:
 
-- 符号 ~ 或 ! 匹配当前 k8s/ns 上一次操作资源对象
-- 符号 @ 或 # 匹配当前 k8s/ns 历史操作最多的资源对象
-- 符号 $ 匹配当前 k8s/ns 最新发布的资源对象
+- `YYYY-MM-DD` 每天的操作记录,包含执行的命令、用户、来源 IP 和目标 k8s
+- `.kube_dict` 历史切换集群的统计, `.last` 上一次切换操作的集群
+- `.pod_dict` 每个 k8s/ns 资源对象的操作历史,用于 `[` `]` 等快捷选择
+- `.line` 上一次 `l` 指定的日志行数
 
-!> 注意 .ns_dict 是 `ki -c` 执行后生成的非空 Namespace 缓存文件,这个缓存文件可以加速 ki 的自动切换,如果集群 Namespace 有新创建或者原来是空的,而现在非空了的时候需要重新执行一下 `ki -c`
+`ki --k` 输出每个 k8s/ns 最常操作的资源和集群切换统计
+
+!> 注意 .ns_dict 是非空 Namespace 的缓存文件,可以加速 ki 的自动切换, ki 发现 Namespace 有变化时会在后台自动重建缓存(`KI_AUTO_CACHE=false` 关闭),也可以执行 `ki --c` 手动重建
 
 ![](//static.xabc.io/ki/ki-24.png)
 
+## 资源排序与用量
+
+- `ki -r test` 输出 Pod 列表并按重启次数排序,快速找到不稳定的 Pod
+- `ki -t test` 输出 Pod 资源用量并按内存排序, `ki -t2 test` 按 CPU 排序,需要集群安装 metrics-server
+- `ki -a` 输出整个集群的 Pod, `ki -a s` 输出整个集群的 Service,其他资源同理
+
+## AI 分析
+
+- `ki --ai` 收集节点、各 Namespace 的 Pod 状态、资源用量和最近事件,生成集群健康报告
+- `ki --ai 问题` 运维、开发问题问答,生成的脚本或配置文件保存到 /tmp/ki/
+
+?> 通过环境变量 `KI_AI_URL` `KI_AI_KEY` `KI_AI_MODEL` 配置兼容 OpenAI 接口的服务,依赖 Python requests 库
+
+## 环境变量
+
+| 变量 | 说明 |
+|---|---|
+| `KI_AUTO_SWITCH=false` | 当前 k8s 找不到匹配的 Namespace 时不自动切换到其他 k8s |
+| `KI_AUTO_CACHE=false` | 不在后台自动重建 Namespace 缓存,手动 `ki --c` 依然可用 |
+| `KI_LINE` | `$index l` 默认输出的日志行数 |
+| `KI_DEBUG_IMAGE` | `$index dbg` 使用的调试镜像,默认 busybox |
+| `KI_AI_URL` `KI_AI_KEY` `KI_AI_MODEL` | AI 服务的地址、密钥和模型 |
+
 ## 查看帮助
 
-实际上只要了解 Pod 的登录和查看日志两个用法就可以满足日常90%的工作需求,其他操作慢慢自然了解
+`ki --h` 查看全部用法,实际上只要了解 Pod 的登录和查看日志两个用法就可以满足日常90%的工作需求,其他操作慢慢自然了解
 
 ![](//static.xabc.io/ki/ki-18.png)

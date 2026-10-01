@@ -2,4 +2,6 @@
 
 - [**Debug**](en/debug)
 
+- [**Docker**](en/di)
+
 - [**Labs**](en/labs)
